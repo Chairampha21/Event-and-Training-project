@@ -21,7 +21,7 @@ export function HeroSearch({ query, onQueryChange, onSearch }) {
   );
 }
 
-export default function SearchBar({ pills, pillFilter, onPillChange, statusFilter, onStatusChange, hideStatus, sortBy, onSortChange }) {
+export default function SearchBar({ pills, pillFilter, onPillChange, statusFilter, onStatusChange, hideStatus }) {
   const list = pills || DEFAULT_PILLS;
   return (
     <div className="filter-section">
@@ -45,13 +45,6 @@ export default function SearchBar({ pills, pillFilter, onPillChange, statusFilte
               </select>
             </label>
           )}
-          <label className="facet-select"><i className="ti ti-arrows-sort" />
-            <select value={sortBy} onChange={(e) => onSortChange(e.target.value)}>
-              <option value="soon">เร็วที่สุดก่อน</option>
-              <option value="seats">ที่นั่งเหลือมาก</option>
-              <option value="name">ชื่อ ก–ฮ</option>
-            </select>
-          </label>
         </div>
       </div>
     </div>

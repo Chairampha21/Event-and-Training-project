@@ -74,6 +74,7 @@ type Event struct {
 	IsListed            bool       `json:"is_listed"`
 	CreatedAt           string     `json:"created_at"`
 	UpdatedAt           string     `json:"updated_at"`
+	RegisteredCount     int        `json:"registered_count"`
 }
 
 type Registration struct {

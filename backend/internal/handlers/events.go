@@ -30,7 +30,8 @@ const eventFields = `
   pretest_enabled, pretest_link, pretest_pass_pct, pretest_time_limit_min,
   cert_template_url, cert_signer_name, cert_signer_title,
   email_on_register, email_before_event, email_after_event,
-  is_listed, created_at, updated_at
+  is_listed, created_at, updated_at,
+  (SELECT COUNT(*) FROM registrations reg WHERE reg.event_id = events.id) AS registered_count
 `
 
 func scanEvent(row interface{ Scan(dest ...any) error }) (models.Event, error) {
@@ -46,6 +47,7 @@ func scanEvent(row interface{ Scan(dest ...any) error }) (models.Event, error) {
 		&e.CertTemplateURL, &e.CertSignerName, &e.CertSignerTitle,
 		&emailOnRegister, &emailBeforeEvent, &emailAfterEvent,
 		&isListed, &e.CreatedAt, &e.UpdatedAt,
+		&e.RegisteredCount,
 	)
 	e.PretestEnabled = pretestEnabled == 1
 	e.EmailOnRegister = emailOnRegister == 1

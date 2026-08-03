@@ -1,37 +1,35 @@
 import React, { useState } from 'react';
-import useLocalStorage from '../../hooks/useLocalStorage';
 import { useEvents } from '../../hooks/useEvents';
 import Modal, { ModalHead } from '../../components/Modal';
 
-const SEED = [
-  { id: 'bl1', name: 'ธนวัฒน์ ทองอำนวย', email: 'thanawat_t@silpakorn.edu', sid: '660710004', reason: 'ขาดกิจกรรม 3 ครั้งติดกันโดยไม่แจ้งล่วงหน้า', by: 'ผศ.ดร. ปิยะ', date: '02 ก.ค. 2568' },
-  { id: 'bl2', name: 'น.ส. กชกร เจริญสุข', email: 'kotchakon_j@silpakorn.edu', sid: '680710008', reason: 'เช็คอินแทนผู้อื่นในกิจกรรม SQL Bootcamp', by: 'วรันธร สอนสงวน', date: '17 ก.ค. 2568' },
-];
+function formatDate(ts) {
+  if (!ts) return '';
+  const d = new Date(ts.replace(' ', 'T'));
+  return isNaN(d) ? ts : d.toLocaleDateString('th-TH');
+}
 
 export default function BlacklistPage() {
-  const { session, pushToast } = useEvents();
-  // Bumped to :v2 — earlier cached data used masked "xxxxx" student IDs.
-  const [list, setList] = useLocalStorage('cpsu-etms:blacklist:v2', SEED);
+  const { blacklist, addToBlacklist, restoreFromBlacklist } = useEvents();
   const [addOpen, setAddOpen] = useState(false);
   const [form, setForm] = useState({ name: '', email: '', sid: '', reason: '' });
   const [restoreId, setRestoreId] = useState(null);
+  const [saving, setSaving] = useState(false);
 
-  function addEntry() {
+  async function addEntry() {
     if (!form.name.trim() || !form.reason.trim()) return;
-    setList((l) => [{ id: 'bl' + Date.now(), ...form, by: session.name, date: new Date().toLocaleDateString('th-TH') }, ...l]);
-    pushToast('เพิ่มรายชื่อ Blacklist แล้ว', form.name, 'warn');
+    setSaving(true);
+    await addToBlacklist(form);
+    setSaving(false);
     setForm({ name: '', email: '', sid: '', reason: '' });
     setAddOpen(false);
   }
 
-  function restore(id) {
-    const u = list.find((x) => x.id === id);
-    setList((l) => l.filter((x) => x.id !== id));
-    if (u) pushToast('คืนสิทธิ์ผู้ใช้งานแล้ว', u.name);
+  async function restore(id) {
+    await restoreFromBlacklist(id);
     setRestoreId(null);
   }
 
-  const restoreUser = list.find((x) => x.id === restoreId);
+  const restoreUser = blacklist.find((x) => x.id === restoreId);
 
   return (
     <div>
@@ -46,7 +44,7 @@ export default function BlacklistPage() {
 
       <div className="wrap tight">
         <div className="section-head">
-          <div><div className="sh-title">รายชื่อ Blacklist <span className="count">{list.length} รายการ</span></div><div className="sh-sub">ผู้ที่ถูกเฝ้าระวังการเข้าร่วมกิจกรรม จะไม่สามารถลงทะเบียนกิจกรรมใหม่ได้จนกว่าจะถอดออก</div></div>
+          <div><div className="sh-title">รายชื่อ Blacklist <span className="count">{blacklist.length} รายการ</span></div><div className="sh-sub">ผู้ที่ถูกเฝ้าระวังการเข้าร่วมกิจกรรม จะไม่สามารถลงทะเบียนกิจกรรมใหม่ได้จนกว่าจะถอดออก</div></div>
           <button className="btn btn-primary" onClick={() => setAddOpen(true)}><i className="ti ti-plus" /> เพิ่มรายชื่อ</button>
         </div>
 
@@ -57,8 +55,8 @@ export default function BlacklistPage() {
                 <tr><th>ชื่อ–นามสกุล</th><th>รหัสนักศึกษา</th><th>เหตุผล</th><th>วันที่บันทึก</th><th>ผู้บันทึก</th><th className="right">การจัดการ</th></tr>
               </thead>
               <tbody>
-                {list.length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--c4-60)', padding: 24 }}>ไม่มีรายชื่อ Blacklist</td></tr>}
-                {list.map((u) => (
+                {blacklist.length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--c4-60)', padding: 24 }}>ไม่มีรายชื่อ Blacklist</td></tr>}
+                {blacklist.map((u) => (
                   <tr key={u.id}>
                     <td>
                       <div className="ev-cell">
@@ -66,10 +64,10 @@ export default function BlacklistPage() {
                         <div><div className="ev-title">{u.name}</div><div className="ev-sub">{u.email}</div></div>
                       </div>
                     </td>
-                    <td><strong>{u.sid}</strong></td>
+                    <td><strong>{u.student_id}</strong></td>
                     <td style={{ maxWidth: 260 }}>{u.reason}</td>
-                    <td>{u.date}</td>
-                    <td>{u.by}</td>
+                    <td>{formatDate(u.created_at)}</td>
+                    <td>{u.created_by_name}</td>
                     <td className="right">
                       <div className="row-actions">
                         <button className="icon-btn" title="คืนสิทธิ์" onClick={() => setRestoreId(u.id)}><i className="ti ti-user-check" /></button>
@@ -80,7 +78,7 @@ export default function BlacklistPage() {
               </tbody>
             </table>
           </div>
-          <div className="table-foot"><span>แสดง {list.length} จาก {list.length} รายการ</span></div>
+          <div className="table-foot"><span>แสดง {blacklist.length} จาก {blacklist.length} รายการ</span></div>
         </div>
       </div>
 
@@ -94,13 +92,13 @@ export default function BlacklistPage() {
         </div>
         <div className="modal-foot">
           <button className="btn btn-outline" onClick={() => setAddOpen(false)}>ยกเลิก</button>
-          <button className="btn btn-dark" onClick={addEntry}><i className="ti ti-user-off" /> เพิ่มรายชื่อ</button>
+          <button className="btn btn-dark" onClick={addEntry} disabled={saving}><i className="ti ti-user-off" /> {saving ? 'กำลังบันทึก...' : 'เพิ่มรายชื่อ'}</button>
         </div>
       </Modal>
 
       <Modal open={!!restoreId} onClose={() => setRestoreId(null)} size="sm">
         <ModalHead eyebrow="ยืนยันการคืนสิทธิ์" icon="ti-user-check" title="คืนสิทธิ์ผู้ใช้งานนี้?" onClose={() => setRestoreId(null)} />
-        <div className="modal-body"><p style={{ fontSize: 14, color: 'var(--c4-70)', lineHeight: 1.6 }}>คุณกำลังจะถอด <strong>{restoreUser?.name}</strong> {restoreUser?.sid && <>(รหัสนักศึกษา {restoreUser.sid}) </>}ออกจากรายชื่อ Blacklist และคืนสิทธิ์ให้สามารถลงทะเบียนกิจกรรมได้ตามปกติ</p></div>
+        <div className="modal-body"><p style={{ fontSize: 14, color: 'var(--c4-70)', lineHeight: 1.6 }}>คุณกำลังจะถอด <strong>{restoreUser?.name}</strong> {restoreUser?.student_id && <>(รหัสนักศึกษา {restoreUser.student_id}) </>}ออกจากรายชื่อ Blacklist และคืนสิทธิ์ให้สามารถลงทะเบียนกิจกรรมได้ตามปกติ</p></div>
         <div className="modal-foot">
           <button className="btn btn-outline" onClick={() => setRestoreId(null)}>ยกเลิก</button>
           <button className="btn btn-primary" onClick={() => restore(restoreId)}><i className="ti ti-user-check" /> คืนสิทธิ์</button>

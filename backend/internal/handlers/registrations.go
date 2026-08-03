@@ -95,6 +95,16 @@ func (h *RegistrationsHandler) RegisterForEvent(c *gin.Context) {
 	}
 	id, _ := res.LastInsertId()
 
+	// This registration just took the last open seat — flip the event to 'full'
+	// automatically so it stops accepting new signups and reflects reality in
+	// the listing, matching the capacity check above.
+	if cap > 0 && regCount+1 >= cap {
+		if _, err := h.DB.Exec(`UPDATE events SET status = 'full' WHERE id = ? AND status = 'open'`, eventID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
+			return
+		}
+	}
+
 	reg, err := scanRegistration(h.DB.QueryRow(`SELECT id, event_id, user_id, status, checked_in, checked_in_at, registered_at, updated_at FROM registrations WHERE id = ?`, id))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
@@ -103,6 +113,64 @@ func (h *RegistrationsHandler) RegisterForEvent(c *gin.Context) {
 
 	activitylog.Log(h.DB, &claims.UserID, "REGISTER", "ลงทะเบียนกิจกรรม: "+title)
 	c.JSON(http.StatusCreated, gin.H{"registration": reg})
+}
+
+// CheckIn marks a registration as checked in on-site — the roster's "ตรวจสอบแล้ว"
+// toggle. Organizer of the event or an admin only. Toggling off (checked_in=false)
+// reverts status back to 'registered' if it was 'attended'.
+func (h *RegistrationsHandler) CheckIn(c *gin.Context) {
+	var body struct {
+		CheckedIn bool `json:"checked_in"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลไม่ถูกต้อง"})
+		return
+	}
+
+	var organizerID sql.NullInt64
+	var status string
+	err := h.DB.QueryRow(
+		`SELECT e.organizer_id, r.status FROM registrations r JOIN events e ON e.id = r.event_id WHERE r.id = ?`,
+		c.Param("id"),
+	).Scan(&organizerID, &status)
+	if err == sql.ErrNoRows {
+		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบรายการลงทะเบียน"})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
+		return
+	}
+
+	claims, _ := middleware.CurrentUser(c)
+	if claims.Role != "admin" && !(organizerID.Valid && organizerID.Int64 == claims.UserID) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "ไม่มีสิทธิ์เข้าถึงรายชื่อผู้สมัคร"})
+		return
+	}
+
+	newStatus := status
+	if body.CheckedIn {
+		if status == "registered" {
+			newStatus = "attended"
+		}
+		_, err = h.DB.Exec(`UPDATE registrations SET checked_in = 1, checked_in_at = NOW(), status = ? WHERE id = ?`, newStatus, c.Param("id"))
+	} else {
+		if status == "attended" {
+			newStatus = "registered"
+		}
+		_, err = h.DB.Exec(`UPDATE registrations SET checked_in = 0, checked_in_at = NULL, status = ? WHERE id = ?`, newStatus, c.Param("id"))
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
+		return
+	}
+
+	reg, err := scanRegistration(h.DB.QueryRow(`SELECT id, event_id, user_id, status, checked_in, checked_in_at, registered_at, updated_at FROM registrations WHERE id = ?`, c.Param("id")))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"registration": reg})
 }
 
 func (h *RegistrationsHandler) CancelRegistration(c *gin.Context) {
@@ -138,30 +206,38 @@ func (h *RegistrationsHandler) CancelRegistration(c *gin.Context) {
 		return
 	}
 
+	// Cancelling frees a seat — if the event had auto-closed as full, reopen it.
+	if _, err := h.DB.Exec(`UPDATE events SET status = 'open' WHERE id = ? AND status = 'full'`, reg.EventID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
+		return
+	}
+
 	activitylog.Log(h.DB, &claims.UserID, "DELETE", "ยกเลิกลงทะเบียน: "+title)
 	c.Status(http.StatusNoContent)
 }
 
 type myRegistrationRow struct {
-	ID           int64             `json:"id"`
-	Status       string            `json:"status"`
-	CheckedIn    bool              `json:"checked_in"`
-	CheckedInAt  models.NullString `json:"checked_in_at"`
-	RegisteredAt string            `json:"registered_at"`
-	EventID      int64             `json:"event_id"`
-	Title        string            `json:"title"`
-	Category     string            `json:"category"`
-	DateStart    string            `json:"date_start"`
-	DateEnd      models.NullString `json:"date_end"`
-	TimeRange    models.NullString `json:"time_range"`
-	EventStatus  string            `json:"event_status"`
+	ID            int64             `json:"id"`
+	Status        string            `json:"status"`
+	CheckedIn     bool              `json:"checked_in"`
+	CheckedInAt   models.NullString `json:"checked_in_at"`
+	RegisteredAt  string            `json:"registered_at"`
+	EventID       int64             `json:"event_id"`
+	Title         string            `json:"title"`
+	Category      string            `json:"category"`
+	DateStart     string            `json:"date_start"`
+	DateEnd       models.NullString `json:"date_end"`
+	TimeRange     models.NullString `json:"time_range"`
+	EventStatus   string            `json:"event_status"`
+	Place         models.NullString `json:"place"`
+	OrganizerName models.NullString `json:"organizer_name"`
 }
 
 func (h *RegistrationsHandler) MyRegistrations(c *gin.Context) {
 	claims, _ := middleware.CurrentUser(c)
 	rows, err := h.DB.Query(
 		`SELECT r.id, r.status, r.checked_in, r.checked_in_at, r.registered_at,
-		        e.id, e.title, e.category, e.date_start, e.date_end, e.time_range, e.status
+		        e.id, e.title, e.category, e.date_start, e.date_end, e.time_range, e.status, e.place, e.organizer_name
 		 FROM registrations r JOIN events e ON e.id = r.event_id
 		 WHERE r.user_id = ? ORDER BY r.registered_at DESC`, claims.UserID,
 	)
@@ -176,7 +252,7 @@ func (h *RegistrationsHandler) MyRegistrations(c *gin.Context) {
 		var r myRegistrationRow
 		var checkedIn int
 		if err := rows.Scan(&r.ID, &r.Status, &checkedIn, &r.CheckedInAt, &r.RegisteredAt,
-			&r.EventID, &r.Title, &r.Category, &r.DateStart, &r.DateEnd, &r.TimeRange, &r.EventStatus); err != nil {
+			&r.EventID, &r.Title, &r.Category, &r.DateStart, &r.DateEnd, &r.TimeRange, &r.EventStatus, &r.Place, &r.OrganizerName); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 			return
 		}

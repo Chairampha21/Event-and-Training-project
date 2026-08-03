@@ -2,8 +2,9 @@ import React, { useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useEvents } from '../../hooks/useEvents';
 import { STATUS_META, EVENT_CATEGORIES } from '../../utils/constants';
-import { formatThaiDate, formatThaiDateRange, parseThaiDateDisplay } from '../../utils/dateFormat';
+import { formatThaiDate, formatThaiDateRange } from '../../utils/dateFormat';
 import Modal, { ModalHead } from '../../components/Modal';
+import { CertOrgOverlay, CertSignerOverlay } from '../../components/CertOverlays';
 import './CreateEventPage.css';
 
 function fileToDataUrl(file) {
@@ -13,30 +14,6 @@ function fileToDataUrl(file) {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
-}
-
-// Overlays the signer's name/title near the bottom of the certificate
-// template image, so organizers can preview roughly where the signature
-// line will read once the certificate is generated.
-function CertSignerOverlay({ name, title }) {
-  if (!name && !title) return null;
-  return (
-    <div className="cert-signer-overlay">
-      {name && <span className="cs-name">{name}</span>}
-      {title && <span className="cs-title">{title}</span>}
-    </div>
-  );
-}
-
-// Overlays the event title near the top of the certificate template image,
-// covering whatever placeholder heading the template file was designed with.
-function CertTitleOverlay({ eventTitle }) {
-  if (!eventTitle) return null;
-  return (
-    <div className="cert-title-overlay">
-      <span>{eventTitle}</span>
-    </div>
-  );
 }
 
 export default function CreateEventPage() {
@@ -69,9 +46,8 @@ export default function CreateEventPage() {
   }
 
   const [dayMode, setDayMode] = useState(editing?.dayMode || 'single');
-  const parsedDate = editing ? parseThaiDateDisplay(editing.date) : null;
-  const [dateIso, setDateIso] = useState(parsedDate?.startIso || '');
-  const [dateEndIso, setDateEndIso] = useState(parsedDate?.endIso || '');
+  const [dateIso, setDateIso] = useState(editing?.dateStart || '');
+  const [dateEndIso, setDateEndIso] = useState(editing?.dateEnd || '');
 
   const parsedTime = editing?.time?.match(/^(\d{1,2}:\d{2})\s*[–-]\s*(\d{1,2}:\d{2})/);
   const [timeStart, setTimeStart] = useState(parsedTime?.[1] || '');
@@ -159,7 +135,9 @@ export default function CreateEventPage() {
     setConfirmOpen(true);
   }
 
-  function doPublish() {
+  const [publishing, setPublishing] = useState(false);
+
+  async function doPublish() {
     const payload = {
       title, desc, cat, org,
       dayMode, attendMode,
@@ -173,14 +151,21 @@ export default function CreateEventPage() {
       certTemplate,
       pretest: { enabled: pretestOn, link: pretestLink },
       signer: { name: signerName, title: signerTitle },
+      dateIso: dateIso || undefined,
+      dateEndIso: dayMode === 'multi' ? (dateEndIso || undefined) : undefined,
     };
-    if (dayMode === 'single' && dateIso) payload.date = formatThaiDate(dateIso);
-    else if (dayMode === 'multi' && dateIso && dateEndIso) payload.date = formatThaiDateRange(dateIso, dateEndIso);
 
-    if (editing) updateEvent(editing.id, payload);
-    else createEvent(payload);
-    setConfirmOpen(false);
-    navigate(session?.role === 'admin' ? '/admin/dashboard' : '/home');
+    setPublishing(true);
+    try {
+      if (editing) await updateEvent(editing.id, payload);
+      else await createEvent(payload);
+      setConfirmOpen(false);
+      navigate(session?.role === 'admin' ? '/admin/dashboard' : '/home');
+    } catch {
+      setConfirmOpen(false);
+    } finally {
+      setPublishing(false);
+    }
   }
 
   const sm = STATUS_META.open;
@@ -306,7 +291,6 @@ export default function CreateEventPage() {
               </div>
             </div>
             {dayCount && <span className="dm-days-hint"><i className="ti ti-info-circle" /> รวม {dayCount} วัน</span>}
-            {editing && !dateIso && <span className="dm-days-hint"><i className="ti ti-info-circle" /> เว้นว่างไว้เพื่อคงวันที่เดิม: {editing.date}</span>}
             {editing && !timeStart && editing.time && <span className="dm-days-hint"><i className="ti ti-info-circle" /> เว้นว่างไว้เพื่อคงเวลาเดิม: {editing.time}</span>}
 
             <div className="attend-mode-pick">
@@ -366,7 +350,7 @@ export default function CreateEventPage() {
                   certTemplate.type?.startsWith('image/') ? (
                     <>
                       <img src={certTemplate.dataUrl} alt="template เกียรติบัตร" />
-                      <CertTitleOverlay eventTitle={title} />
+                      <CertOrgOverlay />
                       <CertSignerOverlay name={signerName} title={signerTitle} />
                       <button type="button" className="pu-zoom" onClick={(e) => { e.stopPropagation(); setCertPreviewOpen(true); }}><i className="ti ti-zoom-in" /> ดูภาพเต็ม</button>
                       <button type="button" className="pu-remove" onClick={(e) => { e.stopPropagation(); setCertTemplate(null); }}><i className="ti ti-x" /></button>
@@ -449,7 +433,7 @@ export default function CreateEventPage() {
         <div className="modal-body"><p style={{ fontSize: 14, color: 'var(--c4-70)', lineHeight: 1.6 }}>{editing ? 'การเปลี่ยนแปลงจะมีผลทันทีและผู้สมัครจะเห็นข้อมูลใหม่' : <>กิจกรรม <strong>{title}</strong> จะแสดงให้ผู้ใช้งานเห็นและเปิดรับสมัครทันที ตรวจสอบข้อมูลให้ครบถ้วนก่อนดำเนินการต่อ</>}</p></div>
         <div className="modal-foot">
           <button className="btn btn-outline" onClick={() => setConfirmOpen(false)}>ยกเลิก</button>
-          <button className="btn btn-primary" onClick={doPublish}><i className="ti ti-send" /> {editing ? 'บันทึกการแก้ไข' : 'เผยแพร่กิจกรรม'}</button>
+          <button className="btn btn-primary" onClick={doPublish} disabled={publishing}><i className="ti ti-send" /> {publishing ? 'กำลังบันทึก...' : editing ? 'บันทึกการแก้ไข' : 'เผยแพร่กิจกรรม'}</button>
         </div>
       </Modal>
 
@@ -465,7 +449,7 @@ export default function CreateEventPage() {
         <div className="modal-body" style={{ padding: 0, maxHeight: '72vh', overflow: 'hidden', display: 'flex', justifyContent: 'center' }}>
           <div style={{ position: 'relative', display: 'inline-flex', maxWidth: '100%', maxHeight: '72vh' }}>
             <img src={certTemplate?.dataUrl} alt="template เกียรติบัตร" style={{ display: 'block', maxWidth: '100%', maxHeight: '72vh', width: 'auto', height: 'auto', objectFit: 'contain' }} />
-            <CertTitleOverlay eventTitle={title} />
+            <CertOrgOverlay />
             <CertSignerOverlay name={signerName} title={signerTitle} />
           </div>
         </div>

@@ -153,7 +153,6 @@ export default function HomePage() {
   const [appliedQuery, setAppliedQuery] = useState('');
   const [pillFilter, setPillFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [sortBy, setSortBy] = useState('soon');
   const [detailId, setDetailId] = useState(null);
   const [manageId, setManageId] = useState(null);
   const [applicantsId, setApplicantsId] = useState(null);
@@ -172,19 +171,15 @@ export default function HomePage() {
       }
       return true;
     });
-    l = [...l].sort((a, b) => {
-      if (sortBy === 'name') return a.title.localeCompare(b.title, 'th');
-      if (sortBy === 'seats') return (b.cap - b.reg) - (a.cap - a.reg);
-      return (statusRank[a.status] - statusRank[b.status]) || (a.id - b.id);
-    });
+    l = [...l].sort((a, b) => (statusRank[a.status] - statusRank[b.status]) || (a.id - b.id));
     return l;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [events, isStudent, pillFilter, statusFilter, appliedQuery, sortBy]);
+  }, [events, isStudent, pillFilter, statusFilter, appliedQuery]);
 
   const filtered = pillFilter !== 'all' || statusFilter !== 'all' || !!appliedQuery;
 
   function resetSearch() {
-    setQuery(''); setAppliedQuery(''); setStatusFilter('all'); setSortBy('soon'); setPillFilter('all');
+    setQuery(''); setAppliedQuery(''); setStatusFilter('all'); setPillFilter('all');
   }
 
   return (
@@ -207,7 +202,6 @@ export default function HomePage() {
         pills={CATEGORY_PILLS}
         pillFilter={pillFilter} onPillChange={setPillFilter}
         statusFilter={statusFilter} onStatusChange={setStatusFilter} hideStatus={isStudent}
-        sortBy={sortBy} onSortChange={setSortBy}
       />
 
       <div className="wrap" style={{ paddingTop: 46 }}>

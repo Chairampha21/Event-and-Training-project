@@ -10,6 +10,7 @@ export default function EvaluationFormPage() {
   const ev = evById(eventId);
   const [scores, setScores] = useState({});
   const [comment, setComment] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   if (!ev) {
     return <div className="wrap"><div className="empty-state">ไม่พบกิจกรรมนี้</div></div>;
@@ -17,10 +18,15 @@ export default function EvaluationFormPage() {
 
   const allRated = EVAL_QUESTIONS.every((q) => scores[q.k]);
 
-  function handleSubmit() {
+  async function handleSubmit() {
     if (!allRated) return;
-    submitEvaluation(ev.id);
-    navigate('/my-registrations');
+    setSubmitting(true);
+    try {
+      await submitEvaluation(ev.id, scores);
+      navigate('/my-registrations');
+    } catch {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -71,8 +77,8 @@ export default function EvaluationFormPage() {
         <span className="fa-left"><i className="ti ti-shield-check" /> คำตอบของคุณจะถูกเก็บเป็นความลับ</span>
         <div className="fa-right">
           <button className="btn btn-outline" onClick={() => navigate(-1)}>ยกเลิก</button>
-          <button className={`btn btn-primary${allRated ? '' : ' disabled'}`} disabled={!allRated} onClick={handleSubmit}>
-            <i className="ti ti-send" /> ส่งแบบประเมิน &amp; รับเกียรติบัตร
+          <button className={`btn btn-primary${allRated ? '' : ' disabled'}`} disabled={!allRated || submitting} onClick={handleSubmit}>
+            <i className="ti ti-send" /> {submitting ? 'กำลังส่ง...' : 'ส่งแบบประเมิน & รับเกียรติบัตร'}
           </button>
         </div>
       </div>

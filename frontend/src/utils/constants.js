@@ -36,16 +36,3 @@ export const REG_STATUS_META = {
   certified: { cls: 'ps-pass', ico: 'ti-circle-check-filled', label: 'รับเกียรติบัตรแล้ว' },
   absent: { cls: 'ps-fail', ico: 'ti-circle-x', label: 'ไม่ได้เข้าร่วม' },
 };
-
-export const SELF = {
-  sid: '670710001',
-  name: 'ภัทร ยะคำวุฒิ',
-  email: 'phat_y@silpakorn.edu',
-};
-
-// Demo login accounts (no real backend yet — see useEvents.login). One account per role.
-export const MOCK_ACCOUNTS = [
-  { email: 'piya_c@silpakorn.edu', password: 'demo1234', role: 'admin', name: 'ผศ.ดร. ปิยะ จันทรัศมี' },
-  { email: 'krisada_p@silpakorn.edu', password: 'demo1234', role: 'organizer', name: 'วรันธร สอนสงวน' },
-  { email: SELF.email, password: 'demo1234', role: 'student', name: SELF.name },
-];

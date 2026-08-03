@@ -1,19 +1,21 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useEvents } from '../../hooks/useEvents';
-import { EVAL_QUESTIONS } from '../../data/evalQuestions';
 import EvalResultChart from '../../components/EvalResultChart';
 import { ROLE_LABEL } from '../../utils/constants';
 
-// Deterministic mock aggregate score per event (no per-response storage exists yet —
-// swap for a real average once evaluation answers are persisted per submission).
-function mockAvg(eventId, qIndex) {
-  const seed = (eventId * 7 + qIndex * 13) % 9;
-  return 3.9 + seed * 0.11;
-}
-
 export default function EvaluationsPage() {
-  const { events, session } = useEvents();
+  const { events, session, getEvaluationResults } = useEvents();
   const evaluated = useMemo(() => events.filter((e) => e.listed && (e.status === 'done')), [events]);
+  const [resultsByEvent, setResultsByEvent] = useState({});
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all(evaluated.map((ev) => getEvaluationResults(ev.id).then((results) => [ev.id, results]))).then((entries) => {
+      if (!cancelled) setResultsByEvent(Object.fromEntries(entries));
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [evaluated.map((e) => e.id).join(',')]);
 
   return (
     <div>
@@ -37,21 +39,23 @@ export default function EvaluationsPage() {
         ) : (
           <div className="eval-cards">
             {evaluated.map((ev) => {
-              const data = EVAL_QUESTIONS.map((q, i) => ({ label: q.label, avg: mockAvg(ev.id, i) }));
-              const overall = data.reduce((a, r) => a + r.avg, 0) / data.length;
+              const results = resultsByEvent[ev.id] || [];
+              const data = results.map((r) => ({ label: r.label, avg: r.avg_score || 0 }));
+              const responded = results.reduce((max, r) => Math.max(max, r.response_count || 0), 0);
+              const overall = data.length ? data.reduce((a, r) => a + r.avg, 0) / data.length : 0;
               return (
                 <div className="eval-item-card" key={ev.id}>
                   <div className="eval-item-head">
                     <div>
                       <div className="eval-item-title">{ev.title}</div>
-                      <div className="eval-item-sub">{ev.date} · {ev.reg} ผู้เข้าร่วม</div>
+                      <div className="eval-item-sub">{ev.date} · {responded} คนทำแบบประเมิน จาก {ev.reg} ผู้เข้าร่วม</div>
                     </div>
                     <div className="eval-item-score">
                       <div className="n">{overall.toFixed(1)}</div>
                       <div className="l">คะแนนเฉลี่ยรวม / 5</div>
                     </div>
                   </div>
-                  <EvalResultChart data={data} />
+                  {responded > 0 ? <EvalResultChart data={data} /> : <p style={{ fontSize: 13, color: 'var(--c4-60)' }}>ยังไม่มีผู้ทำแบบประเมินสำหรับกิจกรรมนี้</p>}
                 </div>
               );
             })}

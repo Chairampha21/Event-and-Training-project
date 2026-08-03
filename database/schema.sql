@@ -46,7 +46,7 @@ CREATE TABLE events (
   description           TEXT          NULL,
   category              VARCHAR(50)   NOT NULL,           -- สัมมนา / Workshop / การแข่งขัน / Cybersecurity
   subcategory           VARCHAR(150)  NULL,                -- e.g. 'AI / Data', 'Hackathon'
-  poster_url            VARCHAR(500)  NULL,
+  poster_url            LONGTEXT      NULL,               -- the frontend stores this as a base64 data: URL, not a path
 
   organizer_id          INT UNSIGNED  NULL,                -- account that owns/manages this event
   organizer_name        VARCHAR(190)  NULL,                -- display text (may be a club/committee, not a login)
@@ -71,7 +71,7 @@ CREATE TABLE events (
   pretest_pass_pct      TINYINT UNSIGNED NULL,
   pretest_time_limit_min SMALLINT UNSIGNED NULL,
 
-  cert_template_url     VARCHAR(500)  NULL,
+  cert_template_url     LONGTEXT      NULL,               -- also a base64 data: URL from the frontend
   cert_signer_name      VARCHAR(190)  NULL,
   cert_signer_title     VARCHAR(190)  NULL,
 

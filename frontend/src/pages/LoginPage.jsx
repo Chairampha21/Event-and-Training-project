@@ -8,12 +8,15 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   if (session) return <Navigate to={ROLE_LANDING[session.role]} replace />;
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
-    const ok = login(email, password);
+    setSubmitting(true);
+    const ok = await login(email, password);
+    setSubmitting(false);
     if (!ok) setError(true);
   }
 
@@ -67,7 +70,7 @@ export default function LoginPage() {
                 />
               </div>
             </div>
-            <button type="submit" className="lf-submit"><i className="ti ti-login-2" /> เข้าสู่ระบบ</button>
+            <button type="submit" className="lf-submit" disabled={submitting}><i className="ti ti-login-2" /> {submitting ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบ'}</button>
           </form>
         </div>
       </div>

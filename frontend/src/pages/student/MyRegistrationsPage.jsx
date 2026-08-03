@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useEvents } from '../../hooks/useEvents';
-import { REG_STATUS_META, CYCLE, SELF } from '../../utils/constants';
+import { REG_STATUS_META, CYCLE } from '../../utils/constants';
 import { CertPreviewModal } from '../../components/CertificateCard';
 
 export default function MyRegistrationsPage() {
-  const { regs, evById } = useEvents();
+  const { regs, session } = useEvents();
   const navigate = useNavigate();
   const [certId, setCertId] = useState(null);
 
@@ -17,13 +17,13 @@ export default function MyRegistrationsPage() {
       <div className="page-header dark" style={{ padding: '46px 32px 90px' }}>
         <div className="ph-inner" style={{ display: 'block' }}>
           <div className="ph-top">
-            <div className="avatar">{SELF.name.slice(0, 1)}</div>
+            <div className="avatar">{(session?.name || '').slice(0, 1)}</div>
             <div className="ph-info">
               <span className="ph-role"><i className="ti ti-school" /> นักศึกษาปัจจุบัน</span>
-              <div className="ph-name">{SELF.name}</div>
+              <div className="ph-name">{session?.name}</div>
               <div className="ph-id">
-                <span><i className="ti ti-id" /> {SELF.sid}</span>
-                <span><i className="ti ti-mail" /> {SELF.email}</span>
+                <span><i className="ti ti-id" /> {session?.student_id}</span>
+                <span><i className="ti ti-mail" /> {session?.email}</span>
               </div>
             </div>
           </div>
@@ -42,19 +42,17 @@ export default function MyRegistrationsPage() {
         <div className="history-list">
           {regs.length === 0 && <div className="empty-state">ยังไม่มีประวัติการลงทะเบียน</div>}
           {regs.map((r) => {
-            const ev = evById(r.eid);
-            if (!ev) return null;
             const s = REG_STATUS_META[r.status];
             return (
               <div className="hist-item" key={r.eid}>
-                <div className={`hi-icon ${ev.tone}`}><i className={`ti ${ev.icon}`} /></div>
+                <div className={`hi-icon ${r.tone}`}><i className={`ti ${r.icon}`} /></div>
                 <div className="hi-info">
-                  <div className="hi-cat">{ev.cat}</div>
-                  <div className="hi-title">{ev.title}</div>
+                  <div className="hi-cat">{r.cat}</div>
+                  <div className="hi-title">{r.title}</div>
                   <div className="hi-meta">
-                    <span><i className="ti ti-calendar-event" /> {ev.date}</span>
-                    <span><i className="ti ti-map-pin" /> {ev.place}</span>
-                    <span><i className="ti ti-route" /> Cycle: {CYCLE[ev.stage]}</span>
+                    <span><i className="ti ti-calendar-event" /> {r.date}</span>
+                    <span><i className="ti ti-map-pin" /> {r.place}</span>
+                    <span><i className="ti ti-route" /> Cycle: {CYCLE[r.stage]}</span>
                   </div>
                   {r.status === 'attended' && (
                     <div className="hi-note"><i className="ti ti-alert-circle" /> ต้องทำแบบประเมินกิจกรรมให้เสร็จก่อนจึงจะรับเกียรติบัตรได้</div>
@@ -63,10 +61,10 @@ export default function MyRegistrationsPage() {
                 <div className="hi-actions">
                   <span className={`pill-status ${s.cls}`}><i className={`ti ${s.ico}`} /> {s.label}</span>
                   {r.status === 'certified' && (
-                    <button className="btn-download" onClick={() => setCertId(ev.id)}><i className="ti ti-download" /> เกียรติบัตร</button>
+                    <button className="btn-download" onClick={() => setCertId(r.eid)}><i className="ti ti-download" /> เกียรติบัตร</button>
                   )}
                   {r.status === 'attended' && (
-                    <button className="btn-download eval" onClick={() => navigate(`/evaluate/${ev.id}`)}><i className="ti ti-clipboard-check" /> ทำแบบประเมิน</button>
+                    <button className="btn-download eval" onClick={() => navigate(`/evaluate/${r.eid}`)}><i className="ti ti-clipboard-check" /> ทำแบบประเมิน</button>
                   )}
                 </div>
               </div>

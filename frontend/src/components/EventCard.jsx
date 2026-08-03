@@ -21,11 +21,24 @@ export default function EventCard({ event, isStudent, myStatus, onApply, onManag
 
   return (
     <article className="card">
-      <div className={`card-strip ${STRIP_TONE[event.tone] || 'strip-1'}`} />
+      {event.poster ? (
+        <div className="card-poster">
+          <img src={event.poster} alt="" />
+          <span className={`badge ${sm.badge}`}><i className={`ti ${sm.ico}`} /> {sm.label}</span>
+        </div>
+      ) : (
+        <div className={`card-strip ${STRIP_TONE[event.tone] || 'strip-1'}`} />
+      )}
       <div className="card-body">
         <div className="card-top">
-          <div className={`icon-box ${event.tone}`}><i className={`ti ${event.icon}`} /></div>
-          <span className={`badge ${sm.badge}`}><i className={`ti ${sm.ico}`} /> {sm.label}</span>
+          {event.poster
+            ? <div className={`icon-box sm ${event.tone}`}><i className={`ti ${event.icon}`} /></div>
+            : (
+              <>
+                <div className={`icon-box ${event.tone}`}><i className={`ti ${event.icon}`} /></div>
+                <span className={`badge ${sm.badge}`}><i className={`ti ${sm.ico}`} /> {sm.label}</span>
+              </>
+            )}
         </div>
         <div className="card-cat">{event.cat}</div>
         <h3 className="card-title">{event.title}</h3>

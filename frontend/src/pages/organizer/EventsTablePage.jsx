@@ -15,6 +15,7 @@ export default function EventsTablePage() {
   const [applicantsId, setApplicantsId] = useState(null);
   const [deleteId, setDeleteId] = useState(null);
   const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [page, setPage] = useState(1);
 
   const list = useMemo(() => events.filter((e) => e.listed), [events]);
@@ -22,9 +23,12 @@ export default function EventsTablePage() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return list;
-    return list.filter((e) => e.title.toLowerCase().includes(q));
-  }, [list, query]);
+    return list.filter((e) => {
+      if (statusFilter !== 'all' && e.status !== statusFilter) return false;
+      if (q && !e.title.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [list, query, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -36,6 +40,11 @@ export default function EventsTablePage() {
 
   function handleSearch(v) {
     setQuery(v);
+    setPage(1);
+  }
+
+  function handleStatusFilter(v) {
+    setStatusFilter(v);
     setPage(1);
   }
 
@@ -94,6 +103,16 @@ export default function EventsTablePage() {
             <h3><i className="ti ti-table" /> รายการกิจกรรม</h3>
             <div className="tools">
               <div className="input-search"><i className="ti ti-search" /><input type="text" placeholder="ค้นหากิจกรรม..." value={query} onChange={(e) => handleSearch(e.target.value)} /></div>
+              <label className="facet-select"><i className="ti ti-circle-dot" />
+                <select value={statusFilter} onChange={(e) => handleStatusFilter(e.target.value)}>
+                  <option value="all">ทุกสถานะ</option>
+                  <option value="open">เปิดรับสมัคร</option>
+                  <option value="soon">เร็ว ๆ นี้</option>
+                  <option value="full">เต็มแล้ว</option>
+                  <option value="closed">ปิดรับสมัคร</option>
+                  <option value="done">สิ้นสุดแล้ว</option>
+                </select>
+              </label>
               <span className="filter-chip active"><i className="ti ti-list" /> ทั้งหมด {filtered.length}</span>
             </div>
           </div>

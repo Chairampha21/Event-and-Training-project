@@ -1,0 +1,2 @@
+/* component-specific tweaks beyond App.css (which owns the bulk of navbar/topbar/notif rules) */
+.nav-tab.active i{opacity:1}

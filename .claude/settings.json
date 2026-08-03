@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go version *)",
+      "Bash(go mod *)",
+      "Bash(go get *)",
+      "Bash(go build *)",
+      "Bash(gofmt -l .)",
+      "Bash(go vet *)",
+      "Bash(gofmt -w internal/config/config.go)",
+      "Bash(node -e \"require\\('bcryptjs'\\).hash\\('test1234',10\\).then\\(h=>console.log\\(h\\)\\)\")",
+      "Bash(nohup /tmp/cpsu-etms-api)",
+      "Bash(nohup /tmp/cpsu-etms-api > /tmp/backend-go.log 2>&1 & *)",
+      "Bash(fuser 4000/tcp)",
+      "Bash(kill 39800)",
+      "Bash(pkill -f /tmp/cpsu-etms-api)",
+      "Bash(rm -f /workspaces/Event-and-Training-project/backend/.env /tmp/cpsu-etms-api /tmp/backend-go.log /tmp/backend.log)",
+      "Bash(rm -f /workspaces/Event-and-Training-project/backend/.env /tmp/cpsu-etms-api /tmp/backend-go.log /tmp/backend.log *)",
+      "Bash(systemctl status *)",
+      "Bash(docker exec -i cpsu-etms-db mariadb -uroot -pcpsuetms123 cpsu_etms -e \" *)",
+      "Bash(timeout 5 go run .)",
+      "Bash(npx --yes playwright --version)",
+      "Read(//home/codespace/.cache/ms-playwright/**)",
+      "Bash(node smoke.js)"
+    ],
+    "additionalDirectories": [
+      "/tmp"
+    ]
+  }
+}

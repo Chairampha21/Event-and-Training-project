@@ -21,8 +21,8 @@ const NAV_TABS = {
     { to: '/events', icon: 'ti-calendar', label: 'กิจกรรมทั้งหมด' },
     { to: '/admin/blacklist', icon: 'ti-user-off', label: 'Blacklist' },
     { to: '/admin/sar', icon: 'ti-clipboard-text', label: 'SAR' },
-    { to: '/admin/dashboard', icon: 'ti-chart-pie', label: 'Dashboard รายปี' },
     { to: '/report', icon: 'ti-report-analytics', label: 'รายงาน' },
+    { to: '/admin/dashboard', icon: 'ti-chart-pie', label: 'Dashboard รายปี' },
   ],
   student: [
     { to: '/home', icon: 'ti-grid-dots', label: 'กิจกรรมทั้งหมด' },
@@ -107,24 +107,22 @@ export default function Navbar() {
         </div>
       </div>
 
-      <nav className="navbar">
-        <div className="nav-left">
-          <NavLink className="logo" to={session.role === 'admin' ? '/admin/dashboard' : '/home'}>
-            <div className="logo-mark">CS</div>
-            <div className="logo-text">
-              <span className="lt1">CPSU ETMS</span>
-              <span className="lt2">ระบบจัดการกิจกรรม &amp; การอบรม · คณะวิทยาศาสตร์</span>
-            </div>
-          </NavLink>
-          <div className="nav-tabs">
-            {tabs.map((t) => (
-              <NavLink key={t.to} to={t.to} className={({ isActive }) => `nav-tab${isActive ? ' active' : ''}`}>
-                <i className={`ti ${t.icon}`} /> {t.label}
-              </NavLink>
-            ))}
+      <nav className="sidebar">
+        <NavLink className="logo" to={session.role === 'admin' ? '/admin/dashboard' : '/home'}>
+          <div className="logo-mark">CS</div>
+          <div className="logo-text">
+            <span className="lt1">CPSU ETMS</span>
+            <span className="lt2">ระบบจัดการกิจกรรม<br />&amp; การอบรม · คณะวิทยาศาสตร์</span>
           </div>
+        </NavLink>
+        <div className="nav-tabs">
+          {tabs.map((t) => (
+            <NavLink key={t.to} to={t.to} className={({ isActive }) => `nav-tab${isActive ? ' active' : ''}`} title={t.label}>
+              <i className={`ti ${t.icon}`} /> <span>{t.label}</span>
+            </NavLink>
+          ))}
         </div>
-        <div className="nav-right">
+        <div className="sidebar-foot">
           <button type="button" className="user-pill" title="ดู/แก้ไขโปรไฟล์" onClick={() => setProfileOpen(true)}>
             <div className={`up-av ${session.role}`}>{initials(session.name)}</div>
             <div className="up-info">
@@ -132,7 +130,7 @@ export default function Navbar() {
               <span className="up-role"><span className={`role-tag ${session.role}`}>{ROLE_LABEL[session.role]}</span></span>
             </div>
           </button>
-          <button className="btn-logout" title="ออกจากระบบ" onClick={handleLogout}><i className="ti ti-logout" /></button>
+          <button className="btn-logout" title="ออกจากระบบ" onClick={handleLogout}><i className="ti ti-logout" /> <span>ออกจากระบบ</span></button>
         </div>
       </nav>
       <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} />

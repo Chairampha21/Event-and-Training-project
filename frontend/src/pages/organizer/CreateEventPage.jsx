@@ -266,7 +266,6 @@ export default function CreateEventPage() {
       <div className="page-header">
         <div className="ph-inner">
           <div>
-            <div className="crumbs"><i className="ti ti-layout-dashboard" /> ผู้ดูแลระบบ <i className="ti ti-chevron-right" /> {editing ? 'แก้ไขกิจกรรม' : 'สร้างกิจกรรมใหม่'}</div>
             <h1>{editing ? 'แก้ไขกิจกรรม' : 'สร้างกิจกรรมใหม่'}</h1>
             <p>กรอกรายละเอียด อัปโหลดโปสเตอร์ กำหนดวัน-เวลา และตั้งค่าพรีเทสและเกียรติบัตรในหน้าเดียว</p>
           </div>

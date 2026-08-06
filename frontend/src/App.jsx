@@ -26,13 +26,13 @@ import './App.css';
 
 function AppLayout() {
   return (
-    <>
+    <div className="app-shell">
       <Navbar />
       <div className="page">
         <Outlet />
       </div>
       <Toast />
-    </>
+    </div>
   );
 }
 

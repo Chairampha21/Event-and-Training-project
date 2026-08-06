@@ -95,7 +95,6 @@ export default function ReportPage() {
       <div className="page-header">
         <div className="ph-inner">
           <div>
-            <div className="crumbs"><i className="ti ti-report-analytics" /> รายงาน <i className="ti ti-chevron-right" /> สรุปผลกิจกรรม</div>
             <h1>รายงานสรุปกิจกรรม</h1>
             <p>สรุปผลกิจกรรมรายรายการ · จำนวนผู้สมัครและผู้เข้าร่วม · อัตราเข้าร่วม · เกียรติบัตรที่ออก</p>
           </div>

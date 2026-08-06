@@ -35,6 +35,15 @@ export default function ApplicantsModal({ eventId, open, onClose }) {
       .filter((p) => (p.name + ' ' + p.sid).toLowerCase().includes(q));
   }, [roster, query]);
 
+  const allChecked = filtered.length > 0 && filtered.every((p) => p.in);
+
+  function toggleAll() {
+    const next = !allChecked;
+    filtered.forEach((p) => {
+      if (p.in !== next) toggleCheckin(eventId, p.i);
+    });
+  }
+
   if (!open || !eventId) return null;
 
   function onSignInSheetFile(e) {
@@ -95,9 +104,15 @@ export default function ApplicantsModal({ eventId, open, onClose }) {
           )}
         </div>
 
-        <div className="input-search" style={{ marginBottom: 12 }}>
-          <i className="ti ti-search" />
-          <input type="text" placeholder="ค้นหารหัสนักศึกษา/ชื่อ..." value={query} onChange={(e) => setQuery(e.target.value)} />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginBottom: 12, flexWrap: 'wrap' }}>
+          <div className="input-search" style={{ marginBottom: 0 }}>
+            <i className="ti ti-search" />
+            <input type="text" placeholder="ค้นหารหัสนักศึกษา/ชื่อ..." value={query} onChange={(e) => setQuery(e.target.value)} />
+          </div>
+          <label className="ci-checkall">
+            <span>ตรวจสอบทั้งหมด{query.trim() ? ' (เฉพาะที่ค้นหา)' : ''}</span>
+            <button type="button" className={`switch sm${allChecked ? ' on' : ''}`} onClick={toggleAll} disabled={filtered.length === 0} />
+          </label>
         </div>
 
         <div>

@@ -36,7 +36,7 @@ a{color:inherit;text-decoration:none}
 /* ============ WRAP / LAYOUT ============ */
 .wrap{max-width:1240px;margin:0 auto;padding:64px 32px 64px;width:100%}
 .wrap.tight{padding-top:34px}
-.page{flex:1;animation:fade .25s ease}
+.page{grid-column:2;grid-row:2;min-width:0;overflow-x:hidden;animation:fade .25s ease}
 @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 
 .section-head{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:24px;gap:16px;flex-wrap:wrap}
@@ -68,10 +68,10 @@ a{color:inherit;text-decoration:none}
 .pill.active{background:var(--c2);color:var(--white)}
 .pill i{font-size:14px}
 .filter-bar .right-tools{display:flex;align-items:center;gap:8px;margin-left:auto}
-.facet-select{position:relative;display:inline-flex;align-items:center;gap:6px;padding:7px 30px 7px 12px;border-radius:8px;border:1px solid var(--c2-10);background:var(--white);color:var(--c4-70);cursor:pointer;transition:.12s}
+.facet-select{position:relative;display:inline-block;border-radius:8px;border:1px solid var(--c2-10);background:var(--white);color:var(--c4-70);cursor:pointer;transition:.12s}
 .facet-select:hover{border-color:var(--c2-20)}
-.facet-select > i{font-size:15px;color:var(--c2);pointer-events:none}
-.facet-select select{appearance:none;-webkit-appearance:none;border:none;background:transparent;font:inherit;font-size:13px;color:var(--c4-70);cursor:pointer;outline:none;padding:0}
+.facet-select > i{position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:15px;color:var(--c2);pointer-events:none}
+.facet-select select{appearance:none;-webkit-appearance:none;border:none;background:transparent;font:inherit;font-size:13px;color:var(--c4-70);cursor:pointer;outline:none;width:100%;padding:7px 30px 7px 34px}
 .facet-select::after{content:"\ea5f";font-family:"tabler-icons";position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:14px;opacity:.55;pointer-events:none}
 
 /* ============ SEARCH BAR ============ */
@@ -445,6 +445,8 @@ td .ev-thumb.dark{background:var(--c4-12);color:var(--c4)}
 .ci-actions .btn{flex:1;min-width:160px}
 .ci-hint{display:flex;gap:6px;align-items:flex-start;font-size:12px;color:var(--c4-60);margin:10px 0 0;line-height:1.5}
 .ci-hint i{margin-top:1px;flex-shrink:0}
+
+.ci-checkall{display:flex;align-items:center;gap:10px;font-size:13px;font-weight:600;color:var(--c4-70);cursor:pointer;white-space:nowrap}
 
 .ci-row{display:flex;align-items:center;gap:14px;padding:12px 10px;border-bottom:1px solid var(--c2-08);border-radius:10px}
 .ci-row:hover{background:var(--c2-04)}

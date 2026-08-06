@@ -63,7 +63,6 @@ export default function EventsTablePage() {
       <div className="page-header">
         <div className="ph-inner">
           <div>
-            <div className="crumbs"><i className="ti ti-calendar" /> จัดการกิจกรรม</div>
             <h1>รายการกิจกรรมทั้งหมด</h1>
             <p>เปิด/ปิดรับสมัคร ตรวจรายชื่อผู้สมัคร เช็คอิน และออกเกียรติบัตร ในที่เดียว</p>
           </div>

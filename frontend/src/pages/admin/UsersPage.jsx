@@ -38,12 +38,8 @@ export default function UsersPage() {
       <div className="page-header">
         <div className="ph-inner">
           <div>
-            <div className="crumbs"><i className="ti ti-users-group" /> ผู้ดูแลระบบ <i className="ti ti-chevron-right" /> จัดการผู้ใช้งาน</div>
             <h1>จัดการผู้ใช้งาน &amp; สิทธิ์การเข้าถึง</h1>
             <p>เพิ่ม แก้ไข ลบบัญชีผู้ใช้ และกำหนดบทบาท (ผู้ดูแลระบบ / ผู้จัดกิจกรรม / นักศึกษา) ให้ผู้ใช้แต่ละคน</p>
-          </div>
-          <div className="ph-actions">
-            <button className="btn btn-accent" onClick={openNew}><i className="ti ti-user-plus" /> เพิ่มผู้ใช้งาน</button>
           </div>
         </div>
       </div>

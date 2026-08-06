@@ -1,14 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useEvents } from '../../hooks/useEvents';
 import { downloadCsv } from '../../utils/csvExport';
-import { ROLE_LABEL } from '../../utils/constants';
 
 const DASH_COLORS = ['var(--c2)', 'var(--c1)', 'var(--c3)', 'var(--c4)', 'var(--c2-15)'];
 
 function fmt(n) { return (n || 0).toLocaleString('en-US'); }
 
 export default function DashboardPage() {
-  const { session, getDashboardYearly } = useEvents();
+  const { getDashboardYearly } = useEvents();
   const [rows, setRows] = useState([]);
   const [year, setYear] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -62,7 +61,6 @@ export default function DashboardPage() {
       <div className="page-header">
         <div className="ph-inner">
           <div>
-            <div className="crumbs"><i className="ti ti-layout-dashboard" /> {ROLE_LABEL[session.role]} <i className="ti ti-chevron-right" /> ภาพรวม</div>
             <h1>แดชบอร์ดภาพรวมรายปี</h1>
             <p>สรุปภาพรวมกิจกรรม ผู้เข้าร่วม เกียรติบัตรที่ออก และความพึงพอใจ ของปีที่เลือก (เฉพาะกิจกรรมที่จัดเสร็จสิ้นแล้ว)</p>
           </div>

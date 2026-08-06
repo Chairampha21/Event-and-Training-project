@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useEvents } from '../../hooks/useEvents';
-import { ROLE_LABEL } from '../../utils/constants';
 import { toBuddhistYear } from '../../utils/dateFormat';
 import { fileToDataUrl } from '../../utils/fileToDataUrl';
 import { downloadDataUrl, downloadAllImages } from '../../utils/downloadImage';
@@ -9,7 +8,7 @@ import Modal, { ModalHead } from '../../components/Modal';
 // คลังโปสเตอร์กิจกรรม — แทนที่แบบฟอร์ม SAR ยาวเดิม ตามที่ผู้จัดกิจกรรมแจ้งว่า
 // สิ่งที่ใช้จริงมีแค่โปสเตอร์กิจกรรมกับโปสเตอร์สรุปข่าว ให้อาจารย์ดูและโหลดได้ทั้งหมด
 export default function SarReportPage() {
-  const { events, session, pushToast, getSar, saveSar } = useEvents();
+  const { events, pushToast, getSar, saveSar } = useEvents();
   const doneEvents = useMemo(() => events.filter((e) => e.listed && e.status === 'done'), [events]);
 
   const years = useMemo(() => {
@@ -89,7 +88,6 @@ export default function SarReportPage() {
       <div className="page-header">
         <div className="ph-inner">
           <div>
-            <div className="crumbs"><i className="ti ti-clipboard-text" /> {ROLE_LABEL[session.role]} <i className="ti ti-chevron-right" /> SAR</div>
             <h1>คลังโปสเตอร์กิจกรรม (SAR)</h1>
             <p>รวมโปสเตอร์กิจกรรมและโปสเตอร์สรุปข่าวของกิจกรรมที่จัดเสร็จสิ้นแล้ว ดูและดาวน์โหลดได้ทั้งหมด</p>
           </div>

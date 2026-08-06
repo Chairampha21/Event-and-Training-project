@@ -3,7 +3,7 @@
 // migrated into this project arrived with corrupted Thai text/mojibake), so please
 // spot-check wording against your original CPSU ETMS files if exact phrasing matters.
 
-export const CYCLE = ['ประกาศ', 'รับสมัคร', 'จัดกิจกรรม', 'เกียรติบัตร'];
+export const CYCLE = ['ประกาศ', 'รับสมัคร', 'จัดกิจกรรม', 'เกียรติบัตร', 'ปิดกิจกรรม'];
 
 // Single source of truth for event categories, shared by the create-event form
 // (organizer can still type a new one) and the home page category filter pills.

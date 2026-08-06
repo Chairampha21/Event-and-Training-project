@@ -1,23 +1,50 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useEvents } from '../../hooks/useEvents';
 import { STATUS_META, EVENT_CATEGORIES } from '../../utils/constants';
 import { formatThaiDate, formatThaiDateRange } from '../../utils/dateFormat';
 import Modal, { ModalHead } from '../../components/Modal';
 import { CertOrgOverlay, CertSignerOverlay } from '../../components/CertOverlays';
+import { fileToDataUrl } from '../../utils/fileToDataUrl';
 import './CreateEventPage.css';
 
-function fileToDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
+// Starter template for a new event's evaluation form — organizers can freely
+// edit, remove, or add to these before publishing (or skip entirely and set
+// it up later from the same edit form).
+const COORDINATOR_OPTIONS = [
+  'ผศ.ดร.สิรักข์ แก้วจำนงค์',
+  'ผศ.โอภาส วงษ์ทวีทรัพย์',
+  'อ.ดร.ภูริวัจน์ วรวิชัยพัฒน์',
+  'รศ.ดร.ปานใจ ธารทัศนวงศ์',
+  'ผศ.ดร.กรัญญา สิทธิสงวน',
+  'ผศ.ดร.กฤษณะ สีพนมวัน',
+  'ผศ.ดร.คทา ประดิษฐวงศ์',
+  'ผศ.ดร.ณัฐโชติ พรหมฤทธิ์',
+  'ผศ.ดร.ทัศนวรรณ ศูนย์กลาง',
+  'ผศ.ดร.ปัญญนัท อ้นพงษ์',
+  'ผศ.ดร.รัชดาพร คณาวงษ์',
+  'ผศ.ดร.วีณาวดี ม่วงอ้น',
+  'ผศ.ดร.สัจจาภรณ์ ไวจรรยา',
+  'ผศ.ดร.สุนีย์ พงษ์พินิจภิญโญ',
+  'ผศ.ดร.อรวรรณ เชาวลิต',
+  'อ.ดร.ณัฐพงศ์ จิวมั่งมี',
+  'อ.ดร.บูชาภัทร ป้านศรี',
+  'อ.ดร.วัสรา รอดเหตุภัย',
+  'อ.ดร.เสาวลักษณ์ อร่ามพงศานุวัต',
+  'อ.เสฐลัทธ์ รอดเหตุภัย',
+  'อ.อภิเษก หงษ์วิทยากร',
+];
+
+const DEFAULT_EVAL_QUESTIONS = [
+  { type: 'choice', label: 'เพศ', required: true, options: ['ชาย', 'หญิง', 'ไม่ประสงค์ระบุเพศ'] },
+  { type: 'choice', label: 'สาขาวิชา', required: true, options: ['สาขาวิชาวิทยาการคอมพิวเตอร์', 'สาขาวิชาเทคโนโลยีสารสนเทศ'] },
+  { type: 'scale', label: 'นักศึกษามีความรู้ความเข้าใจในรายวิชามากขึ้น สามารถวิเคราะห์ปัญหาและพัฒนาโปรแกรมคอมพิวเตอร์ตามความต้องการของผู้ใช้ได้', required: true, options: [] },
+  { type: 'scale', label: 'นักศึกษาสามารถนำความรู้ที่ได้จากโครงการไปปรับใช้ในรายวิชาอื่น ๆ ที่เกี่ยวข้องต่อไปได้', required: true, options: [] },
+  { type: 'scale', label: 'นักศึกษาได้รับความรู้ แนวทางในการเรียน สามารถนำความรู้ที่ได้ไปประยุกต์ในการเรียนการสอนต่อไปได้', required: true, options: [] },
+];
 
 export default function CreateEventPage() {
-  const { session, evById, createEvent, updateEvent, pushToast } = useEvents();
+  const { session, evById, createEvent, updateEvent, pushToast, getEventEvalQuestions, saveEventEvalQuestions } = useEvents();
   const navigate = useNavigate();
   const location = useLocation();
   const editId = location.state?.editId;
@@ -68,6 +95,53 @@ export default function CreateEventPage() {
   const [certPreviewOpen, setCertPreviewOpen] = useState(false);
   const [signerName, setSignerName] = useState(editing?.signer?.name || 'ผศ.ดร.สิรักข์ แก้วจำนงค์');
   const [signerTitle, setSignerTitle] = useState(editing?.signer?.title || 'หัวหน้าภาควิชาคอมพิวเตอร์');
+
+  const evalKeyRef = useRef(0);
+  const newEvalKey = () => `eq-${evalKeyRef.current++}`;
+  const [evalQuestions, setEvalQuestions] = useState(() =>
+    DEFAULT_EVAL_QUESTIONS.map((q) => ({ ...q, _key: newEvalKey() }))
+  );
+  const [evalQuestionsLoaded, setEvalQuestionsLoaded] = useState(!editing);
+  const [evalOn, setEvalOn] = useState(false);
+
+  useEffect(() => {
+    if (!editing) return;
+    let cancelled = false;
+    getEventEvalQuestions(editing.id).then((qs) => {
+      if (cancelled) return;
+      setEvalQuestions(
+        qs.length
+          ? qs.map((q) => ({ _key: newEvalKey(), label: q.label, type: q.type, required: q.required, options: q.options || [] }))
+          : DEFAULT_EVAL_QUESTIONS.map((q) => ({ ...q, _key: newEvalKey() }))
+      );
+      setEvalOn(qs.length > 0);
+      setEvalQuestionsLoaded(true);
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing?.id]);
+
+  function addEvalQuestion(type) {
+    setEvalQuestions((qs) => [...qs, { _key: newEvalKey(), type, label: '', required: true, options: type === 'choice' ? ['', ''] : [] }]);
+  }
+  function removeEvalQuestion(key) {
+    setEvalQuestions((qs) => qs.filter((q) => q._key !== key));
+  }
+  function updateEvalQuestion(key, patch) {
+    setEvalQuestions((qs) => qs.map((q) => (q._key === key ? { ...q, ...patch } : q)));
+  }
+  function setEvalQuestionType(key, type) {
+    setEvalQuestions((qs) => qs.map((q) => (q._key === key ? { ...q, type, options: type === 'choice' ? (q.options.length ? q.options : ['', '']) : q.options } : q)));
+  }
+  function updateEvalOption(key, index, value) {
+    setEvalQuestions((qs) => qs.map((q) => (q._key === key ? { ...q, options: q.options.map((o, i) => (i === index ? value : o)) } : q)));
+  }
+  function addEvalOption(key) {
+    setEvalQuestions((qs) => qs.map((q) => (q._key === key ? { ...q, options: [...q.options, ''] } : q)));
+  }
+  function removeEvalOption(key, index) {
+    setEvalQuestions((qs) => qs.map((q) => (q._key === key ? { ...q, options: q.options.filter((_, i) => i !== index) } : q)));
+  }
 
   const dayCount = useMemo(() => {
     if (dayMode !== 'multi' || !dateIso || !dateEndIso) return null;
@@ -157,8 +231,25 @@ export default function CreateEventPage() {
 
     setPublishing(true);
     try {
+      let eventId = editing?.id;
       if (editing) await updateEvent(editing.id, payload);
-      else await createEvent(payload);
+      else {
+        const created = await createEvent(payload);
+        eventId = created?.id;
+      }
+      // Only write when the section is switched on — "off" just hides the
+      // builder, it must never silently wipe questions saved in an earlier
+      // session (e.g. from opening the edit form with the toggle off).
+      if (eventId && evalQuestionsLoaded && evalOn) {
+        try {
+          const questions = evalQuestions
+            .filter((q) => q.label.trim())
+            .map((q) => ({ label: q.label.trim(), type: q.type, required: q.required, options: q.type === 'choice' ? q.options.map((o) => o.trim()).filter(Boolean) : [] }));
+          await saveEventEvalQuestions(eventId, questions);
+        } catch (err) {
+          pushToast('บันทึกแบบประเมินไม่สำเร็จ', err.message, 'warn');
+        }
+      }
       setConfirmOpen(false);
       navigate(session?.role === 'admin' ? '/admin/dashboard' : '/home');
     } catch {
@@ -257,7 +348,17 @@ export default function CreateEventPage() {
                   </div>
                 )}
               </div>
-              <div className="field"><label>ผู้รับผิดชอบ</label><div className="with-icon"><i className="ti ti-user-cog" /><input type="text" value={org} onChange={(e) => setOrg(e.target.value)} placeholder="ชื่อผู้จัด/อาจารย์ที่ปรึกษา" /></div></div>
+              <div className="field">
+                <label>อาจารย์ผู้ประสานงาน</label>
+                <div className="with-icon">
+                  <i className="ti ti-user-cog" />
+                  <select value={org} onChange={(e) => setOrg(e.target.value)}>
+                    <option value="" disabled hidden>เลือกอาจารย์ผู้ประสานงาน</option>
+                    {org && !COORDINATOR_OPTIONS.includes(org) && <option value={org}>{org}</option>}
+                    {COORDINATOR_OPTIONS.map((name) => <option key={name} value={name}>{name}</option>)}
+                  </select>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -377,6 +478,76 @@ export default function CreateEventPage() {
                 <div className="field"><label>ตำแหน่ง <span className="req">*</span></label><div className="with-icon"><i className="ti ti-id-badge-2" /><input type="text" value={signerTitle} onChange={(e) => setSignerTitle(e.target.value)} /></div></div>
               </div>
             </div>
+          </div>
+
+          <div className="form-card setup-card">
+            <div className="setup-head">
+              <div className="setup-head-text">
+                <h2><span className="fc-num">6</span> แบบประเมินกิจกรรม</h2>
+                <p className="fc-sub">คำถามเพิ่มเติมต่อจากแบบประเมินมาตรฐาน · เปิดเมื่อพร้อมตั้งค่า หรือเปิดกลับมาตั้งค่าทีหลังได้เช่นเดียวกับพรีเทส</p>
+              </div>
+              <button type="button" className={`switch${evalOn ? ' on' : ''}`} onClick={() => setEvalOn((o) => !o)} title="เปิด/ปิดการใช้แบบประเมินเพิ่มเติม" />
+            </div>
+            {evalOn && (!evalQuestionsLoaded ? (
+              <p style={{ fontSize: 13, color: 'var(--c4-60)' }}>กำลังโหลด...</p>
+            ) : (
+              <div className="eval-q-list">
+                {evalQuestions.map((q, i) => (
+                  <div className="eval-q-card" key={q._key}>
+                    <div className="eval-q-top">
+                      <span className="eval-q-idx">{i + 1}</span>
+                      <div className="eval-q-main">
+                        <input
+                          type="text"
+                          value={q.label}
+                          onChange={(e) => updateEvalQuestion(q._key, { label: e.target.value })}
+                          placeholder="ข้อความคำถาม"
+                        />
+                        <div className="eval-q-controls">
+                          <select value={q.type} onChange={(e) => setEvalQuestionType(q._key, e.target.value)}>
+                            <option value="scale">คะแนน 1–5</option>
+                            <option value="choice">แบบเลือกตอบ</option>
+                          </select>
+                          <label className="eval-q-required">
+                            <input type="checkbox" checked={q.required} onChange={(e) => updateEvalQuestion(q._key, { required: e.target.checked })} />
+                            บังคับตอบ
+                          </label>
+                          <button type="button" className="icon-btn danger eval-q-remove" title="ลบคำถามนี้" onClick={() => removeEvalQuestion(q._key)}>
+                            <i className="ti ti-trash" />
+                          </button>
+                        </div>
+                        {q.type === 'choice' && (
+                          <div className="eval-q-options">
+                            {q.options.map((opt, oi) => (
+                              <div className="eval-q-opt-row" key={oi}>
+                                <input
+                                  type="text"
+                                  value={opt}
+                                  onChange={(e) => updateEvalOption(q._key, oi, e.target.value)}
+                                  placeholder={`ตัวเลือกที่ ${oi + 1}`}
+                                />
+                                {q.options.length > 2 && (
+                                  <button type="button" className="icon-btn" title="ลบตัวเลือกนี้" onClick={() => removeEvalOption(q._key, oi)}>
+                                    <i className="ti ti-x" />
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                            <button type="button" className="eval-q-add-opt" onClick={() => addEvalOption(q._key)}>
+                              <i className="ti ti-plus" /> เพิ่มตัวเลือก
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <div className="eval-q-add-row">
+                  <button type="button" className="btn btn-outline" onClick={() => addEvalQuestion('scale')}><i className="ti ti-plus" /> เพิ่มคำถามคะแนน 1–5</button>
+                  <button type="button" className="btn btn-outline" onClick={() => addEvalQuestion('choice')}><i className="ti ti-plus" /> เพิ่มคำถามแบบเลือกตอบ</button>
+                </div>
+              </div>
+            ))}
           </div>
 
           <div className="form-actions">

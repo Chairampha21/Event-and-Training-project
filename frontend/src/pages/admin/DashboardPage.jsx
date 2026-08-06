@@ -8,7 +8,7 @@ const DASH_COLORS = ['var(--c2)', 'var(--c1)', 'var(--c3)', 'var(--c4)', 'var(--
 function fmt(n) { return (n || 0).toLocaleString('en-US'); }
 
 export default function DashboardPage() {
-  const { activityLog, session, getDashboardYearly } = useEvents();
+  const { session, getDashboardYearly } = useEvents();
   const [rows, setRows] = useState([]);
   const [year, setYear] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -151,26 +151,6 @@ export default function DashboardPage() {
             </div>
           </>
         )}
-
-        <div className="table-card" style={{ marginTop: 20 }}>
-          <div className="table-toolbar"><h3><i className="ti ti-history" /> กิจกรรมล่าสุดในระบบ</h3></div>
-          <div style={{ overflowX: 'auto' }}>
-            <table>
-              <thead><tr><th>เวลา</th><th>ผู้ทำรายการ</th><th>Action</th><th>รายละเอียด</th></tr></thead>
-              <tbody>
-                {activityLog.length === 0 && <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--c4-60)', padding: 24 }}>ยังไม่มีกิจกรรมในระบบ</td></tr>}
-                {activityLog.slice(0, 12).map((l, i) => (
-                  <tr key={i}>
-                    <td><div className="ev-title" style={{ fontSize: 13 }}>{l.ts}</div></td>
-                    <td>{l.user}</td>
-                    <td><span className="badge" style={{ background: l.actionColor, color: 'var(--c2)' }}>{l.action}</span></td>
-                    <td>{l.detail}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
       </div>
     </div>
   );

@@ -60,6 +60,47 @@ func (h *BlacklistHandler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"blacklist": list})
 }
 
+type userLookupResult struct {
+	ID        int64  `json:"id"`
+	Name      string `json:"name"`
+	Email     string `json:"email"`
+	StudentID string `json:"student_id"`
+}
+
+// LookupUsers searches students by student ID or name so organizers/admins can
+// pick an existing user when adding a blacklist entry, without needing the
+// admin-only /api/users listing.
+func (h *BlacklistHandler) LookupUsers(c *gin.Context) {
+	q := strings.TrimSpace(c.Query("q"))
+	if q == "" {
+		c.JSON(http.StatusOK, gin.H{"users": []userLookupResult{}})
+		return
+	}
+	like := "%" + q + "%"
+	rows, err := h.DB.Query(
+		`SELECT id, name, email, COALESCE(student_id, '') FROM users
+		 WHERE role = 'student' AND (student_id LIKE ? OR name LIKE ?)
+		 ORDER BY student_id LIMIT 8`,
+		like, like,
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
+		return
+	}
+	defer rows.Close()
+
+	list := []userLookupResult{}
+	for rows.Next() {
+		var u userLookupResult
+		if err := rows.Scan(&u.ID, &u.Name, &u.Email, &u.StudentID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
+			return
+		}
+		list = append(list, u)
+	}
+	c.JSON(http.StatusOK, gin.H{"users": list})
+}
+
 type createBlacklistBody struct {
 	Name      string `json:"name"`
 	Email     string `json:"email"`

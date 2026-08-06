@@ -17,6 +17,7 @@ type Config struct {
 	JWTSecret       string
 	JWTExpiresHours int
 	CORSOrigin      string
+	GoogleClientID  string
 }
 
 func Load() Config {
@@ -32,6 +33,7 @@ func Load() Config {
 		JWTSecret:       getEnv("JWT_SECRET", ""),
 		JWTExpiresHours: getEnvInt("JWT_EXPIRES_HOURS", 168),
 		CORSOrigin:      getEnv("CORS_ORIGIN", "*"),
+		GoogleClientID:  getEnv("GOOGLE_CLIENT_ID", ""),
 	}
 }
 

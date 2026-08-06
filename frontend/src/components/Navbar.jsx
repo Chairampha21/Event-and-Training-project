@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useEvents } from '../hooks/useEvents';
 import { ROLE_LABEL } from '../utils/constants';
+import ProfileModal from './ProfileModal';
 import './Navbar.css';
 
 const NAV_TABS = {
@@ -11,14 +12,14 @@ const NAV_TABS = {
     { to: '/create-event', icon: 'ti-square-rounded-plus', label: 'สร้างกิจกรรม' },
     { to: '/admin/users', icon: 'ti-users-group', label: 'ผู้ใช้งาน' },
     { to: '/admin/blacklist', icon: 'ti-user-off', label: 'Blacklist' },
+    { to: '/admin/activity-log', icon: 'ti-history', label: 'Log ระบบ' },
     { to: '/report', icon: 'ti-report-analytics', label: 'รายงาน' },
   ],
   organizer: [
     { to: '/home', icon: 'ti-home-2', label: 'กิจกรรม' },
     { to: '/create-event', icon: 'ti-square-rounded-plus', label: 'สร้างกิจกรรม' },
-    { to: '/events', icon: 'ti-users', label: 'ผู้เข้าร่วม' },
+    { to: '/events', icon: 'ti-calendar', label: 'กิจกรรมทั้งหมด' },
     { to: '/admin/blacklist', icon: 'ti-user-off', label: 'Blacklist' },
-    { to: '/admin/evaluations', icon: 'ti-chart-bar', label: 'แบบประเมิน' },
     { to: '/admin/sar', icon: 'ti-clipboard-text', label: 'SAR' },
     { to: '/admin/dashboard', icon: 'ti-chart-pie', label: 'Dashboard รายปี' },
     { to: '/report', icon: 'ti-report-analytics', label: 'รายงาน' },
@@ -41,6 +42,7 @@ function initials(name) {
 export default function Navbar() {
   const { session, notifs, markAllRead, clearAllNotif, logout } = useEvents();
   const [notifOpen, setNotifOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const wrapRef = useRef(null);
   const navigate = useNavigate();
 
@@ -123,16 +125,17 @@ export default function Navbar() {
           </div>
         </div>
         <div className="nav-right">
-          <div className="user-pill">
+          <button type="button" className="user-pill" title="ดู/แก้ไขโปรไฟล์" onClick={() => setProfileOpen(true)}>
             <div className={`up-av ${session.role}`}>{initials(session.name)}</div>
             <div className="up-info">
               <span className="up-name">{session.name}</span>
               <span className="up-role"><span className={`role-tag ${session.role}`}>{ROLE_LABEL[session.role]}</span></span>
             </div>
-          </div>
+          </button>
           <button className="btn-logout" title="ออกจากระบบ" onClick={handleLogout}><i className="ti ti-logout" /></button>
         </div>
       </nav>
+      <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} />
     </>
   );
 }

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useEvents } from '../../hooks/useEvents';
 import { STATUS_META, CYCLE, EVENT_CATEGORIES as BASE_CATEGORIES, EVENT_CATEGORY_ICONS as CATEGORY_ICONS } from '../../utils/constants';
@@ -26,12 +26,40 @@ const CATEGORY_PILLS = [
 
 function EventDetailModal({ eventId, open, onClose }) {
   const { evById, myStatus, registerForEvent, session } = useEvents();
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open) setConfirmOpen(false);
+  }, [open, eventId]);
+
   if (!open || !eventId) return null;
   const ev = evById(eventId);
   if (!ev) return null;
   const sm = STATUS_META[ev.status];
   const st = myStatus(ev.id);
   const canReg = ev.status === 'open' && !st;
+
+  function closeAll() {
+    setConfirmOpen(false);
+    onClose();
+  }
+
+  if (confirmOpen) {
+    return (
+      <Modal open={open} onClose={closeAll} size="sm">
+        <ModalHead eyebrow="ยืนยันการสมัคร" icon="ti-user-plus" title="สมัครกิจกรรมนี้เลยหรือไม่?" onClose={closeAll} />
+        <div className="modal-body">
+          <p style={{ fontSize: 14, color: 'var(--c4-70)', lineHeight: 1.6 }}>
+            ยืนยันการสมัครเข้าร่วม <strong>{ev.title}</strong> อีกครั้ง · {ev.date} · {ev.time}
+          </p>
+        </div>
+        <div className="modal-foot">
+          <button className="btn btn-outline" onClick={() => setConfirmOpen(false)}>ย้อนกลับ</button>
+          <button className="btn btn-primary" onClick={() => { registerForEvent(ev.id); closeAll(); }}><i className="ti ti-user-plus" /> ยืนยันสมัคร</button>
+        </div>
+      </Modal>
+    );
+  }
 
   return (
     <Modal open={open} onClose={onClose} size="lg">
@@ -67,7 +95,7 @@ function EventDetailModal({ eventId, open, onClose }) {
         {canReg ? (
           <>
             <button className="btn btn-outline" onClick={onClose}>ปิด</button>
-            <button className="btn btn-primary" onClick={() => { registerForEvent(ev.id); onClose(); }}><i className="ti ti-user-plus" /> ยืนยันลงทะเบียน</button>
+            <button className="btn btn-primary" onClick={() => setConfirmOpen(true)}><i className="ti ti-user-plus" /> ลงทะเบียน</button>
           </>
         ) : (
           <button className="btn btn-primary" onClick={onClose}>ปิด</button>
@@ -146,8 +174,11 @@ function ManageEventModal({ eventId, open, onClose, onOpenApplicants }) {
 }
 
 export default function HomePage() {
-  const { events, session, myStatus } = useEvents();
+  const { events, session, myStatus, getDashboardSummary } = useEvents();
   const isStudent = session?.role === 'student';
+
+  const [summary, setSummary] = useState(null);
+  useEffect(() => { getDashboardSummary().then(setSummary); }, [getDashboardSummary]);
 
   const [query, setQuery] = useState('');
   const [appliedQuery, setAppliedQuery] = useState('');
@@ -187,13 +218,12 @@ export default function HomePage() {
       <div className="hero">
         <div className="hero-inner">
           <h1>ค้นหา · สมัคร · รับเกียรติบัตร<br />ระบบกิจกรรมครบวงจรของภาควิชาคอมพิวเตอร์</h1>
-          <p>ติดตามทุกกิจกรรมและการอบรมของคณะฯ ผ่าน 4 ขั้น Cycle ที่โปร่งใส ตั้งแต่ประกาศกิจกรรม การรับสมัคร การเข้าร่วม (เช็คอินด้วย QR) จนถึงการรับเกียรติบัตรอิเล็กทรอนิกส์</p>
           <HeroSearch query={query} onQueryChange={setQuery} onSearch={() => setAppliedQuery(query.trim().toLowerCase())} />
           <div className="hero-stats">
-            <div className="hero-stat"><span className="v">42<small>+</small></span><span className="l">กิจกรรมในปีนี้</span></div>
-            <div className="hero-stat"><span className="v">3,184</span><span className="l">ผู้เข้าร่วมสะสม</span></div>
-            <div className="hero-stat"><span className="v">2,690</span><span className="l">เกียรติบัตรที่ออก</span></div>
-            <div className="hero-stat"><span className="v">{events.filter((e) => e.listed && e.status === 'open').length}</span><span className="l">กำลังเปิดรับ</span></div>
+            <div className="hero-stat"><span className="v">{summary ? summary.events_this_year : '—'}</span><span className="l">กิจกรรมในปีนี้</span></div>
+            <div className="hero-stat"><span className="v">{summary ? summary.participants_total.toLocaleString('en-US') : '—'}</span><span className="l">ผู้เข้าร่วมสะสม</span></div>
+            <div className="hero-stat"><span className="v">{summary ? summary.certificates_issued.toLocaleString('en-US') : '—'}</span><span className="l">เกียรติบัตรที่ออก</span></div>
+            <div className="hero-stat"><span className="v">{summary ? summary.open_now : events.filter((e) => e.listed && e.status === 'open').length}</span><span className="l">กำลังเปิดรับ</span></div>
           </div>
         </div>
       </div>

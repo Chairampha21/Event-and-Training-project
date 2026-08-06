@@ -2,7 +2,10 @@ package handlers
 
 import (
 	"database/sql"
+	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -45,11 +48,145 @@ func (h *EvaluationsHandler) Questions(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"questions": list})
 }
 
+type eventEvalQuestion struct {
+	ID        int      `json:"id"`
+	EventID   int      `json:"event_id"`
+	Label     string   `json:"label"`
+	SortOrder int      `json:"sort_order"`
+	Type      string   `json:"type"`
+	Required  bool     `json:"required"`
+	Options   []string `json:"options,omitempty"`
+}
+
+// EventQuestions returns the extra, event-specific questions an organizer has
+// added on top of the fixed standard survey (empty array if none were set).
+func (h *EvaluationsHandler) EventQuestions(c *gin.Context) {
+	rows, err := h.DB.Query(`SELECT id, event_id, label, sort_order, question_type, options, required FROM event_evaluation_questions WHERE event_id = ? ORDER BY sort_order ASC`, c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
+		return
+	}
+	defer rows.Close()
+
+	list := []eventEvalQuestion{}
+	for rows.Next() {
+		var q eventEvalQuestion
+		var required int
+		var options sql.NullString
+		if err := rows.Scan(&q.ID, &q.EventID, &q.Label, &q.SortOrder, &q.Type, &options, &required); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
+			return
+		}
+		q.Required = required != 0
+		if options.Valid && options.String != "" {
+			_ = json.Unmarshal([]byte(options.String), &q.Options)
+		}
+		list = append(list, q)
+	}
+	c.JSON(http.StatusOK, gin.H{"questions": list})
+}
+
+type setEventQuestionsBody struct {
+	Questions []struct {
+		Label    string   `json:"label"`
+		Type     string   `json:"type"`
+		Required bool     `json:"required"`
+		Options  []string `json:"options"`
+	} `json:"questions"`
+}
+
+// SetEventQuestions replaces the full set of extra questions for an event
+// (organizer who owns the event, or admin) — simplest way to support both
+// "set them up now" and "add more later" from the same form.
+func (h *EvaluationsHandler) SetEventQuestions(c *gin.Context) {
+	eventID := c.Param("id")
+
+	var organizerID sql.NullInt64
+	err := h.DB.QueryRow(`SELECT organizer_id FROM events WHERE id = ?`, eventID).Scan(&organizerID)
+	if err == sql.ErrNoRows {
+		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบกิจกรรม"})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
+		return
+	}
+	claims, _ := middleware.CurrentUser(c)
+	if claims.Role != "admin" && !(organizerID.Valid && organizerID.Int64 == claims.UserID) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "ไม่มีสิทธิ์แก้ไขแบบประเมินของกิจกรรมนี้"})
+		return
+	}
+
+	var body setEventQuestionsBody
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลไม่ถูกต้อง"})
+		return
+	}
+
+	tx, err := h.DB.Begin()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
+		return
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(`DELETE FROM event_evaluation_questions WHERE event_id = ?`, eventID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
+		return
+	}
+	sortOrder := 0
+	for _, q := range body.Questions {
+		label := strings.TrimSpace(q.Label)
+		if label == "" {
+			continue
+		}
+		qType := q.Type
+		if qType != "choice" {
+			qType = "scale"
+		}
+		var optionsJSON sql.NullString
+		if qType == "choice" {
+			opts := make([]string, 0, len(q.Options))
+			for _, o := range q.Options {
+				o = strings.TrimSpace(o)
+				if o != "" {
+					opts = append(opts, o)
+				}
+			}
+			if len(opts) < 2 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "คำถามแบบเลือกตอบต้องมีอย่างน้อย 2 ตัวเลือก: " + label})
+				return
+			}
+			encoded, _ := json.Marshal(opts)
+			optionsJSON = sql.NullString{String: string(encoded), Valid: true}
+		}
+		if _, err := tx.Exec(
+			`INSERT INTO event_evaluation_questions (event_id, label, sort_order, question_type, options, required) VALUES (?, ?, ?, ?, ?, ?)`,
+			eventID, label, sortOrder, qType, optionsJSON, q.Required,
+		); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
+			return
+		}
+		sortOrder++
+	}
+	if err := tx.Commit(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
+		return
+	}
+
+	h.EventQuestions(c)
+}
+
 type submitEvaluationBody struct {
 	Answers []struct {
 		QuestionID int `json:"question_id"`
 		Score      int `json:"score"`
 	} `json:"answers"`
+	CustomAnswers []struct {
+		QuestionID int     `json:"question_id"`
+		Score      *int    `json:"score"`
+		AnswerText *string `json:"answer_text"`
+	} `json:"custom_answers"`
 }
 
 // Submit records a student's post-event evaluation for their own registration.
@@ -58,7 +195,7 @@ func (h *EvaluationsHandler) Submit(c *gin.Context) {
 	regID := c.Param("id")
 
 	var body submitEvaluationBody
-	if err := c.ShouldBindJSON(&body); err != nil || len(body.Answers) == 0 {
+	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาตอบแบบประเมินให้ครบ"})
 		return
 	}
@@ -71,7 +208,8 @@ func (h *EvaluationsHandler) Submit(c *gin.Context) {
 
 	var userID int64
 	var regStatus string
-	if err := h.DB.QueryRow(`SELECT user_id, status FROM registrations WHERE id = ?`, regID).Scan(&userID, &regStatus); err == sql.ErrNoRows {
+	var eventID int64
+	if err := h.DB.QueryRow(`SELECT user_id, status, event_id FROM registrations WHERE id = ?`, regID).Scan(&userID, &regStatus, &eventID); err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบรายการลงทะเบียน"})
 		return
 	} else if err != nil {
@@ -83,6 +221,72 @@ func (h *EvaluationsHandler) Submit(c *gin.Context) {
 	if userID != claims.UserID {
 		c.JSON(http.StatusForbidden, gin.H{"error": "ไม่มีสิทธิ์ทำแบบประเมินนี้"})
 		return
+	}
+
+	// Look up the event's own extra questions to validate each custom answer
+	// against its declared type/options and to enforce required questions —
+	// the client can't be trusted to send well-formed custom_answers.
+	type customQDef struct {
+		QType    string
+		Options  map[string]bool
+		Required bool
+	}
+	customQs := map[int]customQDef{}
+	qRows, err := h.DB.Query(`SELECT id, question_type, options, required FROM event_evaluation_questions WHERE event_id = ?`, eventID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
+		return
+	}
+	for qRows.Next() {
+		var id int
+		var qType string
+		var required int
+		var options sql.NullString
+		if err := qRows.Scan(&id, &qType, &options, &required); err != nil {
+			qRows.Close()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
+			return
+		}
+		def := customQDef{QType: qType, Required: required != 0}
+		if options.Valid && options.String != "" {
+			var opts []string
+			_ = json.Unmarshal([]byte(options.String), &opts)
+			def.Options = make(map[string]bool, len(opts))
+			for _, o := range opts {
+				def.Options[o] = true
+			}
+		}
+		customQs[id] = def
+	}
+	qRows.Close()
+
+	answered := map[int]bool{}
+	for _, a := range body.CustomAnswers {
+		def, ok := customQs[a.QuestionID]
+		if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "คำถามไม่ถูกต้อง"})
+			return
+		}
+		if def.QType == "choice" {
+			if a.AnswerText == nil || strings.TrimSpace(*a.AnswerText) == "" || !def.Options[*a.AnswerText] {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาเลือกคำตอบที่ถูกต้อง"})
+				return
+			}
+			a.Score = nil
+		} else {
+			if a.Score == nil || *a.Score < 1 || *a.Score > 5 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "คะแนนต้องอยู่ระหว่าง 1-5"})
+				return
+			}
+			a.AnswerText = nil
+		}
+		answered[a.QuestionID] = true
+	}
+	for id, def := range customQs {
+		if def.Required && !answered[id] {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณาตอบแบบประเมินให้ครบ"})
+			return
+		}
 	}
 
 	tx, err := h.DB.Begin()
@@ -105,6 +309,12 @@ func (h *EvaluationsHandler) Submit(c *gin.Context) {
 
 	for _, a := range body.Answers {
 		if _, err := tx.Exec(`INSERT INTO evaluation_answers (evaluation_id, question_id, score) VALUES (?, ?, ?)`, evalID, a.QuestionID, a.Score); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
+			return
+		}
+	}
+	for _, a := range body.CustomAnswers {
+		if _, err := tx.Exec(`INSERT INTO event_evaluation_answers (evaluation_id, question_id, score, answer_text) VALUES (?, ?, ?, ?)`, evalID, a.QuestionID, a.Score, a.AnswerText); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 			return
 		}
@@ -167,38 +377,43 @@ func (h *EvaluationsHandler) Results(c *gin.Context) {
 		return
 	}
 
-	// The event filter must narrow the answers *before* they're joined back to
-	// evaluation_questions — filtering in the last LEFT JOIN's ON clause (as an
-	// earlier version of this query did) doesn't exclude other events' answers,
-	// it only nulls out the registrations columns, so counts/averages leaked
-	// across every event that shared a question.
-	rows, err := h.DB.Query(
-		`SELECT q.q_key, q.label, ROUND(AVG(ea.score), 2) AS avg_score, COUNT(ea.score) AS response_count
-		 FROM evaluation_questions q
+	// Results are now built solely from each event's own custom questions —
+	// the fixed standard 4 were dropped from the student-facing form, so they
+	// never get answered and would only show up here as a constant 0.0.
+	// Only scale-type custom questions are averaged here — choice-type ones
+	// (e.g. เพศ, สาขาวิชา) don't have a meaningful average and are left out
+	// of this endpoint; a future report can tally their answer_text instead.
+	list := []evalResultRow{}
+	customRows, err := h.DB.Query(
+		`SELECT q.id, q.label, ROUND(AVG(ea.score), 2) AS avg_score, COUNT(ea.score) AS response_count
+		 FROM event_evaluation_questions q
 		 LEFT JOIN (
-		   evaluation_answers ea
+		   event_evaluation_answers ea
 		   JOIN evaluations ev ON ev.id = ea.evaluation_id
 		   JOIN registrations r ON r.id = ev.registration_id AND r.event_id = ?
 		 ) ON ea.question_id = q.id
-		 GROUP BY q.id, q.q_key, q.label, q.sort_order
-		 ORDER BY q.sort_order ASC`, c.Param("id"),
+		 WHERE q.event_id = ? AND q.question_type = 'scale'
+		 GROUP BY q.id, q.label, q.sort_order
+		 ORDER BY q.sort_order ASC`, c.Param("id"), c.Param("id"),
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 		return
 	}
-	defer rows.Close()
+	defer customRows.Close()
 
-	list := []evalResultRow{}
-	for rows.Next() {
+	for customRows.Next() {
 		var r evalResultRow
+		var qID int
 		var avg sql.NullFloat64
-		if err := rows.Scan(&r.QKey, &r.Label, &avg, &r.ResponseCnt); err != nil {
+		if err := customRows.Scan(&qID, &r.Label, &avg, &r.ResponseCnt); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 			return
 		}
+		r.QKey = fmt.Sprintf("custom_%d", qID)
 		r.AvgScore = avg.Float64
 		list = append(list, r)
 	}
+
 	c.JSON(http.StatusOK, gin.H{"results": list})
 }

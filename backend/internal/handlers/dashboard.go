@@ -48,6 +48,29 @@ func (h *DashboardHandler) Yearly(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"yearly": list})
 }
 
+type summaryRow struct {
+	EventsThisYear     int `json:"events_this_year"`
+	ParticipantsTotal  int `json:"participants_total"`
+	CertificatesIssued int `json:"certificates_issued"`
+	OpenNow            int `json:"open_now"`
+}
+
+func (h *DashboardHandler) Summary(c *gin.Context) {
+	var r summaryRow
+	err := h.DB.QueryRow(`
+		SELECT
+			(SELECT COUNT(*) FROM events WHERE is_listed = 1 AND YEAR(date_start) = YEAR(CURDATE())),
+			(SELECT COUNT(*) FROM registrations reg JOIN events e ON e.id = reg.event_id WHERE e.is_listed = 1),
+			(SELECT COUNT(*) FROM registrations reg JOIN events e ON e.id = reg.event_id WHERE e.is_listed = 1 AND reg.status = 'certified'),
+			(SELECT COUNT(*) FROM events WHERE is_listed = 1 AND status = 'open')
+	`).Scan(&r.EventsThisYear, &r.ParticipantsTotal, &r.CertificatesIssued, &r.OpenNow)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"summary": r})
+}
+
 type eventStatsRow struct {
 	EventID         int64   `json:"event_id"`
 	Title           string  `json:"title"`

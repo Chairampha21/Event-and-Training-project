@@ -21,17 +21,17 @@ func NewSARHandler(db *sql.DB) *SARHandler {
 	return &SARHandler{DB: db}
 }
 
+// sarReport is now just the "wrap-up poster" an organizer attaches to a
+// finished event — the earlier long-form fields (purpose/outcome/gaps/
+// improvement) were dropped from the API in favor of a simple poster
+// archive, per direct feedback that the text report wasn't what got used.
 type sarReport struct {
-	ID          int64             `json:"id"`
-	EventID     int64             `json:"event_id"`
-	ReportCode  string            `json:"report_code"`
-	Purpose     models.NullString `json:"purpose"`
-	Outcome     models.NullString `json:"outcome"`
-	Gaps        models.NullString `json:"gaps"`
-	Improvement models.NullString `json:"improvement"`
-	Status      string            `json:"status"`
-	CreatedAt   string            `json:"created_at"`
-	UpdatedAt   string            `json:"updated_at"`
+	ID             int64             `json:"id"`
+	EventID        int64             `json:"event_id"`
+	ReportCode     string            `json:"report_code"`
+	RecapPosterURL models.NullString `json:"recap_poster_url"`
+	CreatedAt      string            `json:"created_at"`
+	UpdatedAt      string            `json:"updated_at"`
 }
 
 func (h *SARHandler) checkAccess(c *gin.Context) (int64, sql.NullInt64, bool) {
@@ -60,9 +60,9 @@ func (h *SARHandler) Get(c *gin.Context) {
 	}
 	var r sarReport
 	err := h.DB.QueryRow(
-		`SELECT id, event_id, report_code, purpose, outcome, gaps, improvement, status, created_at, updated_at
+		`SELECT id, event_id, report_code, recap_poster_url, created_at, updated_at
 		 FROM sar_reports WHERE event_id = ?`, c.Param("id"),
-	).Scan(&r.ID, &r.EventID, &r.ReportCode, &r.Purpose, &r.Outcome, &r.Gaps, &r.Improvement, &r.Status, &r.CreatedAt, &r.UpdatedAt)
+	).Scan(&r.ID, &r.EventID, &r.ReportCode, &r.RecapPosterURL, &r.CreatedAt, &r.UpdatedAt)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "ยังไม่มี SAR สำหรับกิจกรรมนี้"})
 		return
@@ -75,13 +75,11 @@ func (h *SARHandler) Get(c *gin.Context) {
 }
 
 type upsertSARBody struct {
-	Purpose     string `json:"purpose"`
-	Outcome     string `json:"outcome"`
-	Gaps        string `json:"gaps"`
-	Improvement string `json:"improvement"`
-	Status      string `json:"status"`
+	RecapPoster string `json:"recap_poster"`
 }
 
+// Upsert saves (or clears, if RecapPoster is empty) the wrap-up poster for
+// an event's SAR record, creating the record on first upload.
 func (h *SARHandler) Upsert(c *gin.Context) {
 	userID, _, ok := h.checkAccess(c)
 	if !ok {
@@ -92,19 +90,13 @@ func (h *SARHandler) Upsert(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลไม่ถูกต้อง"})
 		return
 	}
-	if b.Status != "draft" && b.Status != "final" {
-		b.Status = "draft"
-	}
 
 	eventID := c.Param("id")
 	var existingID sql.NullInt64
 	_ = h.DB.QueryRow(`SELECT id FROM sar_reports WHERE event_id = ?`, eventID).Scan(&existingID)
 
 	if existingID.Valid {
-		_, err := h.DB.Exec(
-			`UPDATE sar_reports SET purpose = ?, outcome = ?, gaps = ?, improvement = ?, status = ? WHERE id = ?`,
-			b.Purpose, b.Outcome, b.Gaps, b.Improvement, b.Status, existingID.Int64,
-		)
+		_, err := h.DB.Exec(`UPDATE sar_reports SET recap_poster_url = ? WHERE id = ?`, nullIfEmpty(b.RecapPoster), existingID.Int64)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 			return
@@ -116,8 +108,8 @@ func (h *SARHandler) Upsert(c *gin.Context) {
 			return
 		}
 		_, err = h.DB.Exec(
-			`INSERT INTO sar_reports (event_id, report_code, purpose, outcome, gaps, improvement, status, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-			eventID, code, b.Purpose, b.Outcome, b.Gaps, b.Improvement, b.Status, userID,
+			`INSERT INTO sar_reports (event_id, report_code, recap_poster_url, status, created_by) VALUES (?, ?, ?, 'final', ?)`,
+			eventID, code, nullIfEmpty(b.RecapPoster), userID,
 		)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
@@ -125,13 +117,13 @@ func (h *SARHandler) Upsert(c *gin.Context) {
 		}
 	}
 
-	activitylog.Log(h.DB, &userID, "UPDATE", "บันทึก SAR กิจกรรม #"+eventID)
+	activitylog.Log(h.DB, &userID, "UPDATE", "บันทึกโปสเตอร์สรุปข่าว กิจกรรม #"+eventID)
 
 	var r sarReport
 	err := h.DB.QueryRow(
-		`SELECT id, event_id, report_code, purpose, outcome, gaps, improvement, status, created_at, updated_at
+		`SELECT id, event_id, report_code, recap_poster_url, created_at, updated_at
 		 FROM sar_reports WHERE event_id = ?`, eventID,
-	).Scan(&r.ID, &r.EventID, &r.ReportCode, &r.Purpose, &r.Outcome, &r.Gaps, &r.Improvement, &r.Status, &r.CreatedAt, &r.UpdatedAt)
+	).Scan(&r.ID, &r.EventID, &r.ReportCode, &r.RecapPosterURL, &r.CreatedAt, &r.UpdatedAt)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 		return

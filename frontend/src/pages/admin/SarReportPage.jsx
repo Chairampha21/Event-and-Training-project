@@ -1,55 +1,87 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useEvents } from '../../hooks/useEvents';
-import EvalResultChart from '../../components/EvalResultChart';
 import { ROLE_LABEL } from '../../utils/constants';
+import { toBuddhistYear } from '../../utils/dateFormat';
+import { fileToDataUrl } from '../../utils/fileToDataUrl';
+import { downloadDataUrl, downloadAllImages } from '../../utils/downloadImage';
+import Modal, { ModalHead } from '../../components/Modal';
 
-const EMPTY_SAR = { purpose: '', outcome: '', gaps: '', improvement: '' };
-
+// คลังโปสเตอร์กิจกรรม — แทนที่แบบฟอร์ม SAR ยาวเดิม ตามที่ผู้จัดกิจกรรมแจ้งว่า
+// สิ่งที่ใช้จริงมีแค่โปสเตอร์กิจกรรมกับโปสเตอร์สรุปข่าว ให้อาจารย์ดูและโหลดได้ทั้งหมด
 export default function SarReportPage() {
-  const { events, session, pushToast, getSar, saveSar, getEvaluationResults } = useEvents();
+  const { events, session, pushToast, getSar, saveSar } = useEvents();
   const doneEvents = useMemo(() => events.filter((e) => e.listed && e.status === 'done'), [events]);
-  const [eventId, setEventId] = useState(doneEvents[0]?.id);
-  const ev = events.find((e) => e.id === Number(eventId)) || doneEvents[0];
 
-  const [form, setForm] = useState(EMPTY_SAR);
-  const [reportCode, setReportCode] = useState(null);
-  const [status, setStatus] = useState('draft');
-  const [evalData, setEvalData] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const years = useMemo(() => {
+    const set = new Set(doneEvents.filter((e) => e.dateStart).map((e) => e.dateStart.slice(0, 4)));
+    return [...set].sort((a, b) => b - a);
+  }, [doneEvents]);
+
+  const [yearFilter, setYearFilter] = useState('');
+  const [search, setSearch] = useState('');
+  const [sarByEvent, setSarByEvent] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [uploadingId, setUploadingId] = useState(null);
+  const [preview, setPreview] = useState(null); // { url, title }
+  const [downloadingAll, setDownloadingAll] = useState(false);
 
   useEffect(() => {
-    if (!ev) return;
-    setLoading(true);
-    Promise.all([getSar(ev.id), getEvaluationResults(ev.id)]).then(([sar, results]) => {
-      setForm(sar ? { purpose: sar.purpose || '', outcome: sar.outcome || '', gaps: sar.gaps || '', improvement: sar.improvement || '' } : EMPTY_SAR);
-      setReportCode(sar?.report_code || null);
-      setStatus(sar?.status || 'draft');
-      setEvalData(results.map((r) => ({ label: r.label, avg: r.avg_score || 0 })));
-      setLoading(false);
+    let cancelled = false;
+    Promise.all(doneEvents.map((ev) => getSar(ev.id).then((sar) => [ev.id, sar]))).then((entries) => {
+      if (!cancelled) { setSarByEvent(Object.fromEntries(entries)); setLoading(false); }
     });
-  }, [ev, getSar, getEvaluationResults]);
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doneEvents.map((e) => e.id).join(',')]);
 
-  const attendRate = ev && ev.cap ? ((ev.reg / ev.cap) * 100).toFixed(1) : '0';
-  const avgSatisfaction = evalData.length ? (evalData.reduce((a, r) => a + r.avg, 0) / evalData.length).toFixed(1) : '0.0';
+  const q = search.trim().toLowerCase();
+  const filtered = doneEvents.filter((ev) => {
+    if (q && !ev.title.toLowerCase().includes(q)) return false;
+    if (yearFilter && ev.dateStart?.slice(0, 4) !== yearFilter) return false;
+    return true;
+  });
 
-  async function handleSave(nextStatus) {
-    if (!ev) return;
-    setSaving(true);
+  async function onUploadRecap(ev, file) {
+    setUploadingId(ev.id);
     try {
-      const sar = await saveSar(ev.id, { ...form, status: nextStatus });
-      setReportCode(sar.report_code);
-      setStatus(sar.status);
-      pushToast(nextStatus === 'final' ? 'ยืนยัน SAR ฉบับสมบูรณ์แล้ว' : 'บันทึกฉบับร่างแล้ว', ev.title.slice(0, 30));
+      const dataUrl = await fileToDataUrl(file);
+      const sar = await saveSar(ev.id, { recap_poster: dataUrl });
+      setSarByEvent((s) => ({ ...s, [ev.id]: sar }));
+      pushToast('อัปโหลดโปสเตอร์สรุปข่าวแล้ว', ev.title.slice(0, 30));
     } catch (err) {
-      pushToast('บันทึกไม่สำเร็จ', err.message, 'warn');
+      pushToast('อัปโหลดไม่สำเร็จ', err.message, 'warn');
     } finally {
-      setSaving(false);
+      setUploadingId(null);
     }
   }
 
-  if (!ev) {
-    return <div className="wrap tight"><div className="empty-state">ยังไม่มีกิจกรรมที่จัดเสร็จสิ้นสำหรับออกรายงาน SAR</div></div>;
+  async function onRemoveRecap(ev) {
+    setUploadingId(ev.id);
+    try {
+      const sar = await saveSar(ev.id, { recap_poster: '' });
+      setSarByEvent((s) => ({ ...s, [ev.id]: sar }));
+    } catch (err) {
+      pushToast('ลบไม่สำเร็จ', err.message, 'warn');
+    } finally {
+      setUploadingId(null);
+    }
+  }
+
+  async function handleDownloadAll() {
+    const items = [];
+    filtered.forEach((ev) => {
+      const safeTitle = ev.title.replace(/[\\/:*?"<>|]/g, '').slice(0, 40);
+      if (ev.poster) items.push({ url: ev.poster, filename: `${safeTitle} - โปสเตอร์กิจกรรม.png` });
+      const recap = sarByEvent[ev.id]?.recap_poster_url;
+      if (recap) items.push({ url: recap, filename: `${safeTitle} - โปสเตอร์สรุปข่าว.png` });
+    });
+    if (items.length === 0) {
+      pushToast('ไม่มีรูปให้ดาวน์โหลด', 'ยังไม่มีโปสเตอร์ในรายการที่กรองอยู่', 'warn');
+      return;
+    }
+    setDownloadingAll(true);
+    await downloadAllImages(items);
+    setDownloadingAll(false);
   }
 
   return (
@@ -58,82 +90,108 @@ export default function SarReportPage() {
         <div className="ph-inner">
           <div>
             <div className="crumbs"><i className="ti ti-clipboard-text" /> {ROLE_LABEL[session.role]} <i className="ti ti-chevron-right" /> SAR</div>
-            <h1>Self Assessment Report (SAR)</h1>
-            <p>รายงานประเมินผลกิจกรรมตามรูปแบบระดับคุณภาพการศึกษา สำหรับหลักฐานประกอบและส่งออก PDF</p>
+            <h1>คลังโปสเตอร์กิจกรรม (SAR)</h1>
+            <p>รวมโปสเตอร์กิจกรรมและโปสเตอร์สรุปข่าวของกิจกรรมที่จัดเสร็จสิ้นแล้ว ดูและดาวน์โหลดได้ทั้งหมด</p>
           </div>
           <div className="ph-actions">
-            <button className="btn btn-outline" onClick={() => handleSave('draft')} disabled={saving}><i className="ti ti-device-floppy" /> บันทึกฉบับร่าง</button>
-            <button className="btn btn-primary" onClick={() => handleSave('final')} disabled={saving}><i className="ti ti-file-download" /> ยืนยันฉบับสมบูรณ์</button>
+            <button className="btn btn-accent" onClick={handleDownloadAll} disabled={downloadingAll}>
+              <i className="ti ti-download" /> {downloadingAll ? 'กำลังดาวน์โหลด...' : 'ดาวน์โหลดทั้งหมด'}
+            </button>
           </div>
         </div>
       </div>
 
       <div className="wrap tight">
-        <div className="form-card">
-          <div className="field" style={{ maxWidth: 420 }}>
-            <label>เลือกกิจกรรมที่จัดเสร็จสิ้นแล้ว</label>
-            <select className="role-select" style={{ width: '100%' }} value={eventId} onChange={(e) => setEventId(Number(e.target.value))}>
-              {doneEvents.map((e) => <option key={e.id} value={e.id}>{e.title}</option>)}
+        <div className="report-filter">
+          <div className="field rf-search">
+            <label>ค้นหากิจกรรม</label>
+            <div className="with-icon"><i className="ti ti-search" />
+              <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="พิมพ์ชื่อกิจกรรมเพื่อค้นหา..." />
+            </div>
+          </div>
+          <div className="field rf-year">
+            <label>ปีที่จัด</label>
+            <select value={yearFilter} onChange={(e) => setYearFilter(e.target.value)}>
+              <option value="">ทุกปี</option>
+              {years.map((y) => <option key={y} value={y}>{toBuddhistYear(Number(y))}</option>)}
             </select>
           </div>
         </div>
 
-        <div className="sar-card" style={loading ? { opacity: .5, pointerEvents: 'none' } : undefined}>
-          <div className="sar-head">
-            <h3><i className="ti ti-clipboard-text" /> SAR — {ev.title}</h3>
-            <span className="sar-meta">รหัสรายงาน: {reportCode || 'ยังไม่ได้บันทึก'} · สถานะ: {status === 'final' ? 'ฉบับสมบูรณ์' : 'ฉบับร่าง'}</span>
+        {loading ? (
+          <p style={{ fontSize: 13, color: 'var(--c4-60)' }}>กำลังโหลด...</p>
+        ) : filtered.length === 0 ? (
+          <div className="empty-state">ไม่พบกิจกรรมที่ตรงเงื่อนไข</div>
+        ) : (
+          <div className="sar-gallery">
+            {filtered.map((ev) => {
+              const recap = sarByEvent[ev.id]?.recap_poster_url;
+              const busy = uploadingId === ev.id;
+              return (
+                <div className="sar-g-card" key={ev.id}>
+                  <div className="sar-g-head">
+                    <div className="sar-g-title">{ev.title}</div>
+                    <div className="sar-g-meta"><i className="ti ti-calendar-event" /> {ev.date}</div>
+                  </div>
+                  <div className="sar-g-imgs">
+                    <div className="sar-g-slot">
+                      <div className="sar-g-slot-label">โปสเตอร์กิจกรรม</div>
+                      <div className="sar-g-thumb">
+                        {ev.poster ? (
+                          <img src={ev.poster} alt="โปสเตอร์กิจกรรม" onClick={() => setPreview({ url: ev.poster, title: `${ev.title} · โปสเตอร์กิจกรรม` })} />
+                        ) : (
+                          <div className="sar-g-empty"><i className="ti ti-photo-off" /> ไม่มีโปสเตอร์</div>
+                        )}
+                      </div>
+                      <div className="sar-g-actions">
+                        <button type="button" disabled={!ev.poster} onClick={() => downloadDataUrl(ev.poster, `${ev.title.slice(0, 40)} - โปสเตอร์กิจกรรม.png`)}>
+                          <i className="ti ti-download" /> โหลด
+                        </button>
+                      </div>
+                    </div>
+                    <div className="sar-g-slot">
+                      <div className="sar-g-slot-label">โปสเตอร์สรุปข่าว</div>
+                      <div className="sar-g-thumb" onClick={() => { if (!recap && !busy) document.getElementById(`sar-recap-${ev.id}`).click(); }}>
+                        <input
+                          type="file"
+                          id={`sar-recap-${ev.id}`}
+                          accept="image/*"
+                          style={{ display: 'none' }}
+                          onChange={(e) => { const f = e.target.files?.[0]; if (f) onUploadRecap(ev, f); e.target.value = ''; }}
+                        />
+                        {recap ? (
+                          <img src={recap} alt="โปสเตอร์สรุปข่าว" onClick={() => setPreview({ url: recap, title: `${ev.title} · โปสเตอร์สรุปข่าว` })} />
+                        ) : (
+                          <div className="sar-g-empty"><i className="ti ti-upload" /> {busy ? 'กำลังอัปโหลด...' : 'อัปโหลดรูป'}</div>
+                        )}
+                      </div>
+                      <div className="sar-g-actions">
+                        {recap ? (
+                          <>
+                            <button type="button" onClick={() => downloadDataUrl(recap, `${ev.title.slice(0, 40)} - โปสเตอร์สรุปข่าว.png`)}><i className="ti ti-download" /> โหลด</button>
+                            <button type="button" onClick={() => onRemoveRecap(ev)} disabled={busy}><i className="ti ti-trash" /> ลบ</button>
+                          </>
+                        ) : (
+                          <button type="button" onClick={() => document.getElementById(`sar-recap-${ev.id}`).click()} disabled={busy}>
+                            <i className="ti ti-upload" /> เลือกไฟล์
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-
-          <div className="sar-section">
-            <h4><span className="num">1</span> ข้อมูลกิจกรรม</h4>
-            <div className="sar-grid">
-              <div className="field"><label>ชื่อกิจกรรม</label><div className="sar-readout">{ev.title}</div></div>
-              <div className="field"><label>วันที่จัด</label><div className="sar-readout">{ev.date}</div></div>
-              <div className="field"><label>สถานที่</label><div className="sar-readout">{ev.place}</div></div>
-              <div className="field"><label>ผู้รับผิดชอบ</label><div className="sar-readout">{ev.org}</div></div>
-            </div>
-          </div>
-
-          <div className="sar-section">
-            <h4><span className="num">2</span> วัตถุประสงค์ &amp; ผลลัพธ์การเรียนรู้</h4>
-            <div className="form-row full" style={{ margin: 0 }}>
-              <div className="field"><label>วัตถุประสงค์</label><textarea value={form.purpose} onChange={(e) => setForm((f) => ({ ...f, purpose: e.target.value }))} /></div>
-            </div>
-            <div className="form-row full" style={{ marginBottom: 0, marginTop: 16 }}>
-              <div className="field"><label>ผลลัพธ์ที่เกิดขึ้นจริง</label><textarea value={form.outcome} onChange={(e) => setForm((f) => ({ ...f, outcome: e.target.value }))} /></div>
-            </div>
-          </div>
-
-          <div className="sar-section">
-            <h4><span className="num">3</span> ตัวเลขเชิงปริมาณ</h4>
-            <div className="sar-grid">
-              <div className="field"><label>ผู้สมัครทั้งหมด</label><div className="sar-readout"><span className="lg">{ev.reg}</span></div></div>
-              <div className="field"><label>ที่นั่งทั้งหมด</label><div className="sar-readout"><span className="lg">{ev.cap}</span></div></div>
-              <div className="field"><label>อัตราเข้าร่วม</label><div className="sar-readout"><span className="lg">{attendRate}%</span></div></div>
-              <div className="field"><label>ระดับความพึงพอใจ</label><div className="sar-readout"><span className="lg">{avgSatisfaction} / 5</span></div></div>
-            </div>
-          </div>
-
-          <div className="sar-section">
-            <h4><span className="num">4</span> ผลการประเมินความพึงพอใจ (รายด้าน)</h4>
-            {evalData.length > 0 ? <EvalResultChart data={evalData} /> : <p style={{ fontSize: 13, color: 'var(--c4-60)' }}>ยังไม่มีผู้ทำแบบประเมินสำหรับกิจกรรมนี้</p>}
-          </div>
-
-          <div className="sar-section">
-            <h4><span className="num">5</span> ข้อสังเกต &amp; ปัญหาที่พบ</h4>
-            <div className="form-row full" style={{ marginBottom: 0 }}>
-              <div className="field"><textarea value={form.gaps} onChange={(e) => setForm((f) => ({ ...f, gaps: e.target.value }))} /></div>
-            </div>
-          </div>
-
-          <div className="sar-section">
-            <h4><span className="num">6</span> แนวทางพัฒนาครั้งต่อไป</h4>
-            <div className="form-row full" style={{ marginBottom: 0 }}>
-              <div className="field"><textarea value={form.improvement} onChange={(e) => setForm((f) => ({ ...f, improvement: e.target.value }))} /></div>
-            </div>
-          </div>
-        </div>
+        )}
       </div>
+
+      <Modal open={!!preview} onClose={() => setPreview(null)} size="lg">
+        <ModalHead eyebrow="ตัวอย่างโปสเตอร์" icon="ti-photo" title={preview?.title || ''} onClose={() => setPreview(null)} />
+        <div className="modal-body" style={{ padding: 0, maxHeight: '72vh', overflow: 'hidden', display: 'flex', justifyContent: 'center' }}>
+          {preview && <img src={preview.url} alt={preview.title} style={{ display: 'block', maxWidth: '100%', maxHeight: '72vh', width: 'auto', height: 'auto', objectFit: 'contain' }} />}
+        </div>
+      </Modal>
     </div>
   );
 }

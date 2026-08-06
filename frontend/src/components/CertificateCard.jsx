@@ -3,7 +3,18 @@ import Modal, { ModalHead } from './Modal';
 import { useEvents } from '../hooks/useEvents';
 import { CertOrgOverlay, CertBodyOverlay, CertSignerOverlay } from './CertOverlays';
 import { printCertificate } from '../utils/certificateGen';
-import { formatThaiDate } from '../utils/dateFormat';
+import { formatThaiDate, formatCertDate } from '../utils/dateFormat';
+
+// Decorative signature squiggle — stands in for a scanned signature image,
+// which isn't part of this project's assets.
+function SignatureSquiggle() {
+  return (
+    <svg className="cp-sign-svg" viewBox="0 0 120 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M4 26c6-14 12-18 16-10 3 6-2 12 3 12s7-14 14-16 6 10 12 10 9-8 15-8 4 8 10 8 8-10 14-10 5 9 11 9 9-6 17-6"
+        stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
 
 export function CertPreviewModal({ eventId, open, onClose }) {
   const { evById, session, myCertificates, downloadCert } = useEvents();
@@ -21,6 +32,8 @@ export function CertPreviewModal({ eventId, open, onClose }) {
 
   const title = ev?.title || cert?.title || '';
   const date = ev?.date || (cert ? formatThaiDate(cert.date_start) : '');
+  const dateStart = ev?.dateStart || cert?.date_start || '';
+  const dateEnd = ev?.dateEnd || dateStart;
   const signerName = ev?.signer?.name || 'ผศ.ดร. ปิยะ จันทรัศมี';
   const signerTitle = ev?.signer?.title || '';
   const certId = cert?.cert_code || `SU-CS-${String(eventId).padStart(3, '0')}`;
@@ -28,7 +41,7 @@ export function CertPreviewModal({ eventId, open, onClose }) {
 
   function handleDownload() {
     downloadCert(eventId);
-    printCertificate({ studentName, eventTitle: title, date, certId, templateUrl: ev?.certTemplate?.dataUrl, signerName, signerTitle });
+    printCertificate({ studentName, eventTitle: title, date, dateStart, dateEnd, certId, templateUrl: ev?.certTemplate?.dataUrl, signerName, signerTitle });
   }
 
   return (
@@ -44,18 +57,20 @@ export function CertPreviewModal({ eventId, open, onClose }) {
           </div>
         ) : (
           <div className="cert-preview">
-            <span className="cp-corner tl" /><span className="cp-corner tr" /><span className="cp-corner bl" /><span className="cp-corner br" />
-            <div className="cp-seal"><i className="ti ti-rosette-discount-check" /></div>
+            <div className="cp-logos">
+              <div className="cp-logo-badge"><i className="ti ti-atom-2" /></div>
+              <div className="cp-logo-cpsu"><span className="cs1">CPSU</span><span className="cs2">NEXT</span></div>
+            </div>
+            <div className="cp-dept">ภาควิชาคอมพิวเตอร์</div>
             <div className="cp-org">คณะวิทยาศาสตร์ มหาวิทยาลัยศิลปากร</div>
-            <div className="cp-eyebrow">ขอมอบใบประกาศเกียรติคุณฉบับนี้ไว้เพื่อเป็นเกียรติแก่</div>
+            <div className="cp-eyebrow">ขอมอบประกาศนียบัตรฉบับนี้ไว้เพื่อแสดงว่า</div>
             <div className="cp-name">{studentName}</div>
-            <div className="cp-for">ซึ่งได้เข้าร่วมและผ่านกิจกรรม</div>
-            <div className="cp-event">{title}</div>
-            <div className="cp-blessing">ขอให้มีความสุข ความเจริญ และประสบความสำเร็จในการศึกษาสืบไป</div>
-            <div className="cp-date">ให้ไว้ ณ วันที่ {date}</div>
+            <div className="cp-for">ได้เข้ารับการอบรม หัวข้อ &ldquo;<strong>{title}</strong>&rdquo;</div>
+            <div className="cp-date">ใน{formatCertDate(dateStart, dateEnd)}</div>
+            <div className="cp-place">ณ ภาควิชาคอมพิวเตอร์ คณะวิทยาศาสตร์<br />มหาวิทยาลัยศิลปากร วิทยาเขตพระราชวังสนามจันทร์</div>
             <div className="cp-sign">
-              <div className="cp-sign-line" />
-              <div className="cp-sign-name">{signerName}</div>
+              <SignatureSquiggle />
+              {signerName && <div className="cp-sign-name">({signerName})</div>}
               {signerTitle && <div className="cp-sign-title">{signerTitle}</div>}
             </div>
           </div>

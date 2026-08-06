@@ -31,16 +31,12 @@ export default function EventCard({ event, isStudent, myStatus, onApply, onManag
       )}
       <div className="card-body">
         <div className="card-top">
-          {event.poster
-            ? <div className={`icon-box sm ${event.tone}`}><i className={`ti ${event.icon}`} /></div>
-            : (
-              <>
-                <div className={`icon-box ${event.tone}`}><i className={`ti ${event.icon}`} /></div>
-                <span className={`badge ${sm.badge}`}><i className={`ti ${sm.ico}`} /> {sm.label}</span>
-              </>
-            )}
+          <div className="card-top-left">
+            <div className={`icon-box sm ${event.tone}`}><i className={`ti ${event.icon}`} /></div>
+            <span className="card-cat">{event.cat}</span>
+          </div>
+          {!event.poster && <span className={`badge ${sm.badge}`}><i className={`ti ${sm.ico}`} /> {sm.label}</span>}
         </div>
-        <div className="card-cat">{event.cat}</div>
         <h3 className="card-title">{event.title}</h3>
         {!isStudent && <CycleProgress stage={event.stage} />}
         <div className="meta">

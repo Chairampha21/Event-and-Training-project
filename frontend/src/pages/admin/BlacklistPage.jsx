@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useEvents } from '../../hooks/useEvents';
 import Modal, { ModalHead } from '../../components/Modal';
+import { api } from '../../utils/api';
 
 function formatDate(ts) {
   if (!ts) return '';
@@ -14,6 +15,44 @@ export default function BlacklistPage() {
   const [form, setForm] = useState({ name: '', email: '', sid: '', reason: '' });
   const [restoreId, setRestoreId] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState('');
+  const [sidMatches, setSidMatches] = useState([]);
+
+  const sidQuery = form.sid.trim();
+  useEffect(() => {
+    if (!sidQuery) { setSidMatches([]); return; }
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      try {
+        const { users } = await api.get(`/blacklist/lookup?q=${encodeURIComponent(sidQuery)}`);
+        if (cancelled) return;
+        const exact = users.find((u) => u.student_id === sidQuery);
+        if (exact) {
+          setForm((f) => ({ ...f, name: exact.name || '', email: exact.email || '' }));
+          setSidMatches([]);
+        } else {
+          setSidMatches(users);
+        }
+      } catch {
+        if (!cancelled) setSidMatches([]);
+      }
+    }, 250);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [sidQuery]);
+
+  function pickUser(u) {
+    setForm((f) => ({ ...f, name: u.name || '', email: u.email || '', sid: u.student_id || '' }));
+    setSidMatches([]);
+  }
+
+  const q = search.trim().toLowerCase();
+  const filtered = q
+    ? blacklist.filter((u) =>
+        (u.student_id || '').toLowerCase().includes(q) ||
+        (u.name || '').toLowerCase().includes(q) ||
+        (u.email || '').toLowerCase().includes(q)
+      )
+    : blacklist;
 
   async function addEntry() {
     if (!form.name.trim() || !form.reason.trim()) return;
@@ -49,14 +88,24 @@ export default function BlacklistPage() {
         </div>
 
         <div className="table-card">
+          <div style={{ padding: 16, borderBottom: '1px solid var(--c4-10)' }}>
+            <div className="field" style={{ maxWidth: 320 }}>
+              <input
+                type="text"
+                placeholder="ค้นหาด้วยรหัสนักศึกษา, ชื่อ หรืออีเมล"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+          </div>
           <div style={{ overflowX: 'auto' }}>
             <table>
               <thead>
                 <tr><th>ชื่อ–นามสกุล</th><th>รหัสนักศึกษา</th><th>เหตุผล</th><th>วันที่บันทึก</th><th>ผู้บันทึก</th><th className="right">การจัดการ</th></tr>
               </thead>
               <tbody>
-                {blacklist.length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--c4-60)', padding: 24 }}>ไม่มีรายชื่อ Blacklist</td></tr>}
-                {blacklist.map((u) => (
+                {filtered.length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--c4-60)', padding: 24 }}>{blacklist.length === 0 ? 'ไม่มีรายชื่อ Blacklist' : 'ไม่พบรายชื่อที่ค้นหา'}</td></tr>}
+                {filtered.map((u) => (
                   <tr key={u.id}>
                     <td>
                       <div className="ev-cell">
@@ -78,16 +127,43 @@ export default function BlacklistPage() {
               </tbody>
             </table>
           </div>
-          <div className="table-foot"><span>แสดง {blacklist.length} จาก {blacklist.length} รายการ</span></div>
+          <div className="table-foot"><span>แสดง {filtered.length} จาก {blacklist.length} รายการ</span></div>
         </div>
       </div>
 
       <Modal open={addOpen} onClose={() => setAddOpen(false)} size="sm">
         <ModalHead eyebrow="เพิ่มรายชื่อ" icon="ti-user-off" title="เพิ่มเข้า Blacklist" onClose={() => setAddOpen(false)} />
         <div className="modal-body">
+          <div className="form-row full">
+            <div className="field" style={{ position: 'relative' }}>
+              <label>รหัสนักศึกษา</label>
+              <input
+                type="text"
+                value={form.sid}
+                onChange={(e) => setForm((f) => ({ ...f, sid: e.target.value }))}
+                onBlur={() => setTimeout(() => setSidMatches([]), 150)}
+                placeholder="พิมพ์เพื่อค้นหาจากรหัสนักศึกษาที่ลงทะเบียนในระบบ"
+                autoComplete="off"
+              />
+              {sidMatches.length > 0 && (
+                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 20, background: 'var(--card-bg, #fff)', border: '1px solid var(--c4-10)', borderRadius: 8, marginTop: 4, boxShadow: '0 8px 24px rgba(0,0,0,.12)', maxHeight: 220, overflowY: 'auto' }}>
+                  {sidMatches.map((u) => (
+                    <div
+                      key={u.id}
+                      onMouseDown={() => pickUser(u)}
+                      style={{ padding: '8px 12px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', gap: 8 }}
+                      className="sid-suggest-item"
+                    >
+                      <span>{u.name}</span>
+                      <strong style={{ color: 'var(--c4-60)' }}>{u.student_id}</strong>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
           <div className="form-row full"><div className="field"><label>ชื่อ–นามสกุล <span className="req">*</span></label><input type="text" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} /></div></div>
           <div className="form-row full"><div className="field"><label>อีเมล</label><input type="text" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} /></div></div>
-          <div className="form-row full"><div className="field"><label>รหัสนักศึกษา</label><input type="text" value={form.sid} onChange={(e) => setForm((f) => ({ ...f, sid: e.target.value }))} /></div></div>
           <div className="form-row full"><div className="field"><label>เหตุผล <span className="req">*</span></label><textarea value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} /></div></div>
         </div>
         <div className="modal-foot">

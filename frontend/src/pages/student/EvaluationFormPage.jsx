@@ -1,28 +1,40 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useEvents } from '../../hooks/useEvents';
-import { EVAL_QUESTIONS } from '../../data/evalQuestions';
 
 export default function EvaluationFormPage() {
   const { eventId } = useParams();
   const navigate = useNavigate();
-  const { evById, submitEvaluation } = useEvents();
+  const { evById, submitEvaluation, getEventEvalQuestions } = useEvents();
   const ev = evById(eventId);
-  const [scores, setScores] = useState({});
+  const [customValues, setCustomValues] = useState({});
+  const [customQuestions, setCustomQuestions] = useState([]);
+  const [loadingCustom, setLoadingCustom] = useState(true);
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!ev) return;
+    let cancelled = false;
+    getEventEvalQuestions(ev.id).then((qs) => {
+      if (!cancelled) { setCustomQuestions(qs); setLoadingCustom(false); }
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ev?.id]);
 
   if (!ev) {
     return <div className="wrap"><div className="empty-state">ไม่พบกิจกรรมนี้</div></div>;
   }
 
-  const allRated = EVAL_QUESTIONS.every((q) => scores[q.k]);
+  const customComplete = customQuestions.every((q) => !q.required || (customValues[q.id] ?? '') !== '');
+  const allRated = !loadingCustom && customComplete;
 
   async function handleSubmit() {
     if (!allRated) return;
     setSubmitting(true);
     try {
-      await submitEvaluation(ev.id, scores);
+      await submitEvaluation(ev.id, {}, customValues);
       navigate('/my-registrations');
     } catch {
       setSubmitting(false);
@@ -44,21 +56,40 @@ export default function EvaluationFormPage() {
           กรุณาทำแบบประเมินให้ครบทุกข้อ ระบบจะปลดล็อกเกียรติบัตรให้โดยอัตโนมัติเมื่อส่งแบบประเมินสำเร็จ
         </div>
 
-        {EVAL_QUESTIONS.map((q) => (
-          <div className="ev-q" key={q.k}>
-            <div className="ev-q-label">{q.label}</div>
-            <div className="ev-stars">
-              {[1, 2, 3, 4, 5].map((v) => (
-                <button
-                  key={v}
-                  type="button"
-                  className={`ev-star${scores[q.k] >= v ? ' on' : ''}`}
-                  onClick={() => setScores((s) => ({ ...s, [q.k]: v }))}
-                >
-                  <i className={`ti ${scores[q.k] >= v ? 'ti-star-filled' : 'ti-star'}`} />
-                </button>
-              ))}
-            </div>
+        {customQuestions.length === 0 && !loadingCustom && (
+          <p style={{ fontSize: 13, color: 'var(--c4-60)' }}>กิจกรรมนี้ยังไม่มีคำถามแบบประเมิน กดส่งเพื่อรับเกียรติบัตรได้เลย</p>
+        )}
+
+        {customQuestions.map((q) => (
+          <div className="ev-q" key={q.id}>
+            <div className="ev-q-label">{q.label} {q.required && <span className="req">*</span>}</div>
+            {q.type === 'choice' ? (
+              <div className="ev-choices">
+                {(q.options || []).map((opt) => (
+                  <button
+                    key={opt}
+                    type="button"
+                    className={`ev-choice-opt${customValues[q.id] === opt ? ' on' : ''}`}
+                    onClick={() => setCustomValues((v) => ({ ...v, [q.id]: opt }))}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="ev-stars">
+                {[1, 2, 3, 4, 5].map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    className={`ev-star${customValues[q.id] >= v ? ' on' : ''}`}
+                    onClick={() => setCustomValues((cv) => ({ ...cv, [q.id]: v }))}
+                  >
+                    <i className={`ti ${customValues[q.id] >= v ? 'ti-star-filled' : 'ti-star'}`} />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         ))}
 

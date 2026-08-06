@@ -16,6 +16,7 @@ import CreateEventPage from './pages/organizer/CreateEventPage';
 import EventsTablePage from './pages/organizer/EventsTablePage';
 import ReportPage from './pages/organizer/ReportPage';
 import DashboardPage from './pages/admin/DashboardPage';
+import ActivityLogPage from './pages/admin/ActivityLogPage';
 import BlacklistPage from './pages/admin/BlacklistPage';
 import SarReportPage from './pages/admin/SarReportPage';
 import EvaluationsPage from './pages/admin/EvaluationsPage';
@@ -68,6 +69,7 @@ function Routed() {
         </Route>
         <Route element={<ProtectedRoute roles={['admin']} />}>
           <Route path="/admin/users" element={<UsersPage />} />
+          <Route path="/admin/activity-log" element={<ActivityLogPage />} />
         </Route>
         <Route path="*" element={<NotFound />} />
       </Route>

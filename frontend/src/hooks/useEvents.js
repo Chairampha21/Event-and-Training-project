@@ -31,14 +31,15 @@ function todayIso() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-// Derives the 4-stage cycle (ประกาศ/รับสมัคร/จัดกิจกรรม/เกียรติบัตร) from the
-// event's actual date range and status, instead of trusting a stage an
+// Derives the 5-stage cycle (ประกาศ/รับสมัคร/จัดกิจกรรม/เกียรติบัตร/ปิดกิจกรรม)
+// from the event's actual date range and status, instead of trusting a stage an
 // organizer may never have gone back to update by hand — so it advances into
 // "จัดกิจกรรม" and "เกียรติบัตร" on its own as the real date arrives/passes.
-// 'done' is still an explicit organizer action (opening certificate
-// eligibility), so it always wins once set.
+// "ปิดกิจกรรม" only lands once the organizer has explicitly issued
+// certificates (status 'done'); until then, an event past its end date just
+// sits at "เกียรติบัตร" (over, certificate pending).
 function deriveStage(status, dateStart, dateEnd) {
-  if (status === 'done') return 3;
+  if (status === 'done') return 4;
   if (status === 'soon') return 0;
   if (!dateStart) return 1;
   const today = todayIso();
@@ -284,24 +285,51 @@ export function AppProvider({ children }) {
     }
     if (session.role === 'organizer' || session.role === 'admin') {
       refreshBlacklist();
-      refreshActivityLog();
     }
     if (session.role === 'admin') {
       refreshUsers();
+      refreshActivityLog();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.id]);
 
   /* ---------- auth ---------- */
+  const applySession = useCallback((user, token) => {
+    setAuthToken(token);
+    setSession({ id: user.id, role: user.role, name: user.name, email: user.email, student_id: user.student_id, dept: user.dept, token });
+    pushToast('เข้าสู่ระบบสำเร็จ', `ยินดีต้อนรับ · ${ROLE_LABEL[user.role]}`);
+  }, [pushToast, setSession]);
+
   const login = useCallback(async (email, password) => {
     try {
       const { user, token } = await api.post('/auth/login', { email, password }, { auth: false });
-      setAuthToken(token);
-      setSession({ id: user.id, role: user.role, name: user.name, email: user.email, student_id: user.student_id, dept: user.dept, token });
-      pushToast('เข้าสู่ระบบสำเร็จ', `ยินดีต้อนรับ · ${ROLE_LABEL[user.role]}`);
+      applySession(user, token);
       return true;
     } catch (err) {
       pushToast('เข้าสู่ระบบไม่สำเร็จ', err.message || 'อีเมลหรือรหัสผ่านไม่ถูกต้อง', 'warn');
+      return false;
+    }
+  }, [pushToast, applySession]);
+
+  const loginWithGoogle = useCallback(async (credential) => {
+    try {
+      const { user, token } = await api.post('/auth/google', { credential }, { auth: false });
+      applySession(user, token);
+      return true;
+    } catch (err) {
+      pushToast('เข้าสู่ระบบด้วย Google ไม่สำเร็จ', err.message || '', 'warn');
+      return false;
+    }
+  }, [pushToast, applySession]);
+
+  const updateProfile = useCallback(async (payload) => {
+    try {
+      const { user } = await api.put('/auth/me', payload);
+      setSession((s) => (s ? { ...s, name: user.name, dept: user.dept, student_id: user.student_id } : s));
+      pushToast('บันทึกโปรไฟล์แล้ว', user.name);
+      return true;
+    } catch (err) {
+      pushToast('บันทึกโปรไฟล์ไม่สำเร็จ', err.message || '', 'warn');
       return false;
     }
   }, [pushToast, setSession]);
@@ -415,7 +443,7 @@ export function AppProvider({ children }) {
   const issueCertificate = useCallback(async (id) => {
     const ev = evById(id);
     try {
-      await api.put(`/events/${id}`, { cycle_stage: 3, status: 'done' });
+      await api.put(`/events/${id}`, { cycle_stage: 4, status: 'done' });
       await refreshEvents();
       pushToast('เปิดให้รับเกียรติบัตรแล้ว', 'ผู้เข้าร่วมต้องทำแบบประเมินก่อนดาวน์โหลด');
       addNotif('ทำแบบประเมินเพื่อรับเกียรติบัตร', `${ev ? ev.title : ''} · กรุณาทำแบบประเมินกิจกรรมเพื่อรับเกียรติบัตร`, 'ti-clipboard-check', 'accent');
@@ -431,16 +459,44 @@ export function AppProvider({ children }) {
     return questions;
   }
 
-  // scores: {[q_key]: 1-5}. Submitting also auto-issues the certificate server-side
-  // once the registration is 'attended' — matches the form's own promise to the user.
-  const submitEvaluation = useCallback(async (id, scores) => {
+  // Extra, event-specific questions an organizer added on top of the fixed
+  // standard survey (empty array if the organizer never set any up).
+  const getEventEvalQuestions = useCallback(async (eventId) => {
+    try {
+      const { questions } = await api.get(`/events/${eventId}/evaluation-questions`);
+      return questions;
+    } catch {
+      return [];
+    }
+  }, []);
+
+  // Replaces the full set of extra questions for an event — used from the
+  // create/edit event form, whether set up at creation or added later.
+  const saveEventEvalQuestions = useCallback(async (eventId, questions) => {
+    const { questions: saved } = await api.put(`/events/${eventId}/evaluation-questions`, { questions });
+    return saved;
+  }, []);
+
+  // scores: {[q_key]: 1-5} for the standard questions.
+  // customValues: {[question_id]: 1-5 (scale question) | string (choice question)}
+  // for the event's own extra questions (if any).
+  // Submitting also auto-issues the certificate server-side once the
+  // registration is 'attended' — matches the form's own promise to the user.
+  const submitEvaluation = useCallback(async (id, scores, customValues) => {
     const ev = evById(id);
     const reg = regs.find((r) => r.eid === Number(id));
     if (!reg) { pushToast('ไม่พบการลงทะเบียนของคุณ', '', 'warn'); return; }
     try {
       const questions = await getEvalQuestions();
       const answers = questions.map((q) => ({ question_id: q.id, score: scores?.[q.q_key] })).filter((a) => a.score);
-      await api.post(`/registrations/${reg.regId}/evaluation`, { answers });
+      const customAnswers = Object.entries(customValues || {})
+        .filter(([, v]) => v !== undefined && v !== null && v !== '')
+        .map(([questionId, v]) => (
+          typeof v === 'string'
+            ? { question_id: Number(questionId), answer_text: v }
+            : { question_id: Number(questionId), score: v }
+        ));
+      await api.post(`/registrations/${reg.regId}/evaluation`, { answers, custom_answers: customAnswers });
       await refreshMyRegistrations();
       pushToast('ส่งแบบประเมินสำเร็จ', 'เกียรติบัตรของคุณพร้อมดาวน์โหลดแล้ว');
       addNotif('เกียรติบัตรพร้อมแล้ว', `${ev ? ev.title : ''} · ขอบคุณที่ทำแบบประเมิน`, 'ti-certificate', 'accent');
@@ -510,6 +566,15 @@ export function AppProvider({ children }) {
     }
   }, []);
 
+  const getDashboardSummary = useCallback(async () => {
+    try {
+      const { summary } = await api.get('/dashboard/summary');
+      return summary;
+    } catch {
+      return null;
+    }
+  }, []);
+
   /* ---------- users (admin UC-17/18) ---------- */
   const upsertUser = useCallback(async (payload, id) => {
     try {
@@ -552,21 +617,21 @@ export function AppProvider({ children }) {
   const value = useMemo(() => ({
     session, events, regs, rosters, users, notifs, toasts, activityLog, signInSheets, blacklist, myCertificates,
     evById, myStatus,
-    login, logout,
+    login, logout, loginWithGoogle, updateProfile,
     registerForEvent, toggleEventStatus, createEvent, updateEvent, deleteEvent,
     toggleCheckin, setSignInSheet, issueCertificate, submitEvaluation, downloadCert,
     addToBlacklist, restoreFromBlacklist,
-    getSar, saveSar, getEvaluationResults, getDashboardYearly,
+    getSar, saveSar, getEvaluationResults, getEventEvalQuestions, saveEventEvalQuestions, getDashboardYearly, getDashboardSummary,
     upsertUser, toggleUserActive, deleteUser,
     addNotif, markAllRead, clearAllNotif,
     pushToast,
   }), [
     session, events, regs, rosters, users, notifs, toasts, activityLog, signInSheets, blacklist, myCertificates,
-    evById, myStatus, login, logout,
+    evById, myStatus, login, logout, loginWithGoogle, updateProfile,
     registerForEvent, toggleEventStatus, createEvent, updateEvent, deleteEvent,
     toggleCheckin, setSignInSheet, issueCertificate, submitEvaluation, downloadCert,
     addToBlacklist, restoreFromBlacklist,
-    getSar, saveSar, getEvaluationResults, getDashboardYearly,
+    getSar, saveSar, getEvaluationResults, getEventEvalQuestions, saveEventEvalQuestions, getDashboardYearly, getDashboardSummary,
     upsertUser, toggleUserActive, deleteUser,
     addNotif, markAllRead, clearAllNotif, pushToast,
   ]);

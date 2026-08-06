@@ -24,7 +24,7 @@ func main() {
 	}
 	defer conn.Close()
 
-	auth := handlers.NewAuthHandler(conn, cfg.JWTSecret, cfg.JWTExpiresHours)
+	auth := handlers.NewAuthHandler(conn, cfg.JWTSecret, cfg.JWTExpiresHours, cfg.GoogleClientID)
 	events := handlers.NewEventsHandler(conn)
 	regs := handlers.NewRegistrationsHandler(conn)
 	certs := handlers.NewCertificatesHandler(conn)
@@ -60,7 +60,9 @@ func main() {
 	{
 		authGroup.POST("/register", auth.Register)
 		authGroup.POST("/login", auth.Login)
+		authGroup.POST("/google", auth.GoogleLogin)
 		authGroup.GET("/me", requireAuth, auth.Me)
+		authGroup.PUT("/me", requireAuth, auth.UpdateMe)
 	}
 
 	eventsGroup := r.Group("/api/events")
@@ -78,6 +80,8 @@ func main() {
 		eventsGroup.PUT("/:id/sar", requireAuth, middleware.RequireRole("organizer", "admin"), sar.Upsert)
 		eventsGroup.GET("/:id/evaluations", requireAuth, middleware.RequireRole("organizer", "admin"), evals.Results)
 		eventsGroup.GET("/:id/stats", requireAuth, middleware.RequireRole("organizer", "admin"), dashboard.EventStats)
+		eventsGroup.GET("/:id/evaluation-questions", requireAuth, evals.EventQuestions)
+		eventsGroup.PUT("/:id/evaluation-questions", requireAuth, middleware.RequireRole("organizer", "admin"), evals.SetEventQuestions)
 	}
 
 	r.GET("/api/me/registrations", requireAuth, middleware.RequireRole("student"), regs.MyRegistrations)
@@ -93,6 +97,7 @@ func main() {
 	blacklistGroup := r.Group("/api/blacklist", requireAuth, middleware.RequireRole("organizer", "admin"))
 	{
 		blacklistGroup.GET("", blacklist.List)
+		blacklistGroup.GET("/lookup", blacklist.LookupUsers)
 		blacklistGroup.POST("", blacklist.Create)
 		blacklistGroup.POST("/:id/restore", blacklist.Restore)
 	}
@@ -101,6 +106,7 @@ func main() {
 	r.POST("/api/notifications/:id/read", requireAuth, notifs.MarkRead)
 
 	r.GET("/api/dashboard/yearly", requireAuth, middleware.RequireRole("organizer", "admin"), dashboard.Yearly)
+	r.GET("/api/dashboard/summary", requireAuth, dashboard.Summary)
 
 	usersGroup := r.Group("/api/users", requireAuth, middleware.RequireRole("admin"))
 	{
@@ -111,7 +117,7 @@ func main() {
 		usersGroup.DELETE("/:id", users.Delete)
 	}
 
-	r.GET("/api/activity-logs", requireAuth, middleware.RequireRole("organizer", "admin"), activityLogs.List)
+	r.GET("/api/activity-logs", requireAuth, middleware.RequireRole("admin"), activityLogs.List)
 
 	r.NoRoute(func(c *gin.Context) { c.JSON(404, gin.H{"error": "ไม่พบ endpoint นี้"}) })
 

@@ -60,7 +60,8 @@
 .notif-empty{padding:40px 18px;text-align:center;color:var(--c4-60);font-size:13px}
 
 /* ============ NAVBAR user pill ============ */
-.user-pill{display:flex;align-items:center;gap:10px;padding:5px 8px;border-radius:10px;cursor:default}
+.user-pill{display:flex;align-items:center;gap:10px;padding:5px 8px;border-radius:10px;cursor:pointer;transition:.12s}
+.user-pill:hover{background:var(--c2-04)}
 .up-av{width:36px;height:36px;border-radius:9px;background:var(--c2);color:var(--white);display:grid;place-items:center;font-weight:700;font-size:13px;flex-shrink:0}
 .up-av.organizer{background:var(--c1)}
 .up-av.student{background:var(--c4)}
@@ -113,6 +114,11 @@
 .role-pick .rp.active i,.role-pick .rp.active span{color:var(--white)}
 .lf-submit{width:100%;background:var(--c2);color:var(--white);border-radius:9px;padding:13px;font-size:14.5px;font-weight:700;margin-top:8px;display:inline-flex;align-items:center;justify-content:center;gap:8px;transition:.14s}
 .lf-submit:hover{background:var(--c4)}
+.lf-divider{display:flex;align-items:center;gap:12px;margin:20px 0;color:var(--c4-60);font-size:12.5px}
+.lf-divider::before,.lf-divider::after{content:"";flex:1;height:1px;background:var(--c2-10)}
+.google-btn{width:100%;background:var(--white);color:var(--c4);border:1px solid var(--c2-15);border-radius:99px;padding:12px;font-size:13.5px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;display:inline-flex;align-items:center;justify-content:center;gap:10px;transition:.14s}
+.google-btn:hover:not(:disabled){background:var(--c2-04);border-color:var(--c2-20)}
+.google-btn:disabled{opacity:.6;cursor:default}
 .lf-hint{font-size:12px;color:var(--c4-60);text-align:center;margin-top:16px;line-height:1.6}
 .lf-hint code{background:var(--c2-08);color:var(--c2);padding:1px 6px;border-radius:5px;font-size:11.5px}
 @media (max-width:860px){

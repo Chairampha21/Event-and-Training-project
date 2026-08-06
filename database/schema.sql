@@ -64,7 +64,7 @@ CREATE TABLE events (
   capacity_online       INT UNSIGNED  NULL,                 -- hybrid events only
 
   status                ENUM('open','closed','soon','full','done') NOT NULL DEFAULT 'soon',
-  cycle_stage           TINYINT UNSIGNED NOT NULL DEFAULT 0, -- 0=ประกาศ 1=รับสมัคร 2=จัดกิจกรรม 3=เกียรติบัตร
+  cycle_stage           TINYINT UNSIGNED NOT NULL DEFAULT 0, -- 0=ประกาศ 1=รับสมัคร 2=จัดกิจกรรม 3=เกียรติบัตร 4=ปิดกิจกรรม
 
   pretest_enabled       TINYINT(1)    NOT NULL DEFAULT 0,
   pretest_link          VARCHAR(500)  NULL,
@@ -162,16 +162,47 @@ CREATE TABLE evaluation_answers (
 ) ENGINE=InnoDB;
 
 -- ---------------------------------------------------------------------
+-- event_evaluation_questions — extra per-event questions an organizer adds
+-- on top of the fixed standard survey above (optional, set at/after creation)
+-- ---------------------------------------------------------------------
+CREATE TABLE event_evaluation_questions (
+  id             INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  event_id       INT UNSIGNED NOT NULL,
+  label          VARCHAR(255) NOT NULL,
+  sort_order     TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  question_type  ENUM('scale','choice') NOT NULL DEFAULT 'scale',
+  options        TEXT NULL,   -- JSON array of option labels, choice-type only
+  required       TINYINT(1) NOT NULL DEFAULT 1,
+  CONSTRAINT fk_eeq_event FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE INDEX idx_eeq_event ON event_evaluation_questions (event_id);
+
+CREATE TABLE event_evaluation_answers (
+  id             BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  evaluation_id  BIGINT UNSIGNED NOT NULL,
+  question_id    INT UNSIGNED NOT NULL,
+  score          TINYINT UNSIGNED NULL,
+  answer_text    VARCHAR(255) NULL,  -- chosen option, choice-type questions
+  CONSTRAINT fk_eea_evaluation FOREIGN KEY (evaluation_id) REFERENCES evaluations(id) ON DELETE CASCADE,
+  CONSTRAINT fk_eea_question   FOREIGN KEY (question_id)   REFERENCES event_evaluation_questions(id) ON DELETE CASCADE,
+  CONSTRAINT uq_eea_eval_question UNIQUE (evaluation_id, question_id),
+  CONSTRAINT chk_eea_score CHECK (score IS NULL OR score BETWEEN 1 AND 5),
+  CONSTRAINT chk_eea_answer_shape CHECK ((score IS NULL) <> (answer_text IS NULL))
+) ENGINE=InnoDB;
+
+-- ---------------------------------------------------------------------
 -- sar_reports — Self Assessment Report, one per finished event
 -- ---------------------------------------------------------------------
 CREATE TABLE sar_reports (
-  id            INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  event_id      INT UNSIGNED  NOT NULL,
-  report_code   VARCHAR(30)   NOT NULL,      -- เช่น SAR-2568-002
-  purpose       TEXT          NULL,          -- วัตถุประสงค์
-  outcome       TEXT          NULL,          -- ผลลัพธ์การเรียนรู้
-  gaps          TEXT          NULL,          -- ข้อค้นพบ/ช่องว่าง
-  improvement   TEXT          NULL,          -- แนวทางปรับปรุง
+  id                INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  event_id          INT UNSIGNED  NOT NULL,
+  report_code       VARCHAR(30)   NOT NULL,      -- เช่น SAR-2568-002
+  recap_poster_url  TEXT          NULL,          -- โปสเตอร์สรุปข่าวหลังจบกิจกรรม
+  purpose       TEXT          NULL,          -- วัตถุประสงค์ (เดิม — ไม่ใช้แล้ว)
+  outcome       TEXT          NULL,          -- ผลลัพธ์การเรียนรู้ (เดิม — ไม่ใช้แล้ว)
+  gaps          TEXT          NULL,          -- ข้อค้นพบ/ช่องว่าง (เดิม — ไม่ใช้แล้ว)
+  improvement   TEXT          NULL,          -- แนวทางปรับปรุง (เดิม — ไม่ใช้แล้ว)
   status        ENUM('draft','final') NOT NULL DEFAULT 'draft',
   created_by    INT UNSIGNED  NULL,
   created_at    TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -256,6 +287,10 @@ WHERE e.is_listed = 1
 GROUP BY e.id, e.title, e.category, e.date_start;
 
 -- Yearly roll-up by category: backs the "Dashboard รายปี" page
+-- avg_satisfaction reads from event_evaluation_answers (each event's own
+-- scale-type questions) since the fixed standard 4 questions are no longer
+-- shown on the student evaluation form — evaluation_answers stays populated
+-- only with legacy pre-cutover data and would otherwise go stale.
 CREATE OR REPLACE VIEW v_dashboard_yearly AS
 SELECT
   YEAR(e.date_start)      AS report_year,
@@ -263,11 +298,11 @@ SELECT
   COUNT(DISTINCT e.id)    AS event_count,
   COUNT(DISTINCT r.id)    AS participant_count,
   COUNT(DISTINCT CASE WHEN r.status = 'certified' THEN r.id END) AS certificate_count,
-  ROUND(AVG(ea.score), 2) AS avg_satisfaction
+  ROUND(AVG(eea.score), 2) AS avg_satisfaction
 FROM events e
 LEFT JOIN registrations r ON r.event_id = e.id
 LEFT JOIN evaluations ev ON ev.registration_id = r.id
-LEFT JOIN evaluation_answers ea ON ea.evaluation_id = ev.id
+LEFT JOIN event_evaluation_answers eea ON eea.evaluation_id = ev.id AND eea.score IS NOT NULL
 WHERE e.is_listed = 1 AND e.status = 'done'
 GROUP BY YEAR(e.date_start), e.category;
 
@@ -288,5 +323,5 @@ INSERT INTO evaluation_questions (q_key, label, sort_order) VALUES
 -- =====================================================================
 -- INSERT INTO users (name, email, password_hash, role, dept) VALUES
 --   ('ผศ.ดร. ปิยะ จันทรัศมี',  'piya_c@silpakorn.edu',    '$2y$10$REPLACE_WITH_REAL_HASH', 'admin',     'หัวหน้าภาควิชาคอมพิวเตอร์'),
---   ('วรันธร สอนสงวน',         'krisada_p@silpakorn.edu', '$2y$10$REPLACE_WITH_REAL_HASH', 'organizer', 'อาจารย์ผู้ดูแลกิจกรรม'),
+--   ('วรันธร สอนสงวน',         'warunthorn_s@silpakorn.edu', '$2y$10$REPLACE_WITH_REAL_HASH', 'organizer', 'อาจารย์ผู้ดูแลกิจกรรม'),
 --   ('ภัทร ยะคำวุฒิ',          'phat_y@silpakorn.edu',    '$2y$10$REPLACE_WITH_REAL_HASH', 'student',   'นักศึกษาชั้นปีที่ 3 · วท.บ. คอมพิวเตอร์');

@@ -99,7 +99,7 @@ export default function ReportPage() {
             <p>สรุปผลกิจกรรมรายรายการ · จำนวนผู้สมัครและผู้เข้าร่วม · อัตราเข้าร่วม · เกียรติบัตรที่ออก</p>
           </div>
           <div className="ph-actions">
-            {tab === 'summary' && <button className="btn btn-accent" onClick={exportReport}><i className="ti ti-file-export" /> ส่งออก CSV</button>}
+            {tab === 'summary' && <button className="btn btn-accent" onClick={exportReport} disabled title="เร็วๆ นี้"><i className="ti ti-file-export" /> ส่งออก CSV</button>}
           </div>
         </div>
       </div>

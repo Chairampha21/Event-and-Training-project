@@ -106,9 +106,7 @@ export default function EventsTablePage() {
                 <select value={statusFilter} onChange={(e) => handleStatusFilter(e.target.value)}>
                   <option value="all">ทุกสถานะ</option>
                   <option value="open">เปิดรับสมัคร</option>
-                  <option value="soon">เร็ว ๆ นี้</option>
                   <option value="full">เต็มแล้ว</option>
-                  <option value="closed">ปิดรับสมัคร</option>
                   <option value="done">สิ้นสุดแล้ว</option>
                 </select>
               </label>

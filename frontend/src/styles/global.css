@@ -106,7 +106,7 @@ a{color:inherit;text-decoration:none}
 .badge-open{background:var(--c1);color:var(--white)}
 .badge-soon{background:var(--c1-12);color:var(--c1);border:1px solid var(--c1-20)}
 .badge-full{background:var(--c4);color:var(--white)}
-.badge-done{background:var(--c4-08);color:var(--c4-70);border:1px solid var(--c4-12)}
+.badge-done{background:var(--c4-70);color:var(--white)}
 .badge-draft{background:var(--c2-08);color:var(--c2);border:1px solid var(--c2-20)}
 .card-cat{font-size:11.5px;font-weight:600;color:var(--c2);text-transform:uppercase;letter-spacing:.08em}
 .card-title{font-size:17px;font-weight:700;color:var(--c4);line-height:1.35;margin-bottom:10px;text-wrap:pretty}

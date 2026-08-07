@@ -2,7 +2,7 @@
 .app-shell{display:grid;grid-template-columns:200px 1fr;grid-template-rows:36px 1fr;flex:1;min-height:0}
 
 /* ============ TOPBAR ============ */
-.topbar{grid-column:1/-1;grid-row:1;background:var(--c4);color:var(--white);height:36px;display:flex;align-items:center;justify-content:space-between;padding:0 32px;font-size:12.5px;letter-spacing:.01em}
+.topbar{grid-column:1/-1;grid-row:1;background:var(--c4);color:var(--white);height:36px;display:flex;align-items:center;justify-content:space-between;padding:0 32px;font-size:12.5px;letter-spacing:.01em;position:sticky;top:0;z-index:60}
 .topbar .tb-left{display:flex;align-items:center;gap:18px;opacity:.9}
 .topbar .tb-left i{font-size:14px}
 .topbar .tb-left span{display:inline-flex;align-items:center;gap:6px}

@@ -20,7 +20,7 @@ const NAV_TABS = {
     { to: '/create-event', icon: 'ti-square-rounded-plus', label: 'สร้างกิจกรรม' },
     { to: '/events', icon: 'ti-calendar', label: 'กิจกรรมทั้งหมด' },
     { to: '/admin/blacklist', icon: 'ti-user-off', label: 'Blacklist' },
-    { to: '/admin/sar', icon: 'ti-clipboard-text', label: 'SAR' },
+    { to: '/admin/sar', icon: 'ti-clipboard-text', label: 'คลังโปสเตอร์กิจกรรม' },
     { to: '/report', icon: 'ti-report-analytics', label: 'รายงาน' },
     { to: '/admin/dashboard', icon: 'ti-chart-pie', label: 'Dashboard รายปี' },
   ],

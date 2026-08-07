@@ -88,12 +88,12 @@ export default function SarReportPage() {
       <div className="page-header">
         <div className="ph-inner">
           <div>
-            <h1>คลังโปสเตอร์กิจกรรม (SAR)</h1>
+            <h1>คลังโปสเตอร์กิจกรรม</h1>
             <p>รวมโปสเตอร์กิจกรรมและโปสเตอร์สรุปข่าวของกิจกรรมที่จัดเสร็จสิ้นแล้ว ดูและดาวน์โหลดได้ทั้งหมด</p>
           </div>
           <div className="ph-actions">
-            <button className="btn btn-accent" onClick={handleDownloadAll} disabled={downloadingAll}>
-              <i className="ti ti-download" /> {downloadingAll ? 'กำลังดาวน์โหลด...' : 'ดาวน์โหลดทั้งหมด'}
+            <button className="btn btn-accent" onClick={handleDownloadAll} disabled title="เร็วๆ นี้">
+              <i className="ti ti-download" /> ดาวน์โหลดทั้งหมด
             </button>
           </div>
         </div>

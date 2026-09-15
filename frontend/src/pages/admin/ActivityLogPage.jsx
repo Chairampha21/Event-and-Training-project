@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { useEvents } from '../../hooks/useEvents';
 
 export default function ActivityLogPage() {
-  const { activityLog } = useEvents();
+  const { activityLog: rawActivityLog } = useEvents();
   const [search, setSearch] = useState('');
+
+  const activityLog = rawActivityLog.filter((l) => (l.action || '').toUpperCase() !== 'LOGIN');
 
   const q = search.trim().toLowerCase();
   const filtered = q

@@ -7,8 +7,8 @@ export const CYCLE = ['ประกาศ', 'รับสมัคร', 'จั�
 
 // Single source of truth for event categories, shared by the create-event form
 // (organizer can still type a new one) and the home page category filter pills.
-export const EVENT_CATEGORIES = ['สัมมนา', 'Workshop', 'การแข่งขัน'];
-export const EVENT_CATEGORY_ICONS = { 'สัมมนา': 'ti-microphone', Workshop: 'ti-tools', 'การแข่งขัน': 'ti-trophy' };
+export const EVENT_CATEGORIES = ['อบรมเชิงบรรยาย', 'อบรมเชิงปฏิบัติการ', 'การแข่งขัน'];
+export const EVENT_CATEGORY_ICONS = { 'อบรมเชิงบรรยาย': 'ti-microphone', 'อบรมเชิงปฏิบัติการ': 'ti-tools', 'การแข่งขัน': 'ti-trophy' };
 
 export const ROLE_LABEL = {
   admin: 'ผู้ดูแลระบบ',

@@ -22,7 +22,7 @@ export default function SarReportPage() {
   const [loading, setLoading] = useState(true);
   const [uploadingId, setUploadingId] = useState(null);
   const [preview, setPreview] = useState(null); // { url, title }
-  const [downloadingAll, setDownloadingAll] = useState(false);
+  const [, setDownloadingAll] = useState(false);
 
   useEffect(() => {
     let cancelled = false;

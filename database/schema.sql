@@ -44,7 +44,7 @@ CREATE TABLE events (
   id                    INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   title                 VARCHAR(255)  NOT NULL,
   description           TEXT          NULL,
-  category              VARCHAR(50)   NOT NULL,           -- สัมมนา / Workshop / การแข่งขัน / Cybersecurity
+  category              VARCHAR(50)   NOT NULL,           -- อบรมเชิงบรรยาย / อบรมเชิงปฏิบัติการ / การแข่งขัน / Cybersecurity
   subcategory           VARCHAR(150)  NULL,                -- e.g. 'AI / Data', 'Hackathon'
   poster_url            LONGTEXT      NULL,               -- the frontend stores this as a base64 data: URL, not a path
 

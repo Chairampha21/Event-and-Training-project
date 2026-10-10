@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useEvents } from '../hooks/useEvents';
 import { ROLE_LANDING } from '../utils/constants';
-import Toast from '../components/Toast';
+import Toast from '../components/ui/Toast';
 
 const GOOGLE_CLIENT_ID = process.env.REACT_APP_GOOGLE_CLIENT_ID || '';
 
@@ -24,6 +24,7 @@ export default function LoginPage() {
   const [error, setError] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
+  const location = useLocation();
 
   useEffect(() => {
     if (!GOOGLE_CLIENT_ID || document.getElementById('google-identity-script')) return;
@@ -35,7 +36,7 @@ export default function LoginPage() {
     document.body.appendChild(script);
   }, []);
 
-  if (session) return <Navigate to={ROLE_LANDING[session.role]} replace />;
+  if (session) return <Navigate to={location.state?.from || ROLE_LANDING[session.role]} replace />;
 
   async function handleSubmit(e) {
     e.preventDefault();

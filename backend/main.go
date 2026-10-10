@@ -10,6 +10,7 @@ import (
 	"cpsu-etms-backend/internal/db"
 	"cpsu-etms-backend/internal/handlers"
 	"cpsu-etms-backend/internal/middleware"
+	"cpsu-etms-backend/internal/reminders"
 )
 
 func main() {
@@ -24,9 +25,13 @@ func main() {
 	}
 	defer conn.Close()
 
+	// Time-based work: reminders, registration-closed summaries, no-show counting.
+	reminders.Start(conn)
+
 	auth := handlers.NewAuthHandler(conn, cfg.JWTSecret, cfg.JWTExpiresHours, cfg.GoogleClientID)
 	events := handlers.NewEventsHandler(conn)
 	regs := handlers.NewRegistrationsHandler(conn)
+	handlers.SetCheckinSecret(cfg.JWTSecret)
 	certs := handlers.NewCertificatesHandler(conn)
 	evals := handlers.NewEvaluationsHandler(conn)
 	blacklist := handlers.NewBlacklistHandler(conn)
@@ -61,31 +66,32 @@ func main() {
 		authGroup.POST("/register", auth.Register)
 		authGroup.POST("/login", auth.Login)
 		authGroup.POST("/google", auth.GoogleLogin)
-		authGroup.GET("/me", requireAuth, auth.Me)
 		authGroup.PUT("/me", requireAuth, auth.UpdateMe)
 	}
 
 	eventsGroup := r.Group("/api/events")
 	{
 		eventsGroup.GET("", optionalAuth, events.List)
-		eventsGroup.GET("/:id", optionalAuth, events.GetOne)
 		eventsGroup.POST("", requireAuth, middleware.RequireRole("organizer", "admin"), events.Create)
 		eventsGroup.PUT("/:id", requireAuth, middleware.RequireRole("organizer", "admin"), events.Update)
 		eventsGroup.DELETE("/:id", requireAuth, middleware.RequireRole("organizer", "admin"), events.Remove)
 
 		eventsGroup.POST("/:id/register", requireAuth, middleware.RequireRole("student"), regs.RegisterForEvent)
+		eventsGroup.POST("/:id/self-checkin", requireAuth, middleware.RequireRole("student"), regs.SelfCheckIn)
 		eventsGroup.GET("/:id/registrations", requireAuth, middleware.RequireRole("organizer", "admin"), regs.EventRoster)
 
 		eventsGroup.GET("/:id/sar", requireAuth, middleware.RequireRole("organizer", "admin"), sar.Get)
 		eventsGroup.PUT("/:id/sar", requireAuth, middleware.RequireRole("organizer", "admin"), sar.Upsert)
 		eventsGroup.GET("/:id/evaluations", requireAuth, middleware.RequireRole("organizer", "admin"), evals.Results)
-		eventsGroup.GET("/:id/stats", requireAuth, middleware.RequireRole("organizer", "admin"), dashboard.EventStats)
 		eventsGroup.GET("/:id/evaluation-questions", requireAuth, evals.EventQuestions)
 		eventsGroup.PUT("/:id/evaluation-questions", requireAuth, middleware.RequireRole("organizer", "admin"), evals.SetEventQuestions)
 	}
 
 	r.GET("/api/me/registrations", requireAuth, middleware.RequireRole("student"), regs.MyRegistrations)
 	r.DELETE("/api/registrations/:id", requireAuth, regs.CancelRegistration)
+	r.PATCH("/api/registrations/:id/payment", requireAuth, middleware.RequireRole("organizer", "admin"), regs.SetPayment)
+	r.POST("/api/registrations/:id/slip", requireAuth, middleware.RequireRole("student"), regs.SubmitSlip)
+	r.GET("/api/registrations/:id/slip", requireAuth, regs.GetSlip)
 	r.PATCH("/api/registrations/:id/checkin", requireAuth, middleware.RequireRole("organizer", "admin"), regs.CheckIn)
 	r.POST("/api/registrations/:id/certificate", requireAuth, middleware.RequireRole("organizer", "admin"), certs.Issue)
 	r.POST("/api/registrations/:id/evaluation", requireAuth, middleware.RequireRole("student"), evals.Submit)
@@ -103,9 +109,12 @@ func main() {
 	}
 
 	r.GET("/api/me/notifications", requireAuth, notifs.List)
+	r.POST("/api/me/notifications/read-all", requireAuth, notifs.MarkAllRead)
+	r.DELETE("/api/me/notifications", requireAuth, notifs.ClearAll)
 	r.POST("/api/notifications/:id/read", requireAuth, notifs.MarkRead)
 
 	r.GET("/api/dashboard/yearly", requireAuth, middleware.RequireRole("organizer", "admin"), dashboard.Yearly)
+	r.GET("/api/dashboard/budget", requireAuth, middleware.RequireRole("organizer", "admin"), dashboard.Budget)
 	r.GET("/api/dashboard/summary", requireAuth, dashboard.Summary)
 
 	usersGroup := r.Group("/api/users", requireAuth, middleware.RequireRole("admin"))

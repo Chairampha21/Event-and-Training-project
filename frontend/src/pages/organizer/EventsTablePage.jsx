@@ -1,18 +1,37 @@
-import React, { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useEvents } from '../../hooks/useEvents';
 import { STATUS_META } from '../../utils/constants';
-import CycleProgress from '../../components/CycleProgress';
-import Modal, { ModalHead } from '../../components/Modal';
-import ApplicantsModal from '../../components/ApplicantsModal';
+import CycleProgress from '../../features/events/components/CycleProgress';
+import Modal, { ModalHead } from '../../components/ui/Modal';
+import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import ApplicantsModal from '../../features/events/components/ApplicantsModal';
+import BudgetActualModal from '../../features/budget/components/BudgetActualModal';
 import { downloadCsv } from '../../utils/csvExport';
 
 const PAGE_SIZE = 6;
 
 export default function EventsTablePage() {
-  const { events, toggleEventStatus, deleteEvent } = useEvents();
+  const { events, toggleEventStatus, deleteEvent, saveBudgetActual } = useEvents();
   const navigate = useNavigate();
   const [applicantsId, setApplicantsId] = useState(null);
+  const [applicantsMode, setApplicantsMode] = useState('list');
+  const openApplicants = (id, mode) => { setApplicantsMode(mode); setApplicantsId(id); };
+  const [budgetId, setBudgetId] = useState(null);
+  const [toggleId, setToggleId] = useState(null);
+
+  // A notification links here as /events?applicants=<id> or /events?budget=<id>:
+  // open that event's window straight away, then drop the parameter so closing
+  // the window (or reloading) does not bring it back.
+  const [params, setParams] = useSearchParams();
+  useEffect(() => {
+    const applicants = Number(params.get('applicants'));
+    const budget = Number(params.get('budget'));
+    if (!applicants && !budget) return;
+    if (applicants) { setApplicantsMode('list'); setApplicantsId(applicants); }
+    else setBudgetId(budget);
+    setParams({}, { replace: true });
+  }, [params, setParams]);
   const [deleteId, setDeleteId] = useState(null);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -20,6 +39,9 @@ export default function EventsTablePage() {
 
   const list = useMemo(() => events.filter((e) => e.listed), [events]);
   const deleteEv = list.find((e) => e.id === deleteId);
+  const budgetEv = list.find((e) => e.id === budgetId);
+  const toggleEv = list.find((e) => e.id === toggleId);
+  const closing = toggleEv?.status === 'open';
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -68,7 +90,6 @@ export default function EventsTablePage() {
           </div>
           <div className="ph-actions">
             <button className="btn glass" onClick={exportCsv}><i className="ti ti-download" /> ส่งออก CSV</button>
-            <button className="btn btn-accent" onClick={() => navigate('/create-event')}><i className="ti ti-plus" /> กิจกรรมใหม่</button>
           </div>
         </div>
       </div>
@@ -145,12 +166,13 @@ export default function EventsTablePage() {
                       <td className="right">
                         <div className="row-actions">
                           {canReg && (
-                            <button className="icon-btn" title={ev.status === 'open' ? 'ปิดรับสมัคร' : 'เปิดรับสมัคร'} onClick={() => toggleEventStatus(ev.id)}>
+                            <button className="icon-btn" title={ev.status === 'open' ? 'ปิดรับสมัคร' : 'เปิดรับสมัคร'} onClick={() => setToggleId(ev.id)}>
                               <i className={`ti ${ev.status === 'open' ? 'ti-lock' : 'ti-lock-open'}`} />
                             </button>
                           )}
                           <button className="icon-btn" title="แก้ไข" onClick={() => navigate('/create-event', { state: { editId: ev.id } })}><i className="ti ti-edit" /></button>
-                          <button className="icon-btn" title="รายชื่อผู้สมัคร / เช็คอิน" onClick={() => setApplicantsId(ev.id)}><i className="ti ti-users" /></button>
+                          <button className="icon-btn" title="รายชื่อผู้สมัคร" onClick={() => openApplicants(ev.id, 'list')}><i className="ti ti-users" /></button>
+                          <button className="icon-btn" title="เช็คอินผู้เข้าร่วม" onClick={() => openApplicants(ev.id, 'checkin')}><i className="ti ti-checkbox" /></button>
                           <button className="icon-btn danger" title="ลบ" onClick={() => setDeleteId(ev.id)}><i className="ti ti-trash" /></button>
                         </div>
                       </td>
@@ -175,7 +197,22 @@ export default function EventsTablePage() {
         </div>
       </div>
 
-      <ApplicantsModal eventId={applicantsId} open={!!applicantsId} onClose={() => setApplicantsId(null)} />
+      <ApplicantsModal eventId={applicantsId} mode={applicantsMode} open={!!applicantsId} onClose={() => setApplicantsId(null)} />
+      <ConfirmDialog
+        open={!!toggleEv}
+        eyebrow="ยืนยันการเปลี่ยนสถานะ"
+        icon={closing ? 'ti-lock' : 'ti-lock-open'}
+        title={closing ? 'ปิดรับสมัครกิจกรรมนี้?' : 'เปิดรับสมัครกิจกรรมนี้?'}
+        confirmLabel={closing ? 'ยืนยันปิดรับสมัคร' : 'ยืนยันเปิดรับสมัคร'}
+        confirmIcon={closing ? 'ti-lock' : 'ti-lock-open'}
+        onConfirm={() => { toggleEventStatus(toggleEv.id); setToggleId(null); }}
+        onCancel={() => setToggleId(null)}
+      >
+        <p style={{ fontSize: 13.5, color: 'var(--c4-70)', lineHeight: 1.7 }}><strong style={{ color: 'var(--c4)' }}>{toggleEv?.title}</strong><br />{closing ? 'นักศึกษาจะสมัครกิจกรรมนี้ไม่ได้จนกว่าจะเปิดรับสมัครอีกครั้ง' : 'นักศึกษาจะสมัครกิจกรรมนี้ได้ทันที'}</p>
+      </ConfirmDialog>
+      {budgetEv && (
+        <BudgetActualModal open event={{ ...budgetEv, budgetPlanned: budgetEv.budgetTotal }} onSave={(amount) => saveBudgetActual(budgetEv.id, amount)} onClose={() => setBudgetId(null)} />
+      )}
 
       <Modal open={!!deleteId} onClose={() => setDeleteId(null)} size="sm">
         <ModalHead eyebrow="ยืนยันการลบ" icon="ti-alert-triangle" title="ลบกิจกรรมนี้?" onClose={() => setDeleteId(null)} />

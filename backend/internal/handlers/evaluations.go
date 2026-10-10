@@ -11,6 +11,7 @@ import (
 
 	"cpsu-etms-backend/internal/activitylog"
 	"cpsu-etms-backend/internal/middleware"
+	"cpsu-etms-backend/internal/notify"
 )
 
 type EvaluationsHandler struct {
@@ -348,6 +349,9 @@ func (h *EvaluationsHandler) Submit(c *gin.Context) {
 	}
 	if certCode != "" {
 		activitylog.Log(h.DB, &claims.UserID, "ISSUE", "ออกเกียรติบัตร: "+certCode)
+		var title string
+		_ = h.DB.QueryRow(`SELECT title FROM events WHERE id = ?`, eventID).Scan(&title)
+		notify.Send(h.DB, claims.UserID, "ti-certificate", notify.ToneAccent, "เกียรติบัตรพร้อมแล้ว", title+" · ขอบคุณที่ทำแบบประเมิน", "/certificates")
 	}
 	c.JSON(http.StatusCreated, gin.H{"cert_code": certCode})
 }

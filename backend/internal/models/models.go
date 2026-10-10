@@ -29,6 +29,18 @@ func (n NullInt) MarshalJSON() ([]byte, error) {
 	return json.Marshal(n.Int64)
 }
 
+// NullFloat marshals to a JSON number or null (see NullString).
+type NullFloat struct {
+	sql.NullFloat64
+}
+
+func (n NullFloat) MarshalJSON() ([]byte, error) {
+	if !n.Valid {
+		return []byte("null"), nil
+	}
+	return json.Marshal(n.Float64)
+}
+
 type User struct {
 	ID        int64      `json:"id"`
 	Name      string     `json:"name"`
@@ -52,13 +64,29 @@ type Event struct {
 	DayMode             string     `json:"day_mode"`
 	DateStart           string     `json:"date_start"`
 	DateEnd             NullString `json:"date_end"`
+	EventDates          []string   `json:"event_dates"` // multi-day events: each day picked, in order; [] otherwise
+	EventTimes          []string   `json:"event_times"` // "HH:MM-HH:MM" per entry of EventDates (same order); [] if not set
 	TimeRange           NullString `json:"time_range"`
+	RegStart            NullString `json:"reg_start"`
+	RegEnd              NullString `json:"reg_end"`
 	AttendMode          string     `json:"attend_mode"`
 	Place               NullString `json:"place"`
-	OnlineLink          NullString `json:"online_link"`
+	OnlineLink          NullString `json:"online_link"`     // only sent to people allowed to join: registrants, the organizer, admins
+	HasOnlineLink       bool       `json:"has_online_link"` // true when a link exists, even if it is withheld from this viewer
 	Capacity            int        `json:"capacity"`
 	CapacityOnsite      NullInt    `json:"capacity_onsite"`
 	CapacityOnline      NullInt    `json:"capacity_online"`
+	BudgetPlanned       NullFloat  `json:"budget_planned"`    // baht from department income (เงินรายได้); null = not set
+	BudgetOther         NullFloat  `json:"budget_other"`      // baht from other sources (แหล่งอื่น); null = not set
+	BudgetTotal         NullFloat  `json:"budget_total"`      // the two sources added up; null when neither is set
+	BudgetActual        NullFloat  `json:"budget_actual"`     // baht actually spent; null = not recorded yet
+	AttendeeNote        NullString `json:"attendee_note"`     // organizer's message to people registering
+	LoanLaptopQty       NullInt    `json:"loan_laptop_qty"`   // notebooks available to borrow; null = none
+	LoanLaptopTaken     int        `json:"loan_laptop_taken"` // how many registrants asked to borrow one
+	RegisteredOnline    int        `json:"registered_online"` // registrants attending online (the rest attend on site)
+	AskDietary          bool       `json:"ask_dietary"`       // registrants are asked about food allergies / dietary needs
+	Fee                 NullFloat  `json:"fee"`               // registration fee in baht; null or 0 = free
+	PaymentInfo         NullString `json:"payment_info"`      // how to pay, shown to people registering
 	Status              string     `json:"status"`
 	CycleStage          int        `json:"cycle_stage"`
 	PretestEnabled      bool       `json:"pretest_enabled"`
@@ -68,6 +96,8 @@ type Event struct {
 	CertTemplateURL     NullString `json:"cert_template_url"`
 	CertSignerName      NullString `json:"cert_signer_name"`
 	CertSignerTitle     NullString `json:"cert_signer_title"`
+	CertSignatureURL    NullString `json:"cert_signature_url"`
+	CertLayout          NullString `json:"cert_layout"` // JSON text; null = default layout
 	EmailOnRegister     bool       `json:"email_on_register"`
 	EmailBeforeEvent    bool       `json:"email_before_event"`
 	EmailAfterEvent     bool       `json:"email_after_event"`

@@ -10,6 +10,7 @@ import (
 	"cpsu-etms-backend/internal/activitylog"
 	"cpsu-etms-backend/internal/middleware"
 	"cpsu-etms-backend/internal/models"
+	"cpsu-etms-backend/internal/notify"
 )
 
 type BlacklistHandler struct {
@@ -136,12 +137,17 @@ func (h *BlacklistHandler) Create(c *gin.Context) {
 	id, _ := res.LastInsertId()
 
 	activitylog.Log(h.DB, &claims.UserID, "BLACKLIST", "เพิ่มรายชื่อ Blacklist: "+b.Name)
+	if userID.Valid {
+		notify.Send(h.DB, userID.Int64, "ti-ban", notify.ToneWarn, "บัญชีถูกระงับสิทธิ์การลงทะเบียน", "เหตุผล: "+strings.TrimSpace(b.Reason), "/my-registrations")
+	}
 	c.JSON(http.StatusCreated, gin.H{"id": id})
 }
 
 func (h *BlacklistHandler) Restore(c *gin.Context) {
 	var name string
-	if err := h.DB.QueryRow(`SELECT name FROM blacklist_entries WHERE id = ?`, c.Param("id")).Scan(&name); err == sql.ErrNoRows {
+	var userID sql.NullInt64
+	var restoredAt sql.NullString
+	if err := h.DB.QueryRow(`SELECT name, user_id, restored_at FROM blacklist_entries WHERE id = ?`, c.Param("id")).Scan(&name, &userID, &restoredAt); err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบรายการ"})
 		return
 	} else if err != nil {
@@ -156,5 +162,8 @@ func (h *BlacklistHandler) Restore(c *gin.Context) {
 
 	claims, _ := middleware.CurrentUser(c)
 	activitylog.Log(h.DB, &claims.UserID, "BLACKLIST", "คืนสิทธิ์: "+name)
+	if userID.Valid && !restoredAt.Valid {
+		notify.Send(h.DB, userID.Int64, "ti-shield-check", notify.ToneAccent, "คืนสิทธิ์การลงทะเบียนแล้ว", "คุณสามารถลงทะเบียนกิจกรรมได้ตามปกติ", "/home")
+	}
 	c.Status(http.StatusNoContent)
 }

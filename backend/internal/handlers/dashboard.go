@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"cpsu-etms-backend/internal/middleware"
+	"cpsu-etms-backend/internal/models"
 )
 
 type DashboardHandler struct {
@@ -18,7 +19,7 @@ func NewDashboardHandler(db *sql.DB) *DashboardHandler {
 }
 
 type yearlyRow struct {
-	ReportYear       int     `json:"report_year"`
+	ReportYear       int     `json:"report_year"` // ปีงบประมาณ (พ.ศ.)
 	Category         string  `json:"category"`
 	EventCount       int     `json:"event_count"`
 	ParticipantCount int     `json:"participant_count"`
@@ -48,6 +49,14 @@ func (h *DashboardHandler) Yearly(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"yearly": list})
 }
 
+// fiscalYearSQL is the Thai fiscal year (ปีงบประมาณ) of a date expression, in
+// the Buddhist era: the year runs 1 October – 30 September and is named after
+// the year it ends in, so October 2025 – September 2026 is ปีงบประมาณ 2569.
+// The v_dashboard_yearly view uses the same rule.
+func fiscalYearSQL(dateExpr string) string {
+	return "(YEAR(" + dateExpr + ") + (MONTH(" + dateExpr + ") >= 10) + 543)"
+}
+
 type summaryRow struct {
 	EventsThisYear     int `json:"events_this_year"`
 	ParticipantsTotal  int `json:"participants_total"`
@@ -59,10 +68,10 @@ func (h *DashboardHandler) Summary(c *gin.Context) {
 	var r summaryRow
 	err := h.DB.QueryRow(`
 		SELECT
-			(SELECT COUNT(*) FROM events WHERE is_listed = 1 AND YEAR(date_start) = YEAR(CURDATE())),
+			(SELECT COUNT(*) FROM events WHERE is_listed = 1 AND `+fiscalYearSQL("date_start")+` = `+fiscalYearSQL(todayTH)+`),
 			(SELECT COUNT(*) FROM registrations reg JOIN events e ON e.id = reg.event_id WHERE e.is_listed = 1),
 			(SELECT COUNT(*) FROM registrations reg JOIN events e ON e.id = reg.event_id WHERE e.is_listed = 1 AND reg.status = 'certified'),
-			(SELECT COUNT(*) FROM events WHERE is_listed = 1 AND status = 'open')
+			(SELECT COUNT(*) FROM events WHERE is_listed = 1 AND (`+effectiveStatusSQL+`) = 'open')
 	`).Scan(&r.EventsThisYear, &r.ParticipantsTotal, &r.CertificatesIssued, &r.OpenNow)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
@@ -71,48 +80,58 @@ func (h *DashboardHandler) Summary(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"summary": r})
 }
 
-type eventStatsRow struct {
-	EventID         int64   `json:"event_id"`
-	Title           string  `json:"title"`
-	Category        string  `json:"category"`
-	DateStart       string  `json:"date_start"`
-	RegisteredCount int     `json:"registered_count"`
-	CheckedInCount  int     `json:"checked_in_count"`
-	CertifiedCount  int     `json:"certified_count"`
-	AttendRatePct   float64 `json:"attend_rate_pct"`
+type budgetRow struct {
+	EventID         int64             `json:"event_id"`
+	Title           string            `json:"title"`
+	Category        string            `json:"category"`
+	ReportYear      int               `json:"report_year"` // ปีงบประมาณ (พ.ศ.)
+	DateStart       string            `json:"date_start"`
+	DateEnd         models.NullString `json:"date_end"`
+	Status          string            `json:"status"`
+	Ended           bool              `json:"ended"` // last day reached or event closed — actual spend may be recorded
+	BudgetPlanned   models.NullFloat  `json:"budget_planned"`
+	BudgetOther     models.NullFloat  `json:"budget_other"`
+	BudgetTotal     models.NullFloat  `json:"budget_total"`
+	BudgetActual    models.NullFloat  `json:"budget_actual"`
+	RegisteredCount int               `json:"registered_count"`
+	AttendedCount   int               `json:"attended_count"`
+	CanEdit         bool              `json:"can_edit"`
 }
 
-func (h *DashboardHandler) EventStats(c *gin.Context) {
-	var organizerID sql.NullInt64
-	err := h.DB.QueryRow(`SELECT organizer_id FROM events WHERE id = ?`, c.Param("id")).Scan(&organizerID)
-	if err == sql.ErrNoRows {
-		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบกิจกรรม"})
-		return
-	}
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
-		return
-	}
+// Budget lists every listed event with its planned and actual budget — one row
+// per event, so the dashboard can roll them up by year and category and still
+// show the per-event detail behind each total. Unlike the yearly view this is
+// not limited to finished events: a planned budget matters before the event runs.
+func (h *DashboardHandler) Budget(c *gin.Context) {
 	claims, _ := middleware.CurrentUser(c)
-	if claims.Role != "admin" && !(organizerID.Valid && organizerID.Int64 == claims.UserID) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "ไม่มีสิทธิ์เข้าถึงสถิติของกิจกรรมนี้"})
-		return
-	}
-
-	var r eventStatsRow
-	var attendRate sql.NullFloat64
-	err = h.DB.QueryRow(
-		`SELECT event_id, title, category, date_start, registered_count, checked_in_count, certified_count, attend_rate_pct
-		 FROM v_event_stats WHERE event_id = ?`, c.Param("id"),
-	).Scan(&r.EventID, &r.Title, &r.Category, &r.DateStart, &r.RegisteredCount, &r.CheckedInCount, &r.CertifiedCount, &attendRate)
-	if err == sql.ErrNoRows {
-		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบข้อมูลสถิติ"})
-		return
-	}
+	rows, err := h.DB.Query(`
+		SELECT e.id, e.title, e.category, ` + fiscalYearSQL("e.date_start") + `, e.date_start, e.date_end, e.status,
+		       (e.status = 'done' OR ` + todayTH + ` >= COALESCE(e.date_end, e.date_start)),
+		       e.budget_planned, e.budget_other, e.budget_actual,
+		       COUNT(r.id), COALESCE(SUM(r.checked_in), 0), e.organizer_id
+		FROM events e
+		LEFT JOIN registrations r ON r.event_id = e.id
+		WHERE e.is_listed = 1
+		GROUP BY e.id
+		ORDER BY e.date_start DESC, e.id DESC`)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 		return
 	}
-	r.AttendRatePct = attendRate.Float64
-	c.JSON(http.StatusOK, gin.H{"stats": r})
+	defer rows.Close()
+
+	list := []budgetRow{}
+	for rows.Next() {
+		var r budgetRow
+		var organizerID sql.NullInt64
+		if err := rows.Scan(&r.EventID, &r.Title, &r.Category, &r.ReportYear, &r.DateStart, &r.DateEnd, &r.Status,
+			&r.Ended, &r.BudgetPlanned, &r.BudgetOther, &r.BudgetActual, &r.RegisteredCount, &r.AttendedCount, &organizerID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
+			return
+		}
+		r.BudgetTotal = budgetTotal(r.BudgetPlanned, r.BudgetOther)
+		r.CanEdit = claims.Role == "admin" || (organizerID.Valid && organizerID.Int64 == claims.UserID)
+		list = append(list, r)
+	}
+	c.JSON(http.StatusOK, gin.H{"budget": list})
 }

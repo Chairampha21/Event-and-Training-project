@@ -16,6 +16,7 @@ import (
 	"cpsu-etms-backend/internal/activitylog"
 	"cpsu-etms-backend/internal/middleware"
 	"cpsu-etms-backend/internal/models"
+	"cpsu-etms-backend/internal/reminders"
 )
 
 type AuthHandler struct {
@@ -172,6 +173,9 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 
 	activitylog.Log(h.DB, &u.ID, "LOGIN", "")
+	if u.Role == "admin" {
+		reminders.AdminDigest(h.DB, u.ID) // what is waiting across the system, at most once a day
+	}
 	c.JSON(http.StatusOK, gin.H{"user": u, "token": token})
 }
 
@@ -296,21 +300,6 @@ func randomHex(n int) string {
 	b := make([]byte, n)
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
-}
-
-func (h *AuthHandler) Me(c *gin.Context) {
-	claims, _ := middleware.CurrentUser(c)
-	row := h.DB.QueryRow(`SELECT `+userPublicFields+` FROM users WHERE id = ?`, claims.UserID)
-	user, err := scanUser(row)
-	if err == sql.ErrNoRows {
-		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบผู้ใช้งาน"})
-		return
-	}
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"user": user})
 }
 
 type updateMeBody struct {

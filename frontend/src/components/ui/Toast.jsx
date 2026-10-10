@@ -1,5 +1,5 @@
 import React from 'react';
-import { useEvents } from '../hooks/useEvents';
+import { useEvents } from '../../hooks/useEvents';
 import './Toast.css';
 
 export default function Toast() {

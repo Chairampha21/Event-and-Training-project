@@ -1,0 +1,32 @@
+.sgu-empty{display:flex;align-items:center;gap:12px;border:1.5px dashed var(--c2-20);border-radius:10px;background:var(--c2-04);padding:12px 14px;cursor:pointer;transition:.15s}
+.sgu-empty:hover{background:var(--c2-08);border-color:var(--c2)}
+.sgu-empty:focus-visible{outline:2px solid var(--c1);outline-offset:2px}
+.sgu-empty.drag{background:var(--c1-12);border-color:var(--c1);border-style:solid}
+.sgu-empty.has-error{border-color:#c2410c}
+.sgu-empty-ic{font-size:24px;color:var(--c2);flex-shrink:0}
+.sgu-empty-title{font-size:13.5px;font-weight:600;color:var(--c4)}
+.sgu-browse{color:var(--c1);font-weight:700;text-decoration:underline;text-underline-offset:2px}
+.sgu-empty-hint{font-size:12px;color:var(--c4-60);margin-top:2px}
+
+.sgu-filled{display:flex;align-items:center;gap:14px;flex-wrap:wrap;border:1.5px solid var(--c2-10);border-radius:10px;background:var(--c2-04);padding:10px 12px}
+.sgu-filled.drag{border-color:var(--c1);background:var(--c1-12)}
+/* white paper behind the signature, the way it will sit on a certificate */
+.sgu-preview{position:relative;width:190px;height:70px;border-radius:8px;background:var(--white);border:1px solid var(--c2-10);display:flex;align-items:center;justify-content:center;padding:6px;flex-shrink:0;overflow:hidden;cursor:zoom-in}
+/* fixed pixel limits: a percentage max-height does not hold a large image inside the box */
+.sgu-preview img{max-width:176px;max-height:56px;width:auto;height:auto;object-fit:contain;display:block}
+.sgu-zoom{position:absolute;right:4px;bottom:4px;width:22px;height:22px;border-radius:6px;background:rgba(18,14,44,.7);color:#fff;font-size:13px;display:grid;place-items:center;opacity:0;transition:.15s}
+.sgu-preview:hover .sgu-zoom,.sgu-preview:focus-visible .sgu-zoom{opacity:1}
+.sgu-preview:focus-visible{outline:2px solid var(--c1);outline-offset:2px}
+.sgu-side{display:flex;flex-direction:column;gap:8px;min-width:0}
+.sgu-status{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:#15803d}
+.sgu-actions{display:flex;gap:8px;flex-wrap:wrap}
+.sgu-actions .btn{padding:6px 11px;font-size:12.5px}
+.sgu-remove{color:#b91c1c;border-color:rgba(185,28,28,.25)}
+.sgu-remove:hover{background:rgba(185,28,28,.06)}
+.sgu-error{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:13px;font-weight:600;color:#b91c1c}
+.sgu-note{font-weight:500;color:var(--c4-70)}
+/* checkerboard = transparent: shows the paper really has been cut away */
+.sgu-preview.cut{background:conic-gradient(#e9e9f1 25%,#fff 0 50%,#e9e9f1 0 75%,#fff 0) 0 0/14px 14px}
+.sgu-cut{display:flex;align-items:flex-start;gap:8px;margin-top:8px;font-size:13px;font-weight:600;color:var(--c4);cursor:pointer}
+.sgu-cut input{width:16px;height:16px;margin-top:2px;accent-color:var(--c2);flex-shrink:0}
+.sgu-cut small{display:block;font-size:12px;font-weight:400;color:var(--c4-60);margin-top:1px}

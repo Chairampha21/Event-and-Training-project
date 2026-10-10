@@ -1,0 +1,64 @@
+/* Series colors (validated for colour-vision separation and contrast on the
+   white card): planned = brand blue, actual = orange. Status colours are kept
+   separate and always come with an icon and a label. */
+.bud{--bud-planned:#3887BE;--bud-actual:#C66A1E;--bud-good:#15803d;--bud-bad:#b4452f;margin-top:36px}
+.bud .section-head{margin-bottom:18px}
+.bud-note{font-size:12px;color:var(--c4-60);line-height:1.45}
+.bud-meter{height:6px;border-radius:99px;background:var(--c2-08);overflow:hidden;margin:2px 0 6px}
+.bud-meter-fill{height:100%;border-radius:99px;background:var(--bud-actual)}
+.bud-meter-fill.over{background:var(--bud-bad)}
+.bud-flag{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;white-space:nowrap}
+.bud-flag i{font-size:15px}
+.bud-flag.good{color:var(--bud-good)}
+.bud-flag.bad{color:var(--bud-bad)}
+.bud-flag.wait{color:var(--c2)}
+.bud-flag.muted{color:var(--c4-60)}
+.cmp-card .bud-flag{margin-bottom:4px}
+
+.bud-legend{display:flex;gap:18px;font-size:12.5px;color:var(--c4-70);margin-bottom:14px}
+.bud-legend span{display:inline-flex;align-items:center;gap:6px}
+.bud-swatch{width:12px;height:12px;border-radius:3px}
+.bud-swatch.planned{background:var(--bud-planned)}
+.bud-swatch.actual{background:var(--bud-actual)}
+.bud-bars{display:flex;flex-direction:column;gap:16px}
+.bud-group-name{font-size:13px;font-weight:600;color:var(--c4);margin-bottom:5px}
+.bud-bar-line{display:grid;grid-template-columns:minmax(0,1fr) 108px;align-items:center;gap:10px;margin-bottom:2px}
+.bud-track{height:14px;border-left:1px solid var(--c2-20)}
+.bud-bar{height:100%;min-width:2px;border-radius:0 4px 4px 0;transition:width .3s ease}
+.bud-bar.planned{background:var(--bud-planned)}
+.bud-bar.actual{background:var(--bud-actual)}
+.bud-bar-line:hover .bud-bar{filter:brightness(.9)}
+.bud-val{font-size:12.5px;color:var(--c4-70);font-variant-numeric:tabular-nums;white-space:nowrap}
+
+.bud-states{display:flex;flex-direction:column}
+.bud-state{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--c2-08)}
+.bud-state:last-child{border-bottom:none}
+.bud-state strong{font-size:16px;color:var(--c4);font-variant-numeric:tabular-nums}
+.bud-callout{margin-top:12px;padding:10px 12px;border-radius:9px;background:var(--c2-04);font-size:12.5px;color:var(--c4-70);line-height:1.5}
+
+.bud-num{font-variant-numeric:tabular-nums;white-space:nowrap}
+.bud-diff{font-weight:600}
+.bud-diff.good{color:var(--bud-good)}
+.bud-diff.bad{color:var(--bud-bad)}
+/* The table always fits its card on a computer screen — no sideways scroll.
+   Only a phone-width screen, too narrow for seven columns, scrolls. */
+.bud-table-wrap{overflow-x:hidden}
+.bud-table{table-layout:fixed;width:100%}
+@media (max-width:900px){.bud-table-wrap{overflow-x:auto}.bud-table{min-width:860px}}
+.bud-table th{white-space:nowrap}
+.bud-table th,.bud-table td{padding-left:12px;padding-right:12px}
+.bud-table th:first-child,.bud-table td:first-child{padding-left:22px}
+.bud-table th:last-child,.bud-table td:last-child{padding-right:18px}
+.bud-table td{vertical-align:middle}
+.bud-ev .ev-title{overflow-wrap:break-word}
+.bud-sub{font-size:12px;font-weight:400;color:var(--c4-60);margin-top:2px;line-height:1.45}
+.bud-sub span{display:block}
+.bud-flag.multi{white-space:normal;align-items:flex-start;line-height:1.4}
+.bud-flag.multi i{margin-top:1px}
+.bud-used{display:flex;align-items:center;justify-content:flex-end;gap:6px;margin-top:4px}
+.bud-used .bud-meter{width:52px;margin:0}
+.bud-used span{font-size:12px;color:var(--c4-60);font-variant-numeric:tabular-nums;min-width:34px;text-align:right}
+.bud-total{background:var(--c2-08);font-weight:700}
+.bud-edit{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;font-size:12px;line-height:1.35;text-align:left;white-space:nowrap}
+.bud-muted{font-size:12px;color:var(--c4-60)}
+@media (prefers-reduced-motion:reduce){.bud-bar{transition:none}}

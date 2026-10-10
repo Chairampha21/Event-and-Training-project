@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useEvents } from '../../hooks/useEvents';
-import EvalResultChart from '../../components/EvalResultChart';
+import EvalResultChart from '../../features/evaluations/components/EvalResultChart';
 import { ROLE_LABEL } from '../../utils/constants';
 
 export default function EvaluationsPage() {

@@ -1,12 +1,9 @@
 import React, { useState } from 'react';
 import { useEvents } from '../../hooks/useEvents';
 import { ROLE_LABEL } from '../../utils/constants';
-import Modal, { ModalHead } from '../../components/Modal';
-
-function initials(name) {
-  const p = (name || '').replace(/^(นาย|น\.ส\.|นางสาว|นาง|ผศ\.ดร\.|อ\.ดร\.|อ\.|ศ\.ดร\.)\s*/, '').trim().split(' ');
-  return (p[0] || '').slice(0, 1) + (p[1] || '').slice(0, 1);
-}
+import Modal, { ModalHead } from '../../components/ui/Modal';
+import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import { initials } from '../../utils/initials';
 
 const ROLES = ['admin', 'organizer', 'student'];
 const EMPTY = { name: '', email: '', role: 'student', dept: '' };
@@ -17,6 +14,7 @@ export default function UsersPage() {
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(EMPTY);
   const [deleteId, setDeleteId] = useState(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const admins = users.filter((u) => u.role === 'admin').length;
   const organizers = users.filter((u) => u.role === 'organizer').length;
@@ -27,7 +25,12 @@ export default function UsersPage() {
 
   function save() {
     if (!form.name.trim() || !form.email.trim()) return;
+    setConfirmOpen(true);
+  }
+
+  function confirmSave() {
     upsertUser(form, editingId);
+    setConfirmOpen(false);
     setFormOpen(false);
   }
 
@@ -112,7 +115,7 @@ export default function UsersPage() {
         </div>
       </div>
 
-      <Modal open={formOpen} onClose={() => setFormOpen(false)} size="sm">
+      <Modal open={formOpen && !confirmOpen} onClose={() => setFormOpen(false)} size="sm">
         <ModalHead eyebrow={editingId ? 'แก้ไขผู้ใช้งาน' : 'เพิ่มผู้ใช้งาน'} icon="ti-user-plus" title={editingId ? form.name : 'เพิ่มผู้ใช้งานใหม่'} onClose={() => setFormOpen(false)} />
         <div className="modal-body">
           <div className="form-row full"><div className="field"><label>ชื่อ–นามสกุล <span className="req">*</span></label><input type="text" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} /></div></div>
@@ -127,6 +130,23 @@ export default function UsersPage() {
           <button className="btn btn-primary" onClick={save}><i className="ti ti-device-floppy" /> บันทึก</button>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        eyebrow="ยืนยันการบันทึก"
+        icon="ti-device-floppy"
+        title={editingId ? 'บันทึกการแก้ไขผู้ใช้งาน?' : 'เพิ่มผู้ใช้งานใหม่?'}
+        confirmLabel="ยืนยันบันทึก"
+        confirmIcon="ti-device-floppy"
+        onConfirm={confirmSave}
+        onCancel={() => setConfirmOpen(false)}
+      >
+        <p style={{ fontSize: 13.5, color: 'var(--c4-70)', lineHeight: 1.7 }}>
+          <strong style={{ color: 'var(--c4)' }}>{form.name}</strong><br />
+          {form.email}<br />
+          บทบาท: <strong style={{ color: 'var(--c4)' }}>{ROLE_LABEL[form.role]}</strong>{form.dept ? ` · ${form.dept}` : ''}
+        </p>
+      </ConfirmDialog>
 
       <Modal open={!!deleteId} onClose={() => setDeleteId(null)} size="sm">
         <ModalHead eyebrow="ยืนยันการลบ" icon="ti-alert-triangle" title="ลบผู้ใช้งานนี้?" onClose={() => setDeleteId(null)} />

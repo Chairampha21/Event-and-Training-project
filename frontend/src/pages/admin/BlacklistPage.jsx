@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useEvents } from '../../hooks/useEvents';
-import Modal, { ModalHead } from '../../components/Modal';
-import { api } from '../../utils/api';
+import Modal, { ModalHead } from '../../components/ui/Modal';
+import { api } from '../../services/api';
 
 function formatDate(ts) {
   if (!ts) return '';
@@ -116,7 +116,7 @@ export default function BlacklistPage() {
                     <td><strong>{u.student_id}</strong></td>
                     <td style={{ maxWidth: 260 }}>{u.reason}</td>
                     <td>{formatDate(u.created_at)}</td>
-                    <td>{u.created_by_name}</td>
+                    <td>{u.created_by_name || (u.created_by ? '–' : 'ระบบ (อัตโนมัติ)')}</td>
                     <td className="right">
                       <div className="row-actions">
                         <button className="icon-btn" title="คืนสิทธิ์" onClick={() => setRestoreId(u.id)}><i className="ti ti-user-check" /></button>

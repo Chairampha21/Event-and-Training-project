@@ -10,6 +10,7 @@ import (
 
 	"cpsu-etms-backend/internal/activitylog"
 	"cpsu-etms-backend/internal/middleware"
+	"cpsu-etms-backend/internal/notify"
 )
 
 type UsersHandler struct {
@@ -136,6 +137,9 @@ func (h *UsersHandler) Update(c *gin.Context) {
 		return
 	}
 
+	var prevRole string
+	_ = h.DB.QueryRow(`SELECT role FROM users WHERE id = ?`, c.Param("id")).Scan(&prevRole)
+
 	args = append(args, c.Param("id"))
 	_, err := h.DB.Exec(`UPDATE users SET `+strings.Join(sets, ", ")+` WHERE id = ?`, args...)
 	if err != nil {
@@ -157,6 +161,13 @@ func (h *UsersHandler) Update(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 		return
 	}
+	// A change of role changes what someone can do in the system: the other admins should know.
+	if prevRole != "" && user.Role != prevRole {
+		claims, _ := middleware.CurrentUser(c)
+		activitylog.Log(h.DB, &claims.UserID, "UPDATE", "เปลี่ยนบทบาทผู้ใช้: "+user.Name+" ("+prevRole+" → "+user.Role+")")
+		notify.SendToAdmins(h.DB, claims.UserID, "ti-user-shield", notify.ToneWarn, "เหตุผิดปกติ: เปลี่ยนบทบาทผู้ใช้",
+			user.Name+" · จาก "+prevRole+" เป็น "+user.Role+" · โดย "+claims.Name, "/admin/users")
+	}
 	c.JSON(http.StatusOK, gin.H{"user": user})
 }
 
@@ -176,6 +187,12 @@ func (h *UsersHandler) SetActive(c *gin.Context) {
 	if n, _ := res.RowsAffected(); n == 0 {
 		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบผู้ใช้งาน"})
 		return
+	}
+	if !body.Active {
+		claims, _ := middleware.CurrentUser(c)
+		var name string
+		_ = h.DB.QueryRow(`SELECT name FROM users WHERE id = ?`, c.Param("id")).Scan(&name)
+		notify.SendToAdmins(h.DB, claims.UserID, "ti-user-pause", notify.ToneWarn, "เหตุผิดปกติ: ผู้ใช้ถูกระงับ", name+" · ระงับโดย "+claims.Name, "/admin/users")
 	}
 	c.Status(http.StatusNoContent)
 }
@@ -202,5 +219,6 @@ func (h *UsersHandler) Delete(c *gin.Context) {
 	}
 
 	activitylog.Log(h.DB, &claims.UserID, "DELETE", "ลบผู้ใช้งาน: "+name)
+	notify.SendToAdmins(h.DB, claims.UserID, "ti-user-x", notify.ToneWarn, "เหตุผิดปกติ: ผู้ใช้ถูกลบ", name+" · ลบโดย "+claims.Name+" · ข้อมูลการลงทะเบียนของผู้ใช้นี้ถูกลบไปด้วย", "/admin/users")
 	c.Status(http.StatusNoContent)
 }

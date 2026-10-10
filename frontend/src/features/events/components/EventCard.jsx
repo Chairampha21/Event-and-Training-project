@@ -1,6 +1,7 @@
 import React from 'react';
-import { STATUS_META } from '../utils/constants';
+import { STATUS_META } from '../../../utils/constants';
 import CycleProgress from './CycleProgress';
+import { formatBaht } from '../../../utils/money';
 import './EventCard.css';
 
 const STRIP_TONE = { '': 'strip-1', alt: 'strip-2', dark: 'strip-3' };
@@ -43,6 +44,8 @@ export default function EventCard({ event, isStudent, myStatus, onApply, onManag
           <div className="row"><i className="ti ti-calendar-event" /> {event.date}</div>
           <div className="row"><i className="ti ti-clock" /> {event.time}</div>
           <div className="row"><i className="ti ti-map-pin" /> {event.place}</div>
+          {event.regPeriod && <div className="row"><i className="ti ti-user-plus" /> รับสมัคร {event.regPeriod}</div>}
+          <div className="row"><i className="ti ti-cash" /> {event.fee > 0 ? `ค่าลงทะเบียน ${formatBaht(event.fee)}` : 'ไม่มีค่าใช้จ่าย'}</div>
         </div>
         <div className="card-footer">
           <div className="seats">

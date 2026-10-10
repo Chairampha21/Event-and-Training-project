@@ -3,7 +3,7 @@ import { useEvents } from '../../hooks/useEvents';
 import { toBuddhistYear } from '../../utils/dateFormat';
 import { fileToDataUrl } from '../../utils/fileToDataUrl';
 import { downloadDataUrl, downloadAllImages } from '../../utils/downloadImage';
-import Modal, { ModalHead } from '../../components/Modal';
+import Modal, { ModalHead } from '../../components/ui/Modal';
 
 // คลังโปสเตอร์กิจกรรม — แทนที่แบบฟอร์ม SAR ยาวเดิม ตามที่ผู้จัดกิจกรรมแจ้งว่า
 // สิ่งที่ใช้จริงมีแค่โปสเตอร์กิจกรรมกับโปสเตอร์สรุปข่าว ให้อาจารย์ดูและโหลดได้ทั้งหมด
@@ -22,7 +22,7 @@ export default function SarReportPage() {
   const [loading, setLoading] = useState(true);
   const [uploadingId, setUploadingId] = useState(null);
   const [preview, setPreview] = useState(null); // { url, title }
-  const [, setDownloadingAll] = useState(false);
+  const [downloadingAll, setDownloadingAll] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -67,20 +67,33 @@ export default function SarReportPage() {
   }
 
   async function handleDownloadAll() {
+    // One folder per event inside the ZIP, holding that event's posters.
     const items = [];
+    const folders = new Set();
     filtered.forEach((ev) => {
-      const safeTitle = ev.title.replace(/[\\/:*?"<>|]/g, '').slice(0, 40);
-      if (ev.poster) items.push({ url: ev.poster, filename: `${safeTitle} - โปสเตอร์กิจกรรม.png` });
       const recap = sarByEvent[ev.id]?.recap_poster_url;
-      if (recap) items.push({ url: recap, filename: `${safeTitle} - โปสเตอร์สรุปข่าว.png` });
+      if (!ev.poster && !recap) return;
+      // Windows refuses these characters, and a folder name ending in a dot or space.
+      const safeTitle = ev.title.replace(/[\\/:*?"<>|]/g, '').trim().slice(0, 80).replace(/[. ]+$/, '') || `กิจกรรม ${ev.id}`;
+      const folder = folders.has(safeTitle) ? `${safeTitle} (${ev.id})` : safeTitle;
+      folders.add(folder);
+      if (ev.poster) items.push({ url: ev.poster, filename: `${folder}/โปสเตอร์กิจกรรม` });
+      if (recap) items.push({ url: recap, filename: `${folder}/โปสเตอร์สรุปข่าว` });
     });
     if (items.length === 0) {
       pushToast('ไม่มีรูปให้ดาวน์โหลด', 'ยังไม่มีโปสเตอร์ในรายการที่กรองอยู่', 'warn');
       return;
     }
     setDownloadingAll(true);
-    await downloadAllImages(items);
-    setDownloadingAll(false);
+    try {
+      const count = await downloadAllImages(items, `คลังโปสเตอร์กิจกรรม${yearFilter ? `-${Number(yearFilter) + 543}` : ''}`);
+      if (count > 0) pushToast('ดาวน์โหลดโปสเตอร์แล้ว', `${count} รูป จาก ${folders.size} กิจกรรม · ไฟล์ ZIP แยกโฟลเดอร์ตามกิจกรรม`);
+      else pushToast('ดาวน์โหลดไม่สำเร็จ', 'อ่านไฟล์รูปไม่ได้', 'warn');
+    } catch (err) {
+      pushToast('ดาวน์โหลดไม่สำเร็จ', err.message, 'warn');
+    } finally {
+      setDownloadingAll(false);
+    }
   }
 
   return (
@@ -92,8 +105,8 @@ export default function SarReportPage() {
             <p>รวมโปสเตอร์กิจกรรมและโปสเตอร์สรุปข่าวของกิจกรรมที่จัดเสร็จสิ้นแล้ว ดูและดาวน์โหลดได้ทั้งหมด</p>
           </div>
           <div className="ph-actions">
-            <button className="btn btn-accent" onClick={handleDownloadAll} disabled title="เร็วๆ นี้">
-              <i className="ti ti-download" /> ดาวน์โหลดทั้งหมด
+            <button className="btn glass" onClick={handleDownloadAll} disabled={downloadingAll || loading} title="ดาวน์โหลดโปสเตอร์ทุกรูปในรายการที่กรองอยู่ เป็นไฟล์ ZIP">
+              <i className="ti ti-download" /> {downloadingAll ? 'กำลังรวมไฟล์...' : 'ดาวน์โหลดทั้งหมด'}
             </button>
           </div>
         </div>

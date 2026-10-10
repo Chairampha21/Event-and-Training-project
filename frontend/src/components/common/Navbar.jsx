@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { useEvents } from '../hooks/useEvents';
-import { ROLE_LABEL } from '../utils/constants';
-import ProfileModal from './ProfileModal';
+import { useEvents } from '../../hooks/useEvents';
+import { ROLE_LABEL } from '../../utils/constants';
 import './Navbar.css';
+import { initials } from '../../utils/initials';
 
 const NAV_TABS = {
   admin: [
@@ -22,7 +22,7 @@ const NAV_TABS = {
     { to: '/admin/blacklist', icon: 'ti-user-off', label: 'Blacklist' },
     { to: '/admin/sar', icon: 'ti-clipboard-text', label: 'คลังโปสเตอร์กิจกรรม' },
     { to: '/report', icon: 'ti-report-analytics', label: 'รายงาน' },
-    { to: '/admin/dashboard', icon: 'ti-chart-pie', label: 'Dashboard รายปี' },
+    { to: '/admin/dashboard', icon: 'ti-chart-pie', label: 'แดชบอร์ดกิจกรรม' },
   ],
   student: [
     { to: '/home', icon: 'ti-grid-dots', label: 'กิจกรรมทั้งหมด' },
@@ -31,18 +31,9 @@ const NAV_TABS = {
   ],
 };
 
-function initials(name) {
-  const p = (name || '')
-    .replace(/^(นาย|น\.ส\.|นางสาว|นาง|ผศ\.ดร\.|อ\.ดร\.|อ\.|ศ\.ดร\.)\s*/, '')
-    .trim()
-    .split(' ');
-  return (p[0] || '').slice(0, 1) + (p[1] || '').slice(0, 1);
-}
-
 export default function Navbar() {
-  const { session, notifs, markAllRead, clearAllNotif, logout } = useEvents();
+  const { session, notifs, refreshNotifications, markAllRead, markNotifRead, clearAllNotif, logout } = useEvents();
   const [notifOpen, setNotifOpen] = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
   const wrapRef = useRef(null);
   const navigate = useNavigate();
 
@@ -58,6 +49,15 @@ export default function Navbar() {
   const tabs = NAV_TABS[session.role] || [];
   const unread = notifs.filter((n) => n.unread).length;
 
+  // Pressing a notification marks it read and, when it points somewhere, goes
+  // to the place where what it talks about can be seen or finished.
+  function openNotif(n) {
+    if (n.unread) markNotifRead(n.id);
+    if (!n.link) return;
+    setNotifOpen(false);
+    navigate(n.link);
+  }
+
   function handleLogout() {
     logout();
     navigate('/login');
@@ -72,7 +72,7 @@ export default function Navbar() {
         <div className="tb-right">
           <div className="tb-divider" />
           <div className="notif-wrap" ref={wrapRef}>
-            <button className="notif-trigger" onClick={(e) => { e.stopPropagation(); setNotifOpen((o) => !o); }}>
+            <button className="notif-trigger" onClick={(e) => { e.stopPropagation(); if (!notifOpen) refreshNotifications(); setNotifOpen((o) => !o); }}>
               <i className="ti ti-bell" /> การแจ้งเตือน · <span>{unread}</span>
               {unread > 0 && <span className="dot" />}
             </button>
@@ -91,13 +91,14 @@ export default function Navbar() {
                     ไม่มีการแจ้งเตือน
                   </div>
                 ) : notifs.map((n) => (
-                  <div key={n.id} className={`notif-item${n.unread ? ' unread' : ''}`}>
+                  <div key={n.id} className={`notif-item${n.unread ? ' unread' : ''}${n.link ? ' has-link' : ''}`} onClick={() => openNotif(n)}>
                     <div className={`notif-icon ${n.tone || ''}`}><i className={`ti ${n.icon}`} /></div>
                     <div className="notif-body">
                       <div className="notif-title">{n.title}</div>
                       <div className="notif-msg">{n.msg}</div>
                       <div className="notif-time"><i className="ti ti-clock" /> {n.time}</div>
                     </div>
+                    {n.link && <i className="ti ti-chevron-right notif-go" />}
                   </div>
                 ))}
               </div>
@@ -121,9 +122,12 @@ export default function Navbar() {
               <i className={`ti ${t.icon}`} /> <span>{t.label}</span>
             </NavLink>
           ))}
+          <NavLink to="/profile" className={({ isActive }) => `nav-tab${isActive ? ' active' : ''}`} title="โปรไฟล์ของฉัน">
+            <i className="ti ti-user-circle" /> <span>โปรไฟล์ของฉัน</span>
+          </NavLink>
         </div>
         <div className="sidebar-foot">
-          <button type="button" className="user-pill" title="ดู/แก้ไขโปรไฟล์" onClick={() => setProfileOpen(true)}>
+          <button type="button" className="user-pill" title="ดู/แก้ไขโปรไฟล์" onClick={() => navigate('/profile')}>
             <div className={`up-av ${session.role}`}>{initials(session.name)}</div>
             <div className="up-info">
               <span className="up-name">{session.name}</span>
@@ -133,7 +137,6 @@ export default function Navbar() {
           <button className="btn-logout" title="ออกจากระบบ" onClick={handleLogout}><i className="ti ti-logout" /> <span>ออกจากระบบ</span></button>
         </div>
       </nav>
-      <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} />
     </>
   );
 }

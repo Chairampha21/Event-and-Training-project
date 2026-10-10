@@ -1,26 +1,48 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useEvents } from '../../hooks/useEvents';
 import { downloadCsv } from '../../utils/csvExport';
+import BudgetSection, { exportBudgetCsv } from '../../features/budget/components/BudgetSection';
+import AttendanceCard from '../../features/dashboard/components/AttendanceCard';
 
 const DASH_COLORS = ['var(--c2)', 'var(--c1)', 'var(--c3)', 'var(--c4)', 'var(--c2-15)'];
+
+// "1 ตุลาคม 2568 – 30 กันยายน 2569" for ปีงบประมาณ 2569 (the year is named after its end).
+function fiscalYearRange(fy) {
+  return `1 ตุลาคม ${fy - 1} – 30 กันยายน ${fy}`;
+}
 
 function fmt(n) { return (n || 0).toLocaleString('en-US'); }
 
 export default function DashboardPage() {
-  const { getDashboardYearly } = useEvents();
+  const { getDashboardYearly, getDashboardBudget, saveBudgetActual } = useEvents();
   const [rows, setRows] = useState([]);
+  const [budgetRows, setBudgetRows] = useState([]);
   const [year, setYear] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getDashboardYearly().then((data) => {
+    Promise.all([getDashboardYearly(), getDashboardBudget()]).then(([data, budget]) => {
       setRows(data);
-      if (data.length) setYear((y) => y ?? data[0].report_year);
+      setBudgetRows(budget);
+      // Default to the newest year that has anything to show in either part.
+      const newest = Math.max(...data.map((r) => r.report_year), ...budget.map((r) => r.report_year));
+      if (Number.isFinite(newest)) setYear((y) => y ?? newest);
       setLoading(false);
     });
-  }, [getDashboardYearly]);
+  }, [getDashboardYearly, getDashboardBudget]);
 
-  const years = useMemo(() => [...new Set(rows.map((r) => r.report_year))].sort((a, b) => b - a), [rows]);
+  // Budget covers every event of the year (a planned budget matters before the
+  // event runs), so its years are offered too — not only years with finished events.
+  const years = useMemo(() => [...new Set([...rows, ...budgetRows].map((r) => r.report_year))].sort((a, b) => b - a), [rows, budgetRows]);
+  const yearBudgetRows = useMemo(() => budgetRows.filter((r) => r.report_year === year), [budgetRows, year]);
+  // Finished events only — the same set the activity figures on this page count.
+  const yearDoneRows = useMemo(() => yearBudgetRows.filter((r) => r.status === 'done'), [yearBudgetRows]);
+
+  async function handleSaveActual(eventId, amount) {
+    const ok = await saveBudgetActual(eventId, amount);
+    if (ok) setBudgetRows(await getDashboardBudget());
+    return ok;
+  }
   const yearRows = useMemo(() => rows.filter((r) => r.report_year === year), [rows, year]);
 
   const totals = useMemo(() => yearRows.reduce((acc, r) => ({
@@ -45,7 +67,7 @@ export default function DashboardPage() {
   }, [yearRows, totals.events]);
 
   function exportDash() {
-    downloadCsv(`dashboard-${year}`, yearRows.map((r) => ({
+    downloadCsv(`dashboard-ปีงบประมาณ-${year}`, yearRows.map((r) => ({
       cat: r.category, events: r.event_count, participants: r.participant_count, certs: r.certificate_count, satis: r.avg_satisfaction,
     })), [
       { label: 'หมวดหมู่', value: 'cat' },
@@ -56,35 +78,47 @@ export default function DashboardPage() {
     ]);
   }
 
+  // Header button: everything on the page for the chosen fiscal year — the
+  // activity summary and the per-event budget table, as two files.
+  function exportAll() {
+    exportDash();
+    if (yearBudgetRows.length > 0) exportBudgetCsv(yearBudgetRows, year);
+  }
+
   return (
     <div>
       <div className="page-header">
         <div className="ph-inner">
           <div>
-            <h1>แดชบอร์ดภาพรวมรายปี</h1>
-            <p>สรุปภาพรวมกิจกรรม ผู้เข้าร่วม เกียรติบัตรที่ออก และความพึงพอใจ ของปีที่เลือก (เฉพาะกิจกรรมที่จัดเสร็จสิ้นแล้ว)</p>
+            <h1>แดชบอร์ดกิจกรรม ประจำปีงบประมาณ{year ? ` พ.ศ. ${year}` : ''}</h1>
+            <p className="ph-lead">ผลการจัดกิจกรรม จำนวนผู้เข้าร่วม เกียรติบัตรที่ออก และความพึงพอใจ พร้อมผลการใช้จ่ายงบประมาณ ของปีงบประมาณที่เลือก</p>
+            <p className="ph-note">สถิติกิจกรรมนับเฉพาะกิจกรรมที่จัดเสร็จสิ้นแล้ว · ผลการใช้จ่ายงบประมาณนับทุกกิจกรรมในปีงบประมาณ</p>
           </div>
+          {year && (
+            <div className="ph-actions">
+              <button className="btn glass" onClick={exportAll} title="ดาวน์โหลด 2 ไฟล์: ผลการจัดกิจกรรม และผลการใช้จ่ายงบประมาณ"><i className="ti ti-download" /> ส่งออก CSV</button>
+            </div>
+          )}
         </div>
       </div>
 
       <div className="wrap tight">
         {!loading && years.length === 0 ? (
-          <div className="empty-state">ยังไม่มีกิจกรรมที่จัดเสร็จสิ้นสำหรับสรุปผลรายปี</div>
+          <div className="empty-state">ยังไม่มีกิจกรรมสำหรับแสดงบนแดชบอร์ด</div>
         ) : (
           <>
             <div className="section-head">
               <div>
-                <div className="sh-title">แดชบอร์ดรายปี {year ? `· ${year}` : ''}</div>
-                <div className="sh-sub">สรุปภาพรวมของปีที่เลือก</div>
+                <div className="sh-title">ผลการจัดกิจกรรม</div>
+                <div className="sh-sub">{year ? `ปีงบประมาณ พ.ศ. ${year} · ${fiscalYearRange(year)}` : 'เลือกปีงบประมาณที่ต้องการดู'}</div>
               </div>
               <div className="dash-controls">
                 <div className="dash-pick">
-                  <label>ปีที่ดู</label>
+                  <label>ปีงบประมาณ</label>
                   <select className="role-select" value={year || ''} onChange={(e) => setYear(Number(e.target.value))}>
-                    {years.map((y) => <option key={y} value={y}>ปี {y}</option>)}
+                    {years.map((y) => <option key={y} value={y}>พ.ศ. {y}</option>)}
                   </select>
                 </div>
-                <button className="btn btn-outline" onClick={exportDash}><i className="ti ti-download" /> Export</button>
               </div>
             </div>
 
@@ -98,7 +132,7 @@ export default function DashboardPage() {
             <div className="chart-row">
               <div className="chart-card">
                 <h3><i className="ti ti-chart-pie" /> สัดส่วนประเภทกิจกรรม</h3>
-                <div className="ch-sub">รวมปี {year} · {totals.events} กิจกรรม</div>
+                <div className="ch-sub">ปีงบประมาณ {year} · {totals.events} กิจกรรม</div>
                 <div className="pie-wrap">
                   <div style={{ position: 'relative', width: 160, height: 160 }}>
                     <div className="pie" style={{ background: pieStops ? `conic-gradient(${pieStops})` : 'var(--c2-10)' }} />
@@ -114,12 +148,13 @@ export default function DashboardPage() {
                   </div>
                 </div>
               </div>
+              <AttendanceCard rows={yearDoneRows} certificates={totals.certs} year={year} />
             </div>
 
             <div className="table-card">
               <div className="table-toolbar">
-                <h3><i className="ti ti-table-options" /> สรุปรายปี · {year}</h3>
-                <button className="btn btn-outline" style={{ padding: '7px 12px', fontSize: 13 }} onClick={exportDash}><i className="ti ti-download" /> Excel</button>
+                <h3><i className="ti ti-table-options" /> สรุปผลการจัดกิจกรรม · ปีงบประมาณ {year}</h3>
+                <button className="btn btn-outline" style={{ padding: '7px 12px', fontSize: 13 }} onClick={exportDash}><i className="ti ti-download" /> ส่งออก CSV</button>
               </div>
               <div style={{ overflowX: 'auto' }}>
                 <table>
@@ -147,6 +182,8 @@ export default function DashboardPage() {
                 </table>
               </div>
             </div>
+
+            <BudgetSection rows={yearBudgetRows} year={year} onSaveActual={handleSaveActual} />
           </>
         )}
       </div>

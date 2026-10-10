@@ -1,0 +1,39 @@
+/* Text the system lays over an uploaded certificate template.
+
+   Sizes follow the certificate's own width: each text block sets its
+   font-size to 1cqw (1% of the certificate's width) and everything inside is
+   sized in em from that. So the thumbnail in the form, the full-screen
+   preview, the student's certificate and the printed page all show the text
+   at the same relative size and position. The base sizes are taken from the
+   department's own printed certificate.
+
+   (The cqw unit is kept out of calc() on purpose: the build's CSS minifier
+   cannot parse it there and fails the production build.)
+
+   Position, per-part size and per-part colour come from custom properties set
+   on .cert-canvas (see utils/certLayout.js) so each event can fit the text to
+   its template; the fallbacks here are the default layout. */
+.cert-canvas{position:relative;display:block;width:100%;container-type:inline-size;line-height:0}
+.cert-canvas>img{display:block;width:100%;height:auto}
+
+.cert-title-overlay,.cert-body-overlay,.cert-signer-overlay{
+  position:absolute;left:calc(var(--ct-x,50%) - 42%);width:84%;pointer-events:none;text-align:center;
+  font-size:1cqw;line-height:1.3;
+  color:var(--ct-c-text,#333);
+}
+
+/* department + faculty */
+.cert-title-overlay{top:var(--ct-title-top,24%);display:flex;flex-direction:column;align-items:center;gap:calc(.3em * var(--ct-s-title,1))}
+.cert-title-overlay .ct-dept{display:block;max-width:100%;font-size:calc(4.8em * var(--ct-s-title,1));font-weight:800;line-height:1.2;overflow-wrap:break-word;color:var(--ct-c-dept,#2b2b2b);text-shadow:0 0 .1em var(--ct-h-dept,#fff),0 0 .1em var(--ct-h-dept,#fff),0 .02em .04em var(--ct-h-dept,#fff)}
+.cert-title-overlay .ct-org{display:block;font-size:calc(2.5em * var(--ct-s-title,1));font-weight:700;color:var(--ct-c-org,#b8953f);text-shadow:0 0 .18em var(--ct-h-org,#fff),0 0 .18em var(--ct-h-org,#fff),0 .04em .08em var(--ct-h-org,#fff)}
+
+/* recipient block */
+.cert-body-overlay{top:var(--ct-body-top,38%);display:flex;flex-direction:column;align-items:center;gap:calc(.5em * var(--ct-s-text,1))}
+.cert-body-overlay>span{font-size:calc(1.8em * var(--ct-s-text,1));line-height:1.5;text-shadow:0 0 .25em var(--ct-h-text,#fff),0 0 .25em var(--ct-h-text,#fff),0 .06em .11em var(--ct-h-text,#fff)}
+.cert-body-overlay .cb-name{font-size:calc(4.6em * var(--ct-s-name,1));font-weight:800;line-height:1.25;margin:calc(.25em * var(--ct-s-name,1)) 0;color:var(--ct-c-name,#1f6f6b);text-shadow:0 0 .1em var(--ct-h-name,#fff),0 0 .1em var(--ct-h-name,#fff),0 .02em .04em var(--ct-h-name,#fff)}
+
+/* signature, signer's name in brackets, position */
+.cert-signer-overlay{bottom:var(--ct-sign-bottom,8%);line-height:1.3}
+.cert-signer-overlay .cs-sign{display:block;height:calc(6em * var(--ct-s-text,1));max-width:calc(26em * var(--ct-s-text,1));width:auto;object-fit:contain;margin:0 auto .3em}
+.cert-signer-overlay .cs-name,.cert-signer-overlay .cs-title{display:block;font-size:calc(1.6em * var(--ct-s-text,1));text-shadow:0 0 .28em var(--ct-h-text,#fff),0 0 .28em var(--ct-h-text,#fff),0 .06em .12em var(--ct-h-text,#fff)}
+.cert-signer-overlay .cs-title{margin-top:.1em}

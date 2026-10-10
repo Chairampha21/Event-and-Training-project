@@ -54,7 +54,22 @@ CREATE TABLE events (
   day_mode              ENUM('single','multi') NOT NULL DEFAULT 'single',
   date_start            DATE          NOT NULL,
   date_end              DATE          NULL,                -- multi-day events only
+  -- multi-day events: the exact days picked, comma-separated ISO dates in order
+  -- ('2026-10-23,2026-10-25') — they need not be consecutive. date_start/date_end
+  -- always hold the first/last of these. NULL for single-day events.
+  -- Existing databases: ALTER TABLE events ADD COLUMN event_dates VARCHAR(2000) NULL AFTER date_end;
+  event_dates           VARCHAR(2000) NULL,
+  -- multi-day events: each picked day's own time, 'HH:MM-HH:MM', comma-separated
+  -- and aligned one-to-one with event_dates ('09:00-12:00,13:00-16:00') — days
+  -- can run at different times. NULL when no per-day times were set.
+  -- Existing databases: ALTER TABLE events ADD COLUMN event_times VARCHAR(2000) NULL AFTER event_dates;
+  event_times           VARCHAR(2000) NULL,
   time_range            VARCHAR(100)  NULL,                -- free text: '09:00–16:00 น.', 'เต็มวัน', '36 ชั่วโมง'
+
+  -- registration window (inclusive, Thai local dates). NULL = no limit on that side.
+  -- Existing databases: ALTER TABLE events ADD COLUMN reg_start DATE NULL AFTER time_range, ADD COLUMN reg_end DATE NULL AFTER reg_start;
+  reg_start             DATE          NULL,
+  reg_end               DATE          NULL,
 
   attend_mode           ENUM('onsite','online','hybrid') NOT NULL DEFAULT 'onsite',
   place                 VARCHAR(255)  NULL,
@@ -62,6 +77,39 @@ CREATE TABLE events (
   capacity              INT UNSIGNED  NOT NULL DEFAULT 0,   -- total seats (onsite-only or online-only events)
   capacity_onsite       INT UNSIGNED  NULL,                 -- hybrid events only
   capacity_online       INT UNSIGNED  NULL,                 -- hybrid events only
+
+  -- budget in baht, split by funding source as in the department's plan:
+  -- budget_planned = งบประมาณเงินรายได้ (department income), budget_other =
+  -- งบประมาณแหล่งอื่น (any other source); the event's total budget is their sum.
+  -- Both are set when the event is created. budget_actual is the amount really
+  -- spent, recorded once the event has finished. NULL = not set.
+  -- Existing databases: ALTER TABLE events ADD COLUMN budget_planned DECIMAL(12,2) NULL AFTER capacity_online, ADD COLUMN budget_other DECIMAL(12,2) NULL AFTER budget_planned, ADD COLUMN budget_actual DECIMAL(12,2) NULL AFTER budget_other;
+  budget_planned        DECIMAL(12,2) NULL,
+  budget_other          DECIMAL(12,2) NULL,
+  budget_actual         DECIMAL(12,2) NULL,
+
+  -- attendee_note: a message from the organizer shown to people registering
+  -- (e.g. 'ให้นำโน้ตบุ๊กส่วนตัวมาด้วย'). loan_laptop_qty: how many notebooks the
+  -- organizer can lend for this event; students ask for one when they register
+  -- (registrations.wants_laptop). NULL = nothing to lend.
+  -- Existing databases: ALTER TABLE events ADD COLUMN attendee_note VARCHAR(500) NULL AFTER budget_actual, ADD COLUMN loan_laptop_qty INT UNSIGNED NULL AFTER attendee_note;
+  --                     ALTER TABLE registrations ADD COLUMN wants_laptop TINYINT(1) NOT NULL DEFAULT 0 AFTER checked_in_at;
+  attendee_note         VARCHAR(500)  NULL,
+  loan_laptop_qty       INT UNSIGNED  NULL,
+  -- ask_dietary: the event serves food, so registrants are asked about food
+  -- allergies and dietary needs (registrations.food_allergy / dietary_pref).
+  -- Existing databases: ALTER TABLE events ADD COLUMN ask_dietary TINYINT(1) NOT NULL DEFAULT 0 AFTER loan_laptop_qty;
+  --                     ALTER TABLE registrations ADD COLUMN food_allergy VARCHAR(300) NULL AFTER wants_laptop, ADD COLUMN dietary_pref VARCHAR(100) NULL AFTER food_allergy;
+  ask_dietary           TINYINT(1)    NOT NULL DEFAULT 0,
+
+  -- fee: registration fee in baht; NULL or 0 = free. payment_info: how to pay
+  -- (account / PromptPay, deadline), shown to people registering. Payment is
+  -- made outside the system; the organizer confirms it per registration
+  -- (registrations.payment_status).
+  -- Existing databases: ALTER TABLE events ADD COLUMN fee DECIMAL(10,2) NULL AFTER ask_dietary, ADD COLUMN payment_info VARCHAR(500) NULL AFTER fee;
+  --                     ALTER TABLE registrations ADD COLUMN payment_status ENUM('none','pending','paid') NOT NULL DEFAULT 'none' AFTER dietary_pref, ADD COLUMN paid_at DATETIME NULL AFTER payment_status;
+  fee                   DECIMAL(10,2) NULL,
+  payment_info          VARCHAR(500)  NULL,
 
   status                ENUM('open','closed','soon','full','done') NOT NULL DEFAULT 'soon',
   cycle_stage           TINYINT UNSIGNED NOT NULL DEFAULT 0, -- 0=ประกาศ 1=รับสมัคร 2=จัดกิจกรรม 3=เกียรติบัตร 4=ปิดกิจกรรม
@@ -74,6 +122,13 @@ CREATE TABLE events (
   cert_template_url     LONGTEXT      NULL,               -- also a base64 data: URL from the frontend
   cert_signer_name      VARCHAR(190)  NULL,
   cert_signer_title     VARCHAR(190)  NULL,
+  -- the signer's scanned signature (base64 data: URL, PNG/JPG), printed above their name.
+  -- Existing databases: ALTER TABLE events ADD COLUMN cert_signature_url MEDIUMTEXT NULL AFTER cert_signer_title;
+  cert_signature_url    MEDIUMTEXT    NULL,
+  -- how the system's text is fitted to this event's template (JSON: positions,
+  -- text size, ink tone, whether to show the organisation line). NULL = default layout.
+  -- Existing databases: ALTER TABLE events ADD COLUMN cert_layout VARCHAR(500) NULL AFTER cert_signature_url;
+  cert_layout           VARCHAR(500)  NULL,
 
   email_on_register     TINYINT(1)    NOT NULL DEFAULT 1,
   email_before_event    TINYINT(1)    NOT NULL DEFAULT 1,
@@ -106,11 +161,54 @@ CREATE TABLE registrations (
   status          ENUM('registered','attended','certified','absent') NOT NULL DEFAULT 'registered',
   checked_in      TINYINT(1)    NOT NULL DEFAULT 0,
   checked_in_at   DATETIME      NULL,
+  -- How this person attends. An event held one way gives everyone that way; a
+  -- hybrid event has the registrant choose, with separate seats for each.
+  -- Online attendees check in themselves through the day's self check-in link.
+  -- Existing databases: ALTER TABLE registrations ADD COLUMN attend_via ENUM('onsite','online') NOT NULL DEFAULT 'onsite' AFTER status;
+  --   UPDATE registrations r JOIN events e ON e.id = r.event_id SET r.attend_via = 'online' WHERE e.attend_mode = 'online';
+  attend_via      ENUM('onsite','online') NOT NULL DEFAULT 'onsite',
+  wants_laptop    TINYINT(1)    NOT NULL DEFAULT 0,        -- asked to borrow one of the event's loan notebooks
+  -- Health-related: shown only to the registrant, the event's organizer and admins,
+  -- and used only to prepare food. '' / NULL = nothing declared.
+  food_allergy    VARCHAR(300)  NULL,                      -- what the registrant is allergic to
+  dietary_pref    VARCHAR(100)  NULL,                      -- e.g. มังสวิรัติ, ฮาลาล
+  -- Payment of a paid event's fee, made outside the system and proven with a slip:
+  --   none      free event, nothing to pay
+  --   pending   registered, no slip sent yet
+  --   submitted slip sent, waiting for the organizer to check it
+  --   rejected  organizer could not accept the slip (see payment_reject_reason); the payer sends another
+  --   paid      organizer confirmed
+  -- Existing databases: ALTER TABLE registrations MODIFY payment_status ENUM('none','pending','submitted','rejected','paid') NOT NULL DEFAULT 'none',
+  --   ADD COLUMN slip_url MEDIUMTEXT NULL AFTER paid_at, ADD COLUMN slip_transferred_at DATETIME NULL AFTER slip_url,
+  --   ADD COLUMN slip_amount DECIMAL(10,2) NULL AFTER slip_transferred_at, ADD COLUMN slip_submitted_at DATETIME NULL AFTER slip_amount,
+  --   ADD COLUMN payment_reject_reason VARCHAR(200) NULL AFTER slip_submitted_at;
+  payment_status  ENUM('none','pending','submitted','rejected','paid') NOT NULL DEFAULT 'none',
+  paid_at         DATETIME      NULL,                      -- when the organizer confirmed the payment (server time, UTC)
+  slip_url        MEDIUMTEXT    NULL,                      -- transfer slip image (base64 data: URL), visible to the payer, the organizer and admins only
+  slip_transferred_at DATETIME  NULL,                      -- date and time of the transfer as the payer entered it (Thai local time)
+  slip_amount     DECIMAL(10,2) NULL,                      -- amount the payer says they transferred
+  slip_submitted_at DATETIME    NULL,                      -- when the slip was sent in (server time, UTC)
+  payment_reject_reason VARCHAR(200) NULL,
   registered_at   TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at      TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_reg_event FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
   CONSTRAINT fk_reg_user  FOREIGN KEY (user_id)  REFERENCES users(id)  ON DELETE CASCADE,
   CONSTRAINT uq_reg_event_user UNIQUE (event_id, user_id)
+) ENGINE=InnoDB;
+
+-- One row per day of the event a registrant was checked in on. An event that
+-- runs over several days is checked day by day; registrations.checked_in = 1
+-- (and status 'attended') means every day of the event has a row here.
+-- A registrant with no row at all once the event is over is the one marked 'absent'.
+-- Existing databases: create this table, then
+--   INSERT IGNORE INTO registration_checkins (registration_id, event_date, checked_in_at)
+--   SELECT r.id, e.date_start, COALESCE(r.checked_in_at, NOW()) FROM registrations r JOIN events e ON e.id = r.event_id WHERE r.checked_in = 1;
+CREATE TABLE registration_checkins (
+  registration_id BIGINT UNSIGNED NOT NULL,
+  event_date      DATE            NOT NULL,
+  checked_in_at   DATETIME        NOT NULL,
+  PRIMARY KEY (registration_id, event_date),
+  CONSTRAINT fk_checkin_reg FOREIGN KEY (registration_id) REFERENCES registrations(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
 CREATE INDEX idx_reg_event ON registrations (event_id);
@@ -198,7 +296,9 @@ CREATE TABLE sar_reports (
   id                INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   event_id          INT UNSIGNED  NOT NULL,
   report_code       VARCHAR(30)   NOT NULL,      -- เช่น SAR-2568-002
-  recap_poster_url  TEXT          NULL,          -- โปสเตอร์สรุปข่าวหลังจบกิจกรรม
+  -- A base64 data: URL of the image, so TEXT (64 KB) is far too small — an ordinary poster is hundreds of KB.
+  -- Existing databases: ALTER TABLE sar_reports MODIFY recap_poster_url MEDIUMTEXT NULL;
+  recap_poster_url  MEDIUMTEXT    NULL,          -- โปสเตอร์สรุปข่าวหลังจบกิจกรรม
   purpose       TEXT          NULL,          -- วัตถุประสงค์ (เดิม — ไม่ใช้แล้ว)
   outcome       TEXT          NULL,          -- ผลลัพธ์การเรียนรู้ (เดิม — ไม่ใช้แล้ว)
   gaps          TEXT          NULL,          -- ข้อค้นพบ/ช่องว่าง (เดิม — ไม่ใช้แล้ว)
@@ -259,12 +359,34 @@ CREATE TABLE notifications (
   tone        VARCHAR(20)   NULL,
   title       VARCHAR(190)  NOT NULL,
   message     VARCHAR(500)  NULL,
+  -- in-app path the bell opens when the notification is pressed: the place where
+  -- what it talks about can be seen or finished ('/events?applicants=12'). NULL = nowhere.
+  -- Existing databases: ALTER TABLE notifications ADD COLUMN link VARCHAR(200) NULL AFTER message;
+  link        VARCHAR(200)  NULL,
   is_read     TINYINT(1)    NOT NULL DEFAULT 0,
   created_at  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_notif_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
 CREATE INDEX idx_notif_user_unread ON notifications (user_id, is_read);
+
+-- ---------------------------------------------------------------------
+-- reminder_log — which time-based reminders have already gone out, so the
+-- periodic job (backend/internal/reminders) never sends one twice.
+--   kind     which rule (event_tomorrow, reg_closed, post_event, ...)
+--   ref_id   what it is about (a registration id, an event id, a yyyymmdd day)
+--   user_id  who it went to (0 = a broadcast)
+--   step     1 = first reminder, 2 = the single follow-up
+-- Existing databases: run this CREATE TABLE as it is.
+-- ---------------------------------------------------------------------
+CREATE TABLE reminder_log (
+  kind     VARCHAR(40)      NOT NULL,
+  ref_id   BIGINT           NOT NULL,
+  user_id  BIGINT           NOT NULL DEFAULT 0,
+  step     TINYINT UNSIGNED NOT NULL DEFAULT 1,
+  sent_at  TIMESTAMP        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (kind, ref_id, user_id, step)
+) ENGINE=InnoDB;
 
 -- =====================================================================
 -- Views — support the dashboard/report pages directly with plain SELECTs
@@ -286,14 +408,16 @@ LEFT JOIN registrations r ON r.event_id = e.id
 WHERE e.is_listed = 1
 GROUP BY e.id, e.title, e.category, e.date_start;
 
--- Yearly roll-up by category: backs the "Dashboard รายปี" page
+-- Fiscal-year roll-up by category: backs the "Dashboard รายปี" page
 -- avg_satisfaction reads from event_evaluation_answers (each event's own
 -- scale-type questions) since the fixed standard 4 questions are no longer
 -- shown on the student evaluation form — evaluation_answers stays populated
 -- only with legacy pre-cutover data and would otherwise go stale.
 CREATE OR REPLACE VIEW v_dashboard_yearly AS
 SELECT
-  YEAR(e.date_start)      AS report_year,
+  -- Thai fiscal year (ปีงบประมาณ), Buddhist era: 1 Oct – 30 Sep, named after the
+  -- year it ends in. So Oct 2025 – Sep 2026 is ปีงบประมาณ พ.ศ. 2569.
+  YEAR(e.date_start) + (MONTH(e.date_start) >= 10) + 543 AS report_year,
   e.category,
   COUNT(DISTINCT e.id)    AS event_count,
   COUNT(DISTINCT r.id)    AS participant_count,
@@ -304,7 +428,7 @@ LEFT JOIN registrations r ON r.event_id = e.id
 LEFT JOIN evaluations ev ON ev.registration_id = r.id
 LEFT JOIN event_evaluation_answers eea ON eea.evaluation_id = ev.id AND eea.score IS NOT NULL
 WHERE e.is_listed = 1 AND e.status = 'done'
-GROUP BY YEAR(e.date_start), e.category;
+GROUP BY YEAR(e.date_start) + (MONTH(e.date_start) >= 10) + 543, e.category;
 
 -- =====================================================================
 -- Required reference data
@@ -323,5 +447,5 @@ INSERT INTO evaluation_questions (q_key, label, sort_order) VALUES
 -- =====================================================================
 -- INSERT INTO users (name, email, password_hash, role, dept) VALUES
 --   ('ผศ.ดร. ปิยะ จันทรัศมี',  'piya_c@silpakorn.edu',    '$2y$10$REPLACE_WITH_REAL_HASH', 'admin',     'หัวหน้าภาควิชาคอมพิวเตอร์'),
---   ('วรันธร สอนสงวน',         'warunthorn_s@silpakorn.edu', '$2y$10$REPLACE_WITH_REAL_HASH', 'organizer', 'อาจารย์ผู้ดูแลกิจกรรม'),
+--   ('วรันธร สอนสงวน',         'warunthorn_s@silpakorn.edu', '$2y$10$REPLACE_WITH_REAL_HASH', 'organizer', 'นักวิชาการอุดมศึกษาปฏิบัติการ'),
 --   ('ภัทร ยะคำวุฒิ',          'phat_y@silpakorn.edu',    '$2y$10$REPLACE_WITH_REAL_HASH', 'student',   'นักศึกษาชั้นปีที่ 3 · วท.บ. คอมพิวเตอร์');

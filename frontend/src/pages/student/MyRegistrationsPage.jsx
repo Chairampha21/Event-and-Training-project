@@ -1,16 +1,47 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useEvents } from '../../hooks/useEvents';
 import { REG_STATUS_META, CYCLE } from '../../utils/constants';
-import { CertPreviewModal } from '../../components/CertificateCard';
+import { CertPreviewModal } from '../../features/certificates/components/CertificateCard';
+import OnlineJoinLink from '../../features/events/components/OnlineJoinLink';
+import PaymentBox from '../../features/events/components/PaymentBox';
+import { buddhistYearOf } from '../../utils/dateFormat';
+
+// The order the status filter is offered in: what still needs doing first.
+const STATUS_ORDER = ['registered', 'attended', 'certified', 'absent'];
 
 export default function MyRegistrationsPage() {
   const { regs, session } = useEvents();
   const navigate = useNavigate();
   const [certId, setCertId] = useState(null);
 
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [yearFilter, setYearFilter] = useState('');
+  const [catFilter, setCatFilter] = useState('');
+
   const certified = regs.filter((r) => r.status === 'certified').length;
-  const attendedMin = regs.filter((r) => r.status !== 'registered').length;
+  const attendedMin = regs.filter((r) => r.status === 'attended' || r.status === 'certified').length;
+
+  const years = useMemo(() => [...new Set(regs.map((r) => buddhistYearOf(r.dateStart)).filter(Boolean))].sort((a, b) => b - a), [regs]);
+  const categories = useMemo(() => [...new Set(regs.map((r) => r.cat).filter(Boolean))], [regs]);
+
+  // Search, year and category narrow the list first; the status chips then
+  // count what is left in each status, so a chip never promises rows that the
+  // other filters would hide.
+  const q = query.trim().toLowerCase();
+  const narrowed = regs.filter((r) => {
+    if (q && !`${r.title} ${r.cat} ${r.place}`.toLowerCase().includes(q)) return false;
+    if (yearFilter && buddhistYearOf(r.dateStart) !== Number(yearFilter)) return false;
+    if (catFilter && r.cat !== catFilter) return false;
+    return true;
+  });
+  const shown = statusFilter === 'all' ? narrowed : narrowed.filter((r) => r.status === statusFilter);
+  const filtering = !!q || !!yearFilter || !!catFilter || statusFilter !== 'all';
+
+  function clearFilters() {
+    setQuery(''); setStatusFilter('all'); setYearFilter(''); setCatFilter('');
+  }
 
   return (
     <div>
@@ -37,11 +68,46 @@ export default function MyRegistrationsPage() {
       </div>
 
       <div style={{ maxWidth: 1240, margin: '-58px auto 0', padding: '0 32px 56px', position: 'relative', zIndex: 2 }}>
-        <div className="section-head"><div><div className="sh-title">ประวัติการลงทะเบียน <span className="count">{regs.length}</span></div><div className="sh-sub">ตรวจสอบสถานะการสมัครและการเข้าร่วมของคุณในปีการศึกษานี้</div></div></div>
+        <div className="hist-tools">
+          <div className="hist-tools-head">
+            <div className="sh-title">ประวัติการลงทะเบียน <span className="count">{filtering ? `${shown.length} จาก ${regs.length}` : regs.length} รายการ</span></div>
+            {filtering && <button type="button" className="btn btn-ghost" onClick={clearFilters}><i className="ti ti-rotate" /> ล้างตัวกรอง</button>}
+          </div>
+          <div className="hist-tools-row">
+            <div className="input-search" style={{ marginBottom: 0 }}>
+              <i className="ti ti-search" />
+              <input type="text" placeholder="ค้นหาชื่อกิจกรรม ประเภท หรือสถานที่..." value={query} onChange={(e) => setQuery(e.target.value)} />
+            </div>
+            <select className="role-select" value={yearFilter} onChange={(e) => setYearFilter(e.target.value)} aria-label="กรองตามปีที่จัด">
+              <option value="">ทุกปี</option>
+              {years.map((y) => <option key={y} value={y}>พ.ศ. {y}</option>)}
+            </select>
+            <select className="role-select" value={catFilter} onChange={(e) => setCatFilter(e.target.value)} aria-label="กรองตามประเภทกิจกรรม">
+              <option value="">ทุกประเภท</option>
+              {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div className="ci-filters" role="group" aria-label="กรองตามสถานะ" style={{ marginBottom: 0 }}>
+            <button type="button" className={`filter-chip${statusFilter === 'all' ? ' active' : ''}`} aria-pressed={statusFilter === 'all'} onClick={() => setStatusFilter('all')}>
+              <i className="ti ti-list" /> ทั้งหมด <b>{narrowed.length}</b>
+            </button>
+            {STATUS_ORDER.filter((st) => REG_STATUS_META[st]).map((st) => (
+              <button type="button" key={st} className={`filter-chip${statusFilter === st ? ' active' : ''}`} aria-pressed={statusFilter === st} onClick={() => setStatusFilter(st)}>
+                <i className={`ti ${REG_STATUS_META[st].ico}`} /> {REG_STATUS_META[st].label} <b>{narrowed.filter((r) => r.status === st).length}</b>
+              </button>
+            ))}
+          </div>
+        </div>
 
         <div className="history-list">
           {regs.length === 0 && <div className="empty-state">ยังไม่มีประวัติการลงทะเบียน</div>}
-          {regs.map((r) => {
+          {regs.length > 0 && shown.length === 0 && (
+            <div className="empty-state">
+              ไม่พบรายการที่ตรงกับ{q ? `คำค้น "${query.trim()}"` : 'ตัวกรองที่เลือก'}
+              <div style={{ marginTop: 10 }}><button type="button" className="btn btn-outline" onClick={clearFilters}><i className="ti ti-rotate" /> ล้างตัวกรอง</button></div>
+            </div>
+          )}
+          {shown.map((r) => {
             const s = REG_STATUS_META[r.status];
             return (
               <div className="hist-item" key={r.eid}>
@@ -54,6 +120,33 @@ export default function MyRegistrationsPage() {
                     <span><i className="ti ti-map-pin" /> {r.place}</span>
                     <span><i className="ti ti-route" /> Cycle: {CYCLE[r.stage]}</span>
                   </div>
+                  {['pending', 'submitted', 'rejected'].includes(r.paymentStatus) && (
+                    <div style={{ marginTop: 9 }}><PaymentBox fee={r.fee} info={r.paymentInfo} reg={r} /></div>
+                  )}
+                  {r.paymentStatus === 'paid' && (
+                    <div className="hi-note info"><i className="ti ti-circle-check-filled" /> ชำระค่าลงทะเบียนแล้ว</div>
+                  )}
+                  {r.onlineLink && (r.status === 'registered' || r.status === 'attended') && (
+                    <div style={{ marginTop: 9 }}><OnlineJoinLink url={r.onlineLink} /></div>
+                  )}
+                  {r.status === 'registered' && r.attendeeNote && (
+                    <div className="hi-note"><i className="ti ti-backpack" /> {r.attendeeNote}</div>
+                  )}
+                  {r.hybrid && r.status === 'registered' && (
+                    <div className="hi-note info">
+                      <i className={`ti ${r.via === 'online' ? 'ti-broadcast' : 'ti-building'}`} />{' '}
+                      {r.via === 'online' ? 'เข้าร่วมออนไลน์ · เช็คชื่อด้วยลิงก์ที่ผู้จัดแจ้งในวันจัดกิจกรรม' : 'เข้าร่วมที่สถานที่จัด · ลงชื่อกับผู้จัดหน้างาน'}
+                    </div>
+                  )}
+                  {r.wantsLaptop && r.status === 'registered' && (
+                    <div className="hi-note info"><i className="ti ti-device-laptop" /> จองโน้ตบุ๊กให้ยืมไว้ 1 เครื่อง</div>
+                  )}
+                  {(r.foodAllergy || r.dietaryPref) && r.status === 'registered' && (
+                    <div className="hi-note info"><i className="ti ti-tools-kitchen-2" /> {[r.foodAllergy && `แพ้: ${r.foodAllergy}`, r.dietaryPref].filter(Boolean).join(' · ')}</div>
+                  )}
+                  {r.daysTotal > 1 && r.daysAttended > 0 && r.daysAttended < r.daysTotal && (
+                    <div className="hi-note info"><i className="ti ti-calendar-check" /> เช็คอินแล้ว {r.daysAttended} จาก {r.daysTotal} วัน · ต้องเข้าร่วมครบทุกวันจึงจะได้รับเกียรติบัตร</div>
+                  )}
                   {r.status === 'attended' && (
                     <div className="hi-note"><i className="ti ti-alert-circle" /> ต้องทำแบบประเมินกิจกรรมให้เสร็จก่อนจึงจะรับเกียรติบัตรได้</div>
                   )}

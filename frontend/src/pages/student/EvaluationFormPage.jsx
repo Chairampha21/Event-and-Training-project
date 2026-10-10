@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useEvents } from '../../hooks/useEvents';
+import ConfirmDialog from '../../components/ui/ConfirmDialog';
 
 export default function EvaluationFormPage() {
   const { eventId } = useParams();
@@ -12,6 +13,7 @@ export default function EvaluationFormPage() {
   const [loadingCustom, setLoadingCustom] = useState(true);
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   useEffect(() => {
     if (!ev) return;
@@ -38,6 +40,7 @@ export default function EvaluationFormPage() {
       navigate('/my-registrations');
     } catch {
       setSubmitting(false);
+      setConfirmOpen(false);
     }
   }
 
@@ -108,11 +111,25 @@ export default function EvaluationFormPage() {
         <span className="fa-left"><i className="ti ti-shield-check" /> คำตอบของคุณจะถูกเก็บเป็นความลับ</span>
         <div className="fa-right">
           <button className="btn btn-outline" onClick={() => navigate(-1)}>ยกเลิก</button>
-          <button className={`btn btn-primary${allRated ? '' : ' disabled'}`} disabled={!allRated || submitting} onClick={handleSubmit}>
+          <button className={`btn btn-primary${allRated ? '' : ' disabled'}`} disabled={!allRated || submitting} onClick={() => setConfirmOpen(true)}>
             <i className="ti ti-send" /> {submitting ? 'กำลังส่ง...' : 'ส่งแบบประเมิน & รับเกียรติบัตร'}
           </button>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        eyebrow="ยืนยันการส่งแบบประเมิน"
+        icon="ti-send"
+        title="ส่งแบบประเมินนี้?"
+        confirmLabel="ยืนยันส่ง"
+        confirmIcon="ti-send"
+        busy={submitting}
+        onConfirm={handleSubmit}
+        onCancel={() => setConfirmOpen(false)}
+      >
+        <p style={{ fontSize: 13.5, color: 'var(--c4-70)', lineHeight: 1.7 }}><strong style={{ color: 'var(--c4)' }}>{ev.title}</strong><br />เมื่อส่งแล้วจะแก้ไขคำตอบไม่ได้</p>
+      </ConfirmDialog>
     </div>
   );
 }

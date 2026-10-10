@@ -24,9 +24,10 @@ export function setAuthToken(token) {
 }
 
 export class ApiError extends Error {
-  constructor(message, status) {
+  constructor(message, status, data) {
     super(message);
     this.status = status;
+    this.data = data || null; // the rest of the error response, when the server sent more than a message
   }
 }
 
@@ -50,7 +51,7 @@ async function request(path, { method = 'GET', body, auth = true } = {}) {
   }
 
   if (!res.ok) {
-    throw new ApiError((data && data.error) || `เกิดข้อผิดพลาด (HTTP ${res.status})`, res.status);
+    throw new ApiError((data && data.error) || `เกิดข้อผิดพลาด (HTTP ${res.status})`, res.status, data);
   }
   return data;
 }

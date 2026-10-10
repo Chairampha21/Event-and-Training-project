@@ -1,17 +1,19 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
-import { AppProvider, useEvents } from './hooks/useEvents';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AppProvider } from './context/AppContext';
+import { useEvents } from './hooks/useEvents';
 import { ROLE_LANDING } from './utils/constants';
-import Navbar from './components/Navbar';
-import Toast from './components/Toast';
-import NotFound from './components/NotFound';
-import ProtectedRoute from './components/ProtectedRoute';
+import AppLayout from './layouts/AppLayout';
+import NotFound from './components/common/NotFound';
+import ProtectedRoute from './components/common/ProtectedRoute';
 
 import LoginPage from './pages/LoginPage';
+import ProfilePage from './pages/ProfilePage';
 import HomePage from './pages/student/HomePage';
 import MyRegistrationsPage from './pages/student/MyRegistrationsPage';
 import EvaluationFormPage from './pages/student/EvaluationFormPage';
 import CertificatesPage from './pages/student/CertificatesPage';
+import SelfCheckinPage from './pages/student/SelfCheckinPage';
 import CreateEventPage from './pages/organizer/CreateEventPage';
 import EventsTablePage from './pages/organizer/EventsTablePage';
 import ReportPage from './pages/organizer/ReportPage';
@@ -23,18 +25,6 @@ import EvaluationsPage from './pages/admin/EvaluationsPage';
 import UsersPage from './pages/admin/UsersPage';
 
 import './App.css';
-
-function AppLayout() {
-  return (
-    <div className="app-shell">
-      <Navbar />
-      <div className="page">
-        <Outlet />
-      </div>
-      <Toast />
-    </div>
-  );
-}
 
 function RootRedirect() {
   const { session } = useEvents();
@@ -55,6 +45,7 @@ function Routed() {
           <Route path="/my-registrations" element={<MyRegistrationsPage />} />
           <Route path="/certificates" element={<CertificatesPage />} />
           <Route path="/evaluate/:eventId" element={<EvaluationFormPage />} />
+          <Route path="/checkin/:eventId" element={<SelfCheckinPage />} />
         </Route>
         <Route element={<ProtectedRoute roles={['organizer', 'admin']} />}>
           <Route path="/create-event" element={<CreateEventPage />} />
@@ -70,6 +61,9 @@ function Routed() {
         <Route element={<ProtectedRoute roles={['admin']} />}>
           <Route path="/admin/users" element={<UsersPage />} />
           <Route path="/admin/activity-log" element={<ActivityLogPage />} />
+        </Route>
+        <Route element={<ProtectedRoute roles={['student', 'organizer', 'admin']} />}>
+          <Route path="/profile" element={<ProfilePage />} />
         </Route>
         <Route path="*" element={<NotFound />} />
       </Route>

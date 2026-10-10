@@ -1,0 +1,37 @@
+.mdp{display:grid;grid-template-columns:auto 1fr;gap:18px;align-items:start}
+.mdp-cal{width:292px;border:1.5px solid var(--c2-10);border-radius:12px;padding:12px;background:var(--white)}
+.mdp-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.mdp-month{font-size:14px;font-weight:700;color:var(--c4)}
+.mdp-nav{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;color:var(--c4-70);font-size:16px;cursor:pointer;transition:.12s}
+.mdp-nav:hover{background:var(--c2-08);color:var(--c2)}
+.mdp-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.mdp-wd{font-size:11.5px;font-weight:600;color:var(--c4-60);text-align:center;padding:4px 0}
+.mdp-day{height:34px;border-radius:8px;font-size:13px;font-weight:600;color:var(--c4);cursor:pointer;transition:.12s;border:1.5px solid transparent}
+.mdp-day:hover{background:var(--c2-08)}
+.mdp-day:disabled,.mdp-day:disabled:hover{color:var(--c4-60);opacity:.4;background:none;cursor:not-allowed}
+.mdp-day.today{border-color:var(--c1-20);color:var(--c1)}
+.mdp-day.selected,.mdp-day.selected:hover{background:var(--c2);border-color:var(--c2);color:var(--white)}
+.mdp-day:focus-visible,.mdp-nav:focus-visible{outline:2px solid var(--c1);outline-offset:1px}
+.mdp-picked{min-width:0}
+.mdp-picked-head{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px;font-weight:600;color:var(--c4);margin-bottom:8px}
+.mdp-clear{font-size:12px;font-weight:600;color:var(--c1);cursor:pointer}
+.mdp-clear:hover{text-decoration:underline}
+.mdp-empty{font-size:12.5px;color:var(--c4-60);line-height:1.55;border:1.5px dashed var(--c2-10);border-radius:10px;padding:14px}
+.mdp-empty i{margin-right:4px}
+.mdp-rows{display:flex;flex-direction:column;gap:8px}
+.mdp-row{display:grid;grid-template-columns:104px minmax(0,1fr) auto minmax(0,1fr) 26px;align-items:center;gap:8px}
+.mdp-row-date{font-size:13px;font-weight:600;color:var(--c2);white-space:nowrap}
+.mdp-row-sep{color:var(--c4-60)}
+.mdp-row-del{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;color:var(--c4-60);font-size:14px;cursor:pointer;transition:.12s}
+.mdp-row-del:hover{background:var(--c2-08);color:var(--c2)}
+.mdp-copy{align-self:flex-start;display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:var(--c1);cursor:pointer;margin-top:2px}
+.mdp-copy:hover{text-decoration:underline}
+.mdp-picked-head .req{color:var(--c1);font-weight:700}
+@media (max-width:720px){
+  .mdp{grid-template-columns:1fr}
+  .mdp-cal{width:100%}
+  .mdp-row{grid-template-columns:minmax(0,1fr) auto minmax(0,1fr) 26px}
+  .mdp-row-date{grid-column:1/-1}
+}
+/* the end-time picker sits near the right edge: open its list leftwards */
+.mdp-row .tp~.tp .tp-pop{left:auto;right:0}

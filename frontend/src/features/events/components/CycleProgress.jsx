@@ -1,5 +1,5 @@
 import React from 'react';
-import { CYCLE } from '../utils/constants';
+import { CYCLE } from '../../../utils/constants';
 
 /** 5-stage cycle tracker: ประกาศ → รับสมัคร → จัดกิจกรรม → เกียรติบัตร → ปิดกิจกรรม */
 export default function CycleProgress({ stage, compact }) {

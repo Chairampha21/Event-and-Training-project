@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useEvents } from '../../hooks/useEvents';
 import { downloadCsv } from '../../utils/csvExport';
+import { downloadXlsx, STYLE } from '../../utils/xlsxExport';
 import { THAI_MONTHS, toBuddhistYear } from '../../utils/dateFormat';
-import EvalResultChart from '../../components/EvalResultChart';
+import EvalResultChart from '../../features/evaluations/components/EvalResultChart';
 
 export default function ReportPage() {
   const { events, rosters, pushToast, getEvaluationResults } = useEvents();
@@ -21,10 +22,13 @@ export default function ReportPage() {
 
   const [query, setQuery] = useState(listed[0]?.title || '');
   const [pickerOpen, setPickerOpen] = useState(false);
+  // The box shows the chosen event's name. Opening the list shows every event;
+  // it only narrows once the person actually types something to search for.
+  const [searching, setSearching] = useState(false);
   const [yearFilter, setYearFilter] = useState('');
   const [monthFilter, setMonthFilter] = useState('');
 
-  const qq = query.trim().toLowerCase();
+  const qq = searching ? query.trim().toLowerCase() : '';
   const filteredEvents = listed.filter((e) => {
     if (qq && !e.title.toLowerCase().includes(qq)) return false;
     if (yearFilter && e.dateStart?.slice(0, 4) !== yearFilter) return false;
@@ -35,8 +39,27 @@ export default function ReportPage() {
   function pickEvent(e) {
     setEventId(e.id);
     setQuery(e.title);
+    setSearching(false);
     setPickerOpen(false);
   }
+
+  function openPicker() {
+    setSearching(false);
+    setPickerOpen(true);
+  }
+
+  // Leaving the box without choosing puts the chosen event's name back.
+  function closePicker() {
+    setPickerOpen(false);
+    setSearching(false);
+    setQuery(ev?.title || '');
+  }
+
+  // Events arrive after the first render; show the first one's name once they do.
+  useEffect(() => {
+    if (!pickerOpen) setQuery(ev?.title || '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ev?.id, ev?.title]);
 
   // เมื่อเปลี่ยนตัวกรองปี/เดือนแล้วกิจกรรมที่เลือกอยู่ไม่เข้าเงื่อนไขอีกต่อไป
   // ให้เลื่อนไปเลือกรายการแรกที่ตรงเงื่อนไขให้อัตโนมัติ
@@ -76,13 +99,67 @@ export default function ReportPage() {
   const recent = useMemo(() => listed.slice(0, 6), [listed]);
   const maxV = Math.max(10, ...recent.map((e) => e.reg));
 
-  function exportReport() {
+  // One export button for the whole report: the menu says what each file
+  // holds, so it does not depend on which tab happens to be open.
+  const [exportOpen, setExportOpen] = useState(false);
+  const hasEval = evalData.length > 0 && evalResponded > 0;
+  const ROSTER_COLS = [
+    { label: 'ชื่อ–นามสกุล', value: 'name' },
+    { label: 'รหัสนักศึกษา', value: 'sid' },
+    { label: 'เช็คอิน', value: (r) => (r.in ? 'เข้าร่วม' : 'ไม่เข้าร่วม') },
+  ];
+  const EVAL_COLS = [
+    { label: 'หัวข้อประเมิน', value: 'label' },
+    { label: 'คะแนนเฉลี่ย (เต็ม 5)', value: (r) => (r.response_count ? Number(r.avg_score || 0).toFixed(2) : '') },
+    { label: 'จำนวนผู้ตอบ', value: (r) => r.response_count || 0 },
+  ];
+
+  function exportReport(kind) {
+    setExportOpen(false);
     if (!ev) return;
     pushToast('กำลังส่งออกรายงาน', ev.title.slice(0, 30));
-    downloadCsv(`report-${ev.id}`, roster, [
-      { label: 'ชื่อ–นามสกุล', value: 'name' },
-      { label: 'รหัสนักศึกษา', value: 'sid' },
-      { label: 'เช็คอิน', value: (r) => (r.in ? 'เข้าร่วม' : 'ไม่เข้าร่วม') },
+    if (kind === 'roster') { downloadCsv(`รายชื่อและการเข้าร่วม-${ev.id}`, roster, ROSTER_COLS); return; }
+    if (kind === 'eval') { downloadCsv(`ผลแบบประเมิน-${ev.id}`, evalResults, EVAL_COLS); return; }
+    // Whole report: one workbook, one sheet per part.
+    const head = (v) => ({ v, s: STYLE.head });
+    const pair = (k, v) => ({ height: 22, cells: [{ v: k, s: STYLE.left }, { v, s: STYLE.left }] });
+    const merged = (last) => ({ merges: [`A1:${last}1`, `A2:${last}2`] });
+    const top = (t) => [
+      { height: 26, cells: [{ v: t, s: STYLE.title }] },
+      { height: 36, cells: [{ v: ev.title, s: STYLE.subtitle }] },
+      { cells: [] },
+    ];
+    downloadXlsx(`รายงานสรุปกิจกรรม-${ev.id}`, [
+      {
+        name: 'สรุปกิจกรรม', cols: [30, 44], ...merged('B'),
+        rows: [
+          ...top('รายงานสรุปกิจกรรม'),
+          pair('วันที่จัด', ev.date),
+          pair('ประเภท', ev.cat || '-'),
+          pair('ผู้สมัครทั้งหมด (คน)', roster.length),
+          pair('เข้าร่วม / เช็คอิน (คน)', attended),
+          pair('อัตราเข้าร่วม (%)', Number(attendRate.toFixed(1))),
+          pair('คะแนนประเมินเฉลี่ยรวม (เต็ม 5)', hasEval ? Number(evalOverall.toFixed(2)) : '-'),
+          pair('ผู้ทำแบบประเมิน (คน)', evalResponded),
+        ],
+      },
+      {
+        name: 'รายชื่อและการเข้าร่วม', cols: [7, 16, 34, 16], ...merged('D'),
+        rows: [
+          ...top('รายชื่อและการเข้าร่วม'),
+          { height: 22, cells: [head('ลำดับ'), head('รหัสนักศึกษา'), head('ชื่อ–นามสกุล'), head('เช็คอิน')] },
+          ...roster.map((r, i) => ({ height: 22, cells: [{ v: i + 1, s: STYLE.center }, { v: r.sid, s: STYLE.center }, { v: r.name, s: STYLE.left }, { v: r.in ? 'เข้าร่วม' : 'ไม่เข้าร่วม', s: STYLE.center }] })),
+        ],
+      },
+      {
+        name: 'ผลแบบประเมิน', cols: [7, 60, 18, 14], ...merged('D'),
+        rows: [
+          ...top('ผลแบบประเมิน'),
+          { height: 22, cells: [head('ลำดับ'), head('หัวข้อประเมิน'), head('คะแนนเฉลี่ย (เต็ม 5)'), head('ผู้ตอบ (คน)')] },
+          ...evalResults.map((r, i) => ({ height: 22, cells: [{ v: i + 1, s: STYLE.center }, { v: r.label, s: STYLE.left }, { v: r.response_count ? Number(Number(r.avg_score || 0).toFixed(2)) : '-', s: STYLE.center }, { v: r.response_count || 0, s: STYLE.center }] })),
+          ...(evalResults.length === 0 ? [{ height: 22, cells: [{ v: '', s: STYLE.center }, { v: 'กิจกรรมนี้ยังไม่มีคำถามแบบประเมิน', s: STYLE.left }, { v: '', s: STYLE.center }, { v: '', s: STYLE.center }] }] : []),
+        ],
+      },
     ]);
   }
 
@@ -99,7 +176,27 @@ export default function ReportPage() {
             <p>สรุปผลกิจกรรมรายรายการ · จำนวนผู้สมัครและผู้เข้าร่วม · อัตราเข้าร่วม · เกียรติบัตรที่ออก</p>
           </div>
           <div className="ph-actions">
-            {tab === 'summary' && <button className="btn btn-accent" onClick={exportReport} disabled title="เร็วๆ นี้"><i className="ti ti-file-export" /> ส่งออก CSV</button>}
+            <div className="rp-export" onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setExportOpen(false); }}>
+              <button type="button" className="btn glass" aria-haspopup="menu" aria-expanded={exportOpen} onClick={() => setExportOpen((o) => !o)}>
+                <i className="ti ti-download" /> ส่งออกรายงาน <i className={`ti ti-chevron-${exportOpen ? 'up' : 'down'}`} />
+              </button>
+              {exportOpen && (
+                <div className="rp-export-menu" role="menu">
+                  <button type="button" role="menuitem" onClick={() => exportReport('all')}>
+                    <i className="ti ti-file-spreadsheet" />
+                    <span><strong>รายงานทั้งหมด (Excel)</strong><small>สรุปกิจกรรม รายชื่อ และผลแบบประเมิน แยกแผ่นในไฟล์เดียว</small></span>
+                  </button>
+                  <button type="button" role="menuitem" onClick={() => exportReport('roster')} disabled={roster.length === 0}>
+                    <i className="ti ti-users" />
+                    <span><strong>รายชื่อและการเข้าร่วม (CSV)</strong><small>{roster.length > 0 ? `${roster.length} คน · เช็คอิน ${attended} คน` : 'ยังไม่มีผู้สมัคร'}</small></span>
+                  </button>
+                  <button type="button" role="menuitem" onClick={() => exportReport('eval')} disabled={!hasEval}>
+                    <i className="ti ti-clipboard-check" />
+                    <span><strong>ผลแบบประเมิน (CSV)</strong><small>{hasEval ? `${evalData.length} หัวข้อ · ผู้ตอบ ${evalResponded} คน` : 'ยังไม่มีผู้ทำแบบประเมิน'}</small></span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -112,23 +209,35 @@ export default function ReportPage() {
               <input
                 type="text"
                 value={query}
-                onChange={(e) => { setQuery(e.target.value); setPickerOpen(true); }}
-                onFocus={() => setPickerOpen(true)}
-                onBlur={() => setTimeout(() => setPickerOpen(false), 150)}
+                role="combobox"
+                aria-expanded={pickerOpen}
+                aria-controls="report-event-list"
+                onChange={(e) => { setQuery(e.target.value); setSearching(true); setPickerOpen(true); }}
+                onFocus={(e) => { e.target.select(); openPicker(); }}
+                onClick={() => { if (!pickerOpen) openPicker(); }}
+                onBlur={() => setTimeout(closePicker, 150)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') e.target.blur();
+                  if (e.key === 'Enter' && pickerOpen && filteredEvents.length > 0) { pickEvent(filteredEvents[0]); e.target.blur(); }
+                }}
                 placeholder="พิมพ์ชื่อกิจกรรมเพื่อค้นหา หรือเลือกจากรายการ..."
                 autoComplete="off"
               />
+              <i className={`ti ti-chevron-${pickerOpen ? 'up' : 'down'} rf-caret`} aria-hidden="true" />
             </div>
             {pickerOpen && (
-              <div className="rf-suggest">
+              <div className="rf-suggest" id="report-event-list" role="listbox">
+                <div className="rf-suggest-head">{qq ? `ผลการค้นหา ${filteredEvents.length} รายการ` : `เลือกกิจกรรม · ทั้งหมด ${filteredEvents.length} รายการ · พิมพ์เพื่อค้นหา`}</div>
                 {filteredEvents.length === 0 && <div className="rf-suggest-empty">ไม่พบกิจกรรมที่ตรงเงื่อนไข</div>}
                 {filteredEvents.map((e) => (
                   <div
                     key={e.id}
                     className={`rf-suggest-item${ev?.id === e.id ? ' active' : ''}`}
+                    role="option"
+                    aria-selected={ev?.id === e.id}
                     onMouseDown={() => pickEvent(e)}
                   >
-                    <span className="rf-title">{e.title}</span>
+                    <span className="rf-title">{ev?.id === e.id && <i className="ti ti-check" />} {e.title}</span>
                     <span className="rf-meta">{e.date}</span>
                   </div>
                 ))}

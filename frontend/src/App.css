@@ -37,7 +37,16 @@
 /* ============ TOPBAR notif ============ */
 .tb-right .notif-wrap{position:relative}
 .notif-trigger{position:relative}
-.notif-trigger .dot{position:absolute;top:1px;right:-3px;width:7px;height:7px;border-radius:50%;background:var(--c1);box-shadow:0 0 0 2px var(--c4)}
+/* Unread count: a red badge, the one colour on the bar that means "look here". */
+.notif-trigger{display:inline-flex;align-items:center;gap:6px}
+.notif-trigger .notif-count{position:relative;display:inline-grid;place-items:center;min-width:24px;height:24px;padding:0 7px;border-radius:99px;background:#ff3b3b;color:#fff;font-size:13px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;box-shadow:0 0 0 2px #fff,0 0 12px 2px rgba(255,59,59,.75)}
+.notif-trigger .notif-count::after{content:'';position:absolute;inset:-2px;border-radius:99px;box-shadow:0 0 0 0 rgba(255,59,59,.85);animation:notifPulse 1.4s ease-out infinite}
+@keyframes notifPulse{to{box-shadow:0 0 0 12px rgba(255,59,59,0)}}
+/* With something unread the bell itself rings every few seconds. */
+.notif-trigger.has-unread{font-weight:700}
+.notif-trigger.has-unread .ti-bell{transform-origin:50% 10%;animation:bellRing 4s ease-in-out infinite}
+@keyframes bellRing{0%,82%,100%{transform:rotate(0)}85%{transform:rotate(16deg)}88%{transform:rotate(-14deg)}91%{transform:rotate(10deg)}94%{transform:rotate(-8deg)}97%{transform:rotate(4deg)}}
+@media (prefers-reduced-motion:reduce){.notif-trigger .notif-count::after,.notif-trigger.has-unread .ti-bell{animation:none}}
 .notif-panel{position:absolute;top:30px;right:0;width:380px;max-width:92vw;background:var(--white);border:1px solid var(--c2-10);border-radius:14px;color:var(--c4);box-shadow:0 24px 60px -18px rgba(42,34,98,.45);z-index:200;overflow:hidden;display:none}
 .notif-panel.open{display:block;animation:fade .18s ease}
 .notif-head{display:flex;align-items:center;justify-content:space-between;padding:15px 18px;border-bottom:1px solid var(--c2-08)}

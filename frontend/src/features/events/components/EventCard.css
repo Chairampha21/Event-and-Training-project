@@ -1,1 +1,10 @@
 /* card/grid rules live in styles/global.css (shared with tables etc.); nothing extra needed yet */
+
+/* Whole card opens the details (stretched title button). */
+.card-clickable{cursor:pointer}
+.card-open{display:inline;font:inherit;color:inherit;text-align:left;line-height:inherit;cursor:pointer}
+.card-open::after{content:'';position:absolute;inset:0;z-index:1;border-radius:14px}
+.card-open:focus-visible{outline:none}
+.card-open:focus-visible::after{outline:3px solid var(--c1);outline-offset:-3px}
+.card-clickable:hover .card-title{color:var(--c2)}
+.card-clickable .card-footer button{position:relative;z-index:2}

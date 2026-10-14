@@ -5,8 +5,7 @@ import { STATUS_META, CYCLE } from '../../../utils/constants';
 import Modal, { ModalHead } from '../../../components/ui/Modal';
 import ConfirmDialog from '../../../components/ui/ConfirmDialog';
 import BudgetActualModal from '../../budget/components/BudgetActualModal';
-import CertIssuePreview from '../../certificates/components/CertIssuePreview';
-import { certTemplateFor } from '../../certificates/utils/defaultTemplate';
+import { CertIssueReview } from '../../certificates/components/CertIssuePreview';
 import { formatBaht } from '../../../utils/money';
 
 // Organizer/admin action menu for one event: edit, roster & check-in, record
@@ -30,6 +29,7 @@ export default function ManageEventModal({ eventId, open, onClose, onOpenApplica
   const sm = STATUS_META[ev.status];
   const isOpen = ev.status === 'open';
   const canToggle = ev.status === 'open' || ev.status === 'closed';
+  const certIssued = ev.stage === 4; // certificates already opened to attendees
 
   if (confirmDelete) {
     return (
@@ -66,6 +66,13 @@ export default function ManageEventModal({ eventId, open, onClose, onOpenApplica
             <div className="me-tx"><strong>รายชื่อผู้สมัคร</strong><span>ดูผู้สมัคร การชำระเงิน ข้อมูลยืมโน้ตบุ๊กและแพ้อาหาร ดาวน์โหลดรายชื่อ</span></div>
             <i className="ti ti-chevron-right me-go" />
           </button>
+          {ev.fee > 0 && (
+            <button className="me-action" onClick={() => { onClose(); onOpenApplicants(ev.id, 'slips'); }}>
+              <div className="me-ic"><i className="ti ti-receipt" /></div>
+              <div className="me-tx"><strong>ตรวจสอบสลิป</strong><span>ตรวจหลักฐานการชำระเงิน · ดูว่าใครรอตรวจ ตรวจแล้ว หรือยังไม่ส่งสลิป</span></div>
+              <i className="ti ti-chevron-right me-go" />
+            </button>
+          )}
           <button className="me-action" onClick={() => { onClose(); onOpenApplicants(ev.id, 'checkin'); }}>
             <div className="me-ic"><i className="ti ti-checkbox" /></div>
             <div className="me-tx"><strong>เช็คอินผู้เข้าร่วม</strong><span>เช็คชื่อผู้ที่มาเข้าร่วมในวันจัดกิจกรรม</span></div>
@@ -84,8 +91,11 @@ export default function ManageEventModal({ eventId, open, onClose, onOpenApplica
             <i className="ti ti-chevron-right me-go" />
           </button>
           <button className="me-action" onClick={() => setConfirming('cert')}>
-            <div className="me-ic"><i className="ti ti-certificate" /></div>
-            <div className="me-tx"><strong>ออกเกียรติบัตร</strong><span>เปิดสิทธิ์ให้ผู้เข้าร่วมที่เช็คอินแล้ว</span></div>
+            <div className="me-ic"><i className={`ti ${certIssued ? 'ti-circle-check' : 'ti-certificate'}`} /></div>
+            <div className="me-tx">
+              <strong>{certIssued ? 'ออกเกียรติบัตรแล้ว' : 'ออกเกียรติบัตร'}</strong>
+              <span>{certIssued ? 'เปิดสิทธิ์แล้ว · กดเพื่อแจ้งเตือนผู้ที่เช็คอินเพิ่มหลังจากนั้น' : 'เปิดสิทธิ์ให้ผู้เข้าร่วมที่เช็คอินแล้ว'}</span>
+            </div>
             <i className="ti ti-chevron-right me-go" />
           </button>
           {canToggle && (
@@ -105,26 +115,17 @@ export default function ManageEventModal({ eventId, open, onClose, onOpenApplica
       <div className="modal-foot"><button className="btn btn-outline" onClick={onClose}>ปิด</button></div>
       <ConfirmDialog
         open={confirming === 'cert'}
-        eyebrow="ยืนยันการออกเกียรติบัตร"
+        eyebrow={certIssued ? 'ออกเกียรติบัตรแล้ว' : 'ยืนยันการออกเกียรติบัตร'}
         icon="ti-certificate"
-        title="ออกเกียรติบัตรกิจกรรมนี้?"
-        confirmLabel="ยืนยันออกเกียรติบัตร"
-        confirmIcon="ti-certificate"
+        title={certIssued ? 'แจ้งเตือนผู้ที่เช็คอินเพิ่ม?' : 'ออกเกียรติบัตรกิจกรรมนี้?'}
+        confirmLabel={certIssued ? 'แจ้งเตือนผู้ที่เช็คอินเพิ่ม' : 'ยืนยันออกเกียรติบัตร'}
+        confirmIcon={certIssued ? 'ti-bell' : 'ti-certificate'}
         size=""
         onConfirm={() => { issueCertificate(ev.id); onClose(); }}
         onCancel={() => setConfirming(null)}
       >
-        <p style={{ fontSize: 13.5, color: 'var(--c4-70)', lineHeight: 1.7, marginBottom: 12 }}><strong style={{ color: 'var(--c4)' }}>{ev.title}</strong><br />ผู้เข้าร่วมที่เช็คอินแล้วจะได้รับสิทธิ์รับเกียรติบัตรและได้รับการแจ้งเตือน · ตรวจตัวอย่างด้านล่างก่อนยืนยัน</p>
-        <CertIssuePreview ev={ev} />
-        <div className="me-cert-meta">
-          <div>
-            <div><i className="ti ti-photo" /> {certTemplateFor(ev).own ? 'ใช้ template ของกิจกรรมนี้' : 'ใช้ template หลักของภาควิชา'}</div>
-            <div><i className="ti ti-signature" /> {ev.signer?.name ? `ผู้ลงนาม ${ev.signer.name}${ev.signer.signature ? '' : ' · ยังไม่มีลายเซ็น'}` : 'ยังไม่ได้ระบุผู้ลงนาม'}</div>
-          </div>
-          <button type="button" className="btn btn-outline" onClick={() => { onClose(); navigate('/create-event', { state: { editId: ev.id, section: 'cert' } }); }}>
-            <i className="ti ti-edit" /> แก้ไขเกียรติบัตร
-          </button>
-        </div>
+        <p style={{ fontSize: 13.5, color: 'var(--c4-70)', lineHeight: 1.7 }}><strong style={{ color: 'var(--c4)' }}>{ev.title}</strong><br />{certIssued ? 'กิจกรรมนี้ออกเกียรติบัตรไปแล้ว · ยืนยันอีกครั้งจะแจ้งเตือนเฉพาะผู้ที่เช็คอินเพิ่มหลังจากนั้น ผู้ที่เคยได้รับแจ้งเตือนแล้วจะไม่ได้รับซ้ำ และไม่มีการออกเกียรติบัตรใบที่สอง' : 'ผู้เข้าร่วมที่เช็คอินแล้วจะได้รับสิทธิ์รับเกียรติบัตรและได้รับการแจ้งเตือน · ตรวจตัวอย่างด้านล่างก่อนยืนยัน'}</p>
+        <CertIssueReview ev={ev} onEdit={() => { onClose(); navigate('/create-event', { state: { editId: ev.id, section: 'cert' } }); }} />
       </ConfirmDialog>
       <ConfirmDialog
         open={confirming === 'toggle'}

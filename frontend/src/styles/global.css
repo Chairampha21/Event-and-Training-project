@@ -473,11 +473,8 @@ td .ev-thumb.dark{background:var(--c4-12);color:var(--c4)}
 .diet-chips button{display:inline-flex;align-items:center;gap:4px;padding:6px 11px;border-radius:999px;border:1px solid var(--c2-20);font-size:12.5px;font-weight:600;color:var(--c2);background:var(--white);transition:.12s}
 .diet-chips button:hover{background:var(--c2-08)}
 .diet-chips button.on{background:var(--c2);border-color:var(--c2);color:var(--white)}
-.diet-text,.diet-pref select{width:100%;border:1px solid var(--c2-10);border-radius:8px;padding:9px 11px;font-size:13.5px;background:var(--white);color:var(--c4);outline:none}
-.diet-text:focus,.diet-pref select:focus{border-color:var(--c2);box-shadow:0 0 0 3px var(--c2-08)}
-.diet-pref{display:block;margin-top:12px}
-.diet-pref>span{display:block;font-size:13px;font-weight:600;color:var(--c4);margin-bottom:6px}
-.diet-pref small{font-weight:400;color:var(--c4-60)}
+.diet-text{width:100%;border:1px solid var(--c2-10);border-radius:8px;padding:9px 11px;font-size:13.5px;background:var(--white);color:var(--c4);outline:none}
+.diet-text:focus{border-color:var(--c2);box-shadow:0 0 0 3px var(--c2-08)}
 .diet-privacy{display:flex;align-items:flex-start;gap:5px;font-size:12px;color:var(--c4-60);margin-top:10px;line-height:1.45}
 .diet-need{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:var(--c4-70);margin-right:auto}
 .my-diet{display:flex;align-items:flex-start;gap:6px;font-size:13px;color:var(--c4-70);margin-top:8px}
@@ -814,7 +811,7 @@ select.role-select:focus{border-color:var(--c2)}
   .hero-stats{grid-template-columns:repeat(2,1fr);gap:18px}
 }
 
-.me-cert-meta{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:12px;font-size:12.5px;color:var(--c4-70);line-height:1.7}
+.me-cert-meta{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:12px 0;font-size:12.5px;color:var(--c4-70);line-height:1.7}
 .me-cert-meta i{color:var(--c2)}
 .me-cert-meta .btn{padding:7px 12px;font-size:13px;white-space:nowrap}
 
@@ -826,3 +823,33 @@ select.role-select:focus{border-color:var(--c2)}
 .rp-export-menu i{font-size:18px;color:var(--c2);margin-top:2px}
 .rp-export-menu strong{display:block;font-size:13.5px}
 .rp-export-menu small{display:block;font-size:12px;color:var(--c4-60);line-height:1.45}
+
+/* Applicants window, slip-checking tab */
+.ci-tabs{margin-bottom:16px}
+.ci-tab-count{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 6px;margin-left:4px;border-radius:99px;background:#e5484d;color:#fff;font-size:11.5px;font-weight:700;line-height:1}
+.slip-groups{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:14px}
+.slip-group{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:12px 14px;border-radius:12px;border:1.5px solid var(--c2-10);background:var(--white);text-align:left;cursor:pointer;transition:.12s}
+.slip-group:hover{border-color:var(--c2-20);background:var(--c2-04)}
+.slip-group .sg-top{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--c4-70)}
+.slip-group strong{font-size:26px;font-weight:800;color:var(--c4);line-height:1.15;font-variant-numeric:tabular-nums}
+.slip-group small{font-size:11.5px;color:var(--c4-60)}
+.slip-group.active{border-color:var(--c2);background:var(--c2-04);box-shadow:0 0 0 3px var(--c2-08)}
+.slip-group.active .sg-top{color:var(--c2)}
+.slip-group.waiting strong{color:var(--c2)}
+.slip-meta{display:flex;align-items:center;gap:5px;margin-top:3px;font-size:12px;color:var(--c4-60)}
+.slip-meta.bad{color:#b4452f}
+.slip-btn{padding:7px 13px;font-size:13px}
+.slip-verdict{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;white-space:nowrap}
+.slip-verdict.paid{color:#15803d}
+.slip-verdict.rejected{color:#b4452f}
+.slip-verdict.pending{color:#7a5a12}
+@media (max-width:560px){.slip-groups{grid-template-columns:1fr}}
+
+/* A box the form is waiting on: red outline, and what to do written under it. */
+.field.has-error input,.field.has-error textarea,.field.has-error select,.field.has-error .tp-trigger{border-color:#d93636 !important;box-shadow:0 0 0 3px rgba(217,54,54,.14)}
+.field.has-error .pup-empty{border-color:#d93636 !important;background:rgba(217,54,54,.04)}
+.form-card h2 .req{color:var(--c1);font-weight:700}
+.field.has-error .mdp{outline:2px solid #d93636;outline-offset:6px;border-radius:12px}
+.field.has-error>label{color:#b42318}
+.field-error{display:flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;color:#b42318}
+.field-error i{font-size:15px}

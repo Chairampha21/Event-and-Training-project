@@ -16,12 +16,15 @@ function ApplyButton({ event, status, onApply }) {
   return <button className="btn-apply" onClick={() => onApply(event.id)}><i className="ti ti-eye" /> ดูรายละเอียด</button>;
 }
 
+// The whole card opens the event's details: the title is the real button and
+// its ::after covers the card (see EventCard.css), so there is one control for
+// keyboards and screen readers, and the footer button stays on top of it.
 export default function EventCard({ event, isStudent, myStatus, onApply, onManage }) {
   const sm = STATUS_META[event.status];
   const pct = Math.round((event.reg / event.cap) * 100);
 
   return (
-    <article className="card">
+    <article className="card card-clickable">
       {event.poster ? (
         <div className="card-poster">
           <img src={event.poster} alt="" />
@@ -38,7 +41,7 @@ export default function EventCard({ event, isStudent, myStatus, onApply, onManag
           </div>
           {!event.poster && <span className={`badge ${sm.badge}`}><i className={`ti ${sm.ico}`} /> {sm.label}</span>}
         </div>
-        <h3 className="card-title">{event.title}</h3>
+        <h3 className="card-title"><button type="button" className="card-open" onClick={() => onApply(event.id)} aria-label={`ดูรายละเอียด ${event.title}`}>{event.title}</button></h3>
         {!isStudent && <CycleProgress stage={event.stage} />}
         <div className="meta">
           <div className="row"><i className="ti ti-calendar-event" /> {event.date}</div>

@@ -43,3 +43,26 @@ export default function CertIssuePreview({ ev }) {
     </>
   );
 }
+
+/**
+ * Body of the "issue certificates?" confirmation, the same wherever it is
+ * asked (event menu, check-in list): which template and signer will be used,
+ * a way to go and change them, then the certificate itself. `onEdit` takes
+ * the organizer to the certificate section of the event form.
+ */
+export function CertIssueReview({ ev, onEdit }) {
+  return (
+    <>
+      <div className="me-cert-meta">
+        <div>
+          <div><i className="ti ti-photo" /> {certTemplateFor(ev).own ? 'ใช้ template ของกิจกรรมนี้' : 'ใช้ template หลักของภาควิชา'}</div>
+          <div><i className="ti ti-signature" /> {ev.signer?.name ? `ผู้ลงนาม ${ev.signer.name}${ev.signer.signature ? '' : ' · ยังไม่มีลายเซ็น'}` : 'ยังไม่ได้ระบุผู้ลงนาม'}</div>
+        </div>
+        <button type="button" className="btn btn-outline" onClick={onEdit}>
+          <i className="ti ti-edit" /> แก้ไขเกียรติบัตร
+        </button>
+      </div>
+      <CertIssuePreview ev={ev} />
+    </>
+  );
+}

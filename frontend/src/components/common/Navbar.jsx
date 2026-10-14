@@ -72,9 +72,9 @@ export default function Navbar() {
         <div className="tb-right">
           <div className="tb-divider" />
           <div className="notif-wrap" ref={wrapRef}>
-            <button className="notif-trigger" onClick={(e) => { e.stopPropagation(); if (!notifOpen) refreshNotifications(); setNotifOpen((o) => !o); }}>
-              <i className="ti ti-bell" /> การแจ้งเตือน · <span>{unread}</span>
-              {unread > 0 && <span className="dot" />}
+            <button className={`notif-trigger${unread > 0 ? ' has-unread' : ''}`} onClick={(e) => { e.stopPropagation(); if (!notifOpen) refreshNotifications(); setNotifOpen((o) => !o); }}>
+              <i className="ti ti-bell" /> การแจ้งเตือน
+              {unread > 0 && <span className="notif-count" aria-label={`ยังไม่ได้อ่าน ${unread} รายการ`}>{unread > 99 ? '99+' : unread}</span>}
             </button>
             <div className={`notif-panel${notifOpen ? ' open' : ''}`}>
               <div className="notif-head">

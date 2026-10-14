@@ -884,7 +884,7 @@ func (h *RegistrationsHandler) SubmitSlip(c *gin.Context) {
 	activitylog.Log(h.DB, &claims.UserID, "UPDATE", "แจ้งชำระเงิน: "+title)
 	if organizerID.Valid {
 		notify.Send(h.DB, organizerID.Int64, "ti-receipt", notify.ToneDark, "มีการแจ้งชำระเงินรอตรวจสอบ",
-			fmt.Sprintf("%s ส่งสลิป %s บาท · %s", claims.Name, formatAmount(body.Amount), title), fmt.Sprintf("/events?applicants=%d", slipEventID))
+			fmt.Sprintf("%s ส่งสลิป %s บาท · %s", claims.Name, formatAmount(body.Amount), title), fmt.Sprintf("/events?slips=%d", slipEventID))
 	}
 	c.JSON(http.StatusOK, gin.H{"payment_status": "submitted"})
 }

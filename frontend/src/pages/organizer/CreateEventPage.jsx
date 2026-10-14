@@ -11,6 +11,7 @@ import EventDetailModal from '../../features/events/components/EventDetailModal'
 import { parseMoney, formatBaht } from '../../utils/money';
 
 import Modal, { ModalHead } from '../../components/ui/Modal';
+import { withProgress } from '../../utils/alert';
 import CertTemplateUpload from '../../features/certificates/components/CertTemplateUpload';
 import SignatureUpload from '../../features/certificates/components/SignatureUpload';
 import './CreateEventPage.css';
@@ -162,7 +163,7 @@ export default function CreateEventPage() {
   // The block is optional and collapsed by default so the form stays short for
   // events that don't need it. When editing it opens if anything was saved in it.
   const [prepOn, setPrepOn] = useState(!!(editing?.attendeeNote || editing?.loanQty));
-  // The event serves food: ask registrants about food allergies and dietary needs
+  // The event serves food: ask registrants about food allergies
   // (its own section — food is something the organizer provides, not something attendees bring).
   const [askDietary, setAskDietary] = useState(!!editing?.askDietary);
   const prepTouched = useRef(false);
@@ -301,77 +302,65 @@ export default function CreateEventPage() {
 
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  function handlePublish() {
-    if (!title.trim() || !desc.trim()) {
-      pushToast('กรอกข้อมูลไม่ครบ', 'ระบุชื่อกิจกรรมและรายละเอียดก่อน', 'warn');
-      return;
-    }
-    if (!cat) {
-      pushToast('ยังไม่ได้เลือกประเภทกิจกรรม', 'กรุณาเลือกประเภทกิจกรรมก่อนเผยแพร่', 'warn');
-      return;
-    }
-    if (dayMode === 'single' && !dateIso) {
-      pushToast('ยังไม่ได้เลือกวันที่', 'กรุณาเลือกวันที่จัดกิจกรรม', 'warn'); return;
-    }
-    if (dayMode === 'single' && timeStart && timeEnd && timeEnd <= timeStart) {
-      pushToast('เวลาไม่ถูกต้อง', 'เวลาสิ้นสุดต้องหลังเวลาเริ่ม', 'warn'); return;
-    }
-    if (dayMode === 'multi' && eventDates.length < 2) {
-      pushToast('ยังเลือกวันไม่ครบ', 'กิจกรรมแบบหลายวันต้องเลือกอย่างน้อย 2 วัน', 'warn'); return;
-    }
+  // The first thing in the way of publishing, as { key, msg } (key = the
+  // data-field of the box to fix), or null. Pure, so it can run on every render
+  // once a publish was tried and keep the red box on what is still missing.
+  function findProblem() {
+    const at = (key, msg) => ({ key, msg });
+    if (!poster) return at('poster', 'กรุณาอัปโหลดโปสเตอร์กิจกรรม');
+    if (!title.trim()) return at('title', 'กรุณาระบุชื่อกิจกรรม');
+    if (!desc.trim()) return at('desc', 'กรุณาระบุรายละเอียดกิจกรรม');
+    if (!cat) return at('cat', 'กรุณาเลือกประเภทกิจกรรม');
+    if (Number.isNaN(budgetPlanned)) return at('budget', BUDGET_ERROR);
+    if (Number.isNaN(budgetOther)) return at('budgetOther', BUDGET_ERROR);
+    if (dayMode === 'single' && !dateIso) return at('date', 'กรุณาเลือกวันที่จัดกิจกรรม');
+    if (dayMode === 'single' && timeStart && timeEnd && timeEnd <= timeStart) return at('timeEnd', 'เวลาสิ้นสุดต้องหลังเวลาเริ่ม');
+    if (dayMode === 'multi' && eventDates.length < 2) return at('date', 'กิจกรรมแบบหลายวันต้องเลือกอย่างน้อย 2 วัน');
     if (dayMode === 'multi') {
       const missing = eventDates.find((d) => !dayTimes[d]?.start || !dayTimes[d]?.end);
-      if (missing) {
-        pushToast('ยังระบุเวลาไม่ครบ', `กรุณาระบุเวลาเริ่มและสิ้นสุดของวันที่ ${formatThaiDate(missing)}`, 'warn'); return;
-      }
+      if (missing) return at('date', `กรุณาระบุเวลาเริ่มและสิ้นสุดของวันที่ ${formatThaiDate(missing)}`);
       const backwards = eventDates.find((d) => dayTimes[d].end <= dayTimes[d].start);
-      if (backwards) {
-        pushToast('เวลาไม่ถูกต้อง', `เวลาสิ้นสุดของวันที่ ${formatThaiDate(backwards)} ต้องหลังเวลาเริ่ม`, 'warn'); return;
-      }
+      if (backwards) return at('date', `เวลาสิ้นสุดของวันที่ ${formatThaiDate(backwards)} ต้องหลังเวลาเริ่ม`);
     }
     // Typing a date by hand gets past the picker's limit, so check again here.
     const originalDates = editing ? [editing.dateStart, ...(editing.dates || []), editing.regStart, editing.regEnd] : [];
     const isPast = (d) => !!d && d < today && !originalDates.includes(d);
-    if (isPast(dayMode === 'single' ? dateIso : eventDates.find(isPast))) {
-      pushToast('วันที่จัดกิจกรรมไม่ถูกต้อง', 'ไม่สามารถเลือกวันที่ผ่านมาแล้วได้', 'warn'); return;
-    }
-    if (isPast(regStartIso) || isPast(regEndIso)) {
-      pushToast('ช่วงเวลารับสมัครไม่ถูกต้อง', 'ไม่สามารถเลือกวันที่ผ่านมาแล้วได้', 'warn'); return;
-    }
-    if ((!editing || regStartIso || regEndIso) && (!regStartIso || !regEndIso)) {
-      pushToast('ยังไม่ได้ระบุช่วงเวลารับสมัคร', 'กรุณาเลือกวันเปิดและวันปิดรับสมัคร', 'warn'); return;
-    }
-    if (regStartIso && regEndIso && regEndIso < regStartIso) {
-      pushToast('ช่วงเวลารับสมัครไม่ถูกต้อง', 'วันปิดรับสมัครต้องไม่ก่อนวันเปิดรับสมัคร', 'warn'); return;
-    }
-    if (regEndIso && eventLastIso && regEndIso > eventLastIso) {
-      pushToast('ช่วงเวลารับสมัครไม่ถูกต้อง', 'วันปิดรับสมัครต้องไม่เกินวันจัดกิจกรรม', 'warn'); return;
-    }
-    if (prepOn && loanAvailable && loanQtyInvalid) {
-      pushToast('จำนวนโน้ตบุ๊กให้ยืมไม่ถูกต้อง', 'กรอกเป็นจำนวนเต็ม 0–1000 เครื่อง', 'warn'); return;
-    }
-    if (prepOn && loanAvailable && loanQty < loanTaken) {
-      pushToast('ลดจำนวนโน้ตบุ๊กไม่ได้', `มีผู้ขอยืมแล้ว ${loanTaken} เครื่อง`, 'warn'); return;
-    }
-    if (feeOn && !(feeValue > 0)) {
-      pushToast('ยังไม่ได้ระบุค่าลงทะเบียน', 'กรอกจำนวนเงินมากกว่า 0 หรือปิดสวิตช์หากไม่มีค่าใช้จ่าย', 'warn'); return;
-    }
-    if (feeOn && !paymentInfo.trim()) {
-      pushToast('ยังไม่ได้ระบุวิธีชำระเงิน', 'บอกผู้สมัครว่าต้องชำระอย่างไร เช่น เลขบัญชีหรือพร้อมเพย์', 'warn'); return;
-    }
-    if (budgetInvalid) {
-      pushToast('งบประมาณไม่ถูกต้อง', 'กรอกเป็นตัวเลข ไม่ติดลบ และทศนิยมไม่เกิน 2 ตำแหน่ง', 'warn'); return;
-    }
-    if (attendMode !== 'online' && !place.trim()) {
-      pushToast('ยังไม่ได้ระบุสถานที่', 'กรุณาระบุสถานที่จัดกิจกรรม', 'warn'); return;
-    }
-    if (attendMode !== 'onsite' && onlineLink.trim() && !/^https?:\/\/\S+$/i.test(onlineLink.trim())) {
-      pushToast('ลิงก์ออนไลน์ไม่ถูกต้อง', 'ลิงก์ต้องขึ้นต้นด้วย http:// หรือ https://', 'warn'); return;
-    }
-    if (attendMode !== 'onsite' && !onlineLink.trim()) {
-      pushToast('ยังไม่ได้ระบุลิงก์ออนไลน์', 'กรุณาระบุลิงก์เข้าร่วมออนไลน์', 'warn'); return;
-    }
+    if (isPast(dayMode === 'single' ? dateIso : eventDates.find(isPast))) return at('date', 'ไม่สามารถเลือกวันที่ผ่านมาแล้วได้');
+    if ((!editing || regStartIso || regEndIso) && !regStartIso) return at('regStart', 'กรุณาเลือกวันเปิดรับสมัคร');
+    if ((!editing || regStartIso || regEndIso) && !regEndIso) return at('regEnd', 'กรุณาเลือกวันปิดรับสมัคร');
+    if (isPast(regStartIso)) return at('regStart', 'ไม่สามารถเลือกวันที่ผ่านมาแล้วได้');
+    if (isPast(regEndIso)) return at('regEnd', 'ไม่สามารถเลือกวันที่ผ่านมาแล้วได้');
+    if (regStartIso && regEndIso && regEndIso < regStartIso) return at('regEnd', 'วันปิดรับสมัครต้องไม่ก่อนวันเปิดรับสมัคร');
+    if (regEndIso && eventLastIso && regEndIso > eventLastIso) return at('regEnd', 'วันปิดรับสมัครต้องไม่เกินวันจัดกิจกรรม');
+    if (attendMode !== 'online' && !place.trim()) return at('place', 'กรุณาระบุสถานที่จัดกิจกรรม');
+    if (attendMode !== 'onsite' && !onlineLink.trim()) return at('link', 'กรุณาระบุลิงก์เข้าร่วมออนไลน์');
+    if (attendMode !== 'onsite' && !/^https?:\/\/\S+$/i.test(onlineLink.trim())) return at('link', 'ลิงก์ต้องขึ้นต้นด้วย http:// หรือ https://');
+    if (feeOn && !(feeValue > 0)) return at('fee', 'กรอกจำนวนเงินมากกว่า 0 หรือปิดสวิตช์หากไม่มีค่าใช้จ่าย');
+    if (feeOn && !paymentInfo.trim()) return at('payinfo', 'บอกผู้สมัครว่าต้องชำระอย่างไร เช่น เลขบัญชีหรือพร้อมเพย์');
+    if (prepOn && loanAvailable && loanQtyInvalid) return at('loan', 'กรอกเป็นจำนวนเต็ม 0–1000 เครื่อง');
+    if (prepOn && loanAvailable && loanQty < loanTaken) return at('loan', `มีผู้ขอยืมแล้ว ${loanTaken} เครื่อง จึงลดต่ำกว่านี้ไม่ได้`);
+    return null;
+  }
 
+  // After a publish was tried, the box still in the way is outlined in red
+  // with what to do written under it; fixing it moves the red box to the next.
+  const [triedPublish, setTriedPublish] = useState(false);
+  const problem = triedPublish ? findProblem() : null;
+  const errCls = (key) => (problem?.key === key ? ' has-error' : '');
+  const errMsg = (key) => (problem?.key === key ? <span className="field-error" role="alert"><i className="ti ti-alert-circle" /> {problem.msg}</span> : null);
+
+  function handlePublish() {
+    const found = findProblem();
+    if (found) {
+      setTriedPublish(true);
+      // Take the person to the box to fix: scroll it into the middle of the screen and put the cursor in it.
+      const box = document.querySelector(`[data-field="${found.key}"]`);
+      if (box) {
+        box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setTimeout(() => box.querySelector('input, textarea, select, button')?.focus({ preventScroll: true }), 350);
+      }
+      return;
+    }
     setConfirmOpen(true);
   }
 
@@ -411,25 +400,28 @@ export default function CreateEventPage() {
 
     setPublishing(true);
     try {
-      let eventId = editing?.id;
-      if (editing) await updateEvent(editing.id, payload);
-      else {
-        const created = await createEvent(payload);
-        eventId = created?.id;
-      }
-      // Only write when the section is switched on — "off" just hides the
-      // builder, it must never silently wipe questions saved in an earlier
-      // session (e.g. from opening the edit form with the toggle off).
-      if (eventId && evalQuestionsLoaded && evalOn) {
-        try {
-          const questions = evalQuestions
-            .filter((q) => q.label.trim())
-            .map((q) => ({ label: q.label.trim(), type: q.type, required: q.required, options: q.type === 'choice' ? q.options.map((o) => o.trim()).filter(Boolean) : [] }));
-          await saveEventEvalQuestions(eventId, questions);
-        } catch (err) {
-          pushToast('บันทึกแบบประเมินไม่สำเร็จ', err.message, 'warn');
+      // One "working…" pop-up from the first step to the last, then the result.
+      await withProgress(async () => {
+        let eventId = editing?.id;
+        if (editing) await updateEvent(editing.id, payload);
+        else {
+          const created = await createEvent(payload);
+          eventId = created?.id;
         }
-      }
+        // Only write when the section is switched on — "off" just hides the
+        // builder, it must never silently wipe questions saved in an earlier
+        // session (e.g. from opening the edit form with the toggle off).
+        if (eventId && evalQuestionsLoaded && evalOn) {
+          try {
+            const questions = evalQuestions
+              .filter((q) => q.label.trim())
+              .map((q) => ({ label: q.label.trim(), type: q.type, required: q.required, options: q.type === 'choice' ? q.options.map((o) => o.trim()).filter(Boolean) : [] }));
+            await saveEventEvalQuestions(eventId, questions);
+          } catch (err) {
+            pushToast('บันทึกแบบประเมินไม่สำเร็จ', err.message, 'warn');
+          }
+        }
+      });
       setConfirmOpen(false);
       navigate(session?.role === 'admin' ? '/admin/dashboard' : '/home');
     } catch {
@@ -490,28 +482,33 @@ export default function CreateEventPage() {
       <div className="wrap ce-layout" style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 28, alignItems: 'flex-start', paddingTop: 30 }}>
         <div className="ce-main">
           <div className="form-card">
-            <h2><span className="fc-num">1</span> โปสเตอร์กิจกรรม</h2>
-            <p className="fc-sub">ภาพประกาศสัมพันธ์ที่จะแสดงบนการ์ดกิจกรรมและหน้ารายละเอียด</p>
-            <PosterUpload value={poster} onChange={setPoster} />
+            <h2><span className="fc-num">1</span> โปสเตอร์กิจกรรม <span className="req">*</span></h2>
+            <p className="fc-sub">ภาพประกาศสัมพันธ์ที่จะแสดงบนการ์ดกิจกรรมและหน้ารายละเอียด · ต้องอัปโหลดก่อนเผยแพร่</p>
+            <div className={`field${errCls('poster')}`} data-field="poster">
+              <PosterUpload value={poster} onChange={setPoster} />
+              {errMsg('poster')}
+            </div>
           </div>
 
           <div className="form-card">
             <h2><span className="fc-num">2</span> ข้อมูลกิจกรรม</h2>
             <p className="fc-sub">รายละเอียดหลักที่จะแสดงในหน้ารายการและรายละเอียดกิจกรรม</p>
             <div className="form-row full">
-              <div className="field">
-                <label>ชื่อกิจกรรม <span className="req">*</span></label>
-                <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="เช่น Python for Data Science: จาก Zero สู่ Pandas" />
+              <div className={`field${errCls('title')}`} data-field="title">
+                <label htmlFor="ce-title">ชื่อกิจกรรม <span className="req">*</span></label>
+                <input id="ce-title" type="text" value={title} onChange={(e) => setTitle(e.target.value)} aria-invalid={problem?.key === 'title'} />
+                {errMsg('title') || <span className="helper budget-hint"><i className="ti ti-info-circle" /> เช่น Python for Data Science: จาก Zero สู่ Pandas</span>}
               </div>
             </div>
             <div className="form-row full">
-              <div className="field">
-                <label>รายละเอียด <span className="req">*</span></label>
-                <textarea value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="อธิบายเนื้อหา กลุ่มเป้าหมาย และสิ่งที่ผู้เข้าร่วมจะได้รับ" />
+              <div className={`field${errCls('desc')}`} data-field="desc">
+                <label htmlFor="ce-desc">รายละเอียด <span className="req">*</span></label>
+                <textarea id="ce-desc" value={desc} onChange={(e) => setDesc(e.target.value)} aria-invalid={problem?.key === 'desc'} />
+                {errMsg('desc') || <span className="helper budget-hint"><i className="ti ti-info-circle" /> อธิบายเนื้อหา กลุ่มเป้าหมาย และสิ่งที่ผู้เข้าร่วมจะได้รับ</span>}
               </div>
             </div>
             <div className="form-row">
-              <div className="field">
+              <div className={`field${errCls('cat')}`} data-field="cat">
                 <label>ประเภทกิจกรรม <span className="req">*</span></label>
                 {addingCat ? (
                   <span className="cat-add-input">
@@ -546,6 +543,7 @@ export default function CreateEventPage() {
                     </select>
                   </div>
                 )}
+                {errMsg('cat')}
               </div>
               <div className="field">
                 <label>อาจารย์ผู้ประสานงาน</label>
@@ -560,21 +558,21 @@ export default function CreateEventPage() {
               </div>
             </div>
             <div className="form-row three" style={{ marginBottom: 6 }}>
-              <div className="field">
+              <div className={`field${errCls('budget')}`} data-field="budget">
                 <label htmlFor="ce-budget">งบประมาณเงินรายได้ (บาท)</label>
                 <div className="with-icon">
                   <i className="ti ti-currency-baht" />
-                  <input id="ce-budget" type="text" inputMode="decimal" value={budgetText} onChange={(e) => setBudgetText(e.target.value)} placeholder="เช่น 15000" aria-invalid={Number.isNaN(budgetPlanned)} />
+                  <input id="ce-budget" type="text" inputMode="decimal" value={budgetText} onChange={(e) => setBudgetText(e.target.value)} aria-invalid={Number.isNaN(budgetPlanned)} />
                 </div>
-                {Number.isNaN(budgetPlanned) && <span className="helper" role="alert" style={BUDGET_ERROR_STYLE}>{BUDGET_ERROR}</span>}
+                {Number.isNaN(budgetPlanned) ? <span className="field-error" role="alert"><i className="ti ti-alert-circle" /> {BUDGET_ERROR}</span> : null}
               </div>
-              <div className="field">
+              <div className={`field${errCls('budgetOther')}`} data-field="budgetOther">
                 <label htmlFor="ce-budget-other">งบประมาณแหล่งอื่น (บาท)</label>
                 <div className="with-icon">
                   <i className="ti ti-currency-baht" />
-                  <input id="ce-budget-other" type="text" inputMode="decimal" value={budgetOtherText} onChange={(e) => setBudgetOtherText(e.target.value)} placeholder="เช่น 5000" aria-invalid={Number.isNaN(budgetOther)} />
+                  <input id="ce-budget-other" type="text" inputMode="decimal" value={budgetOtherText} onChange={(e) => setBudgetOtherText(e.target.value)} aria-invalid={Number.isNaN(budgetOther)} />
                 </div>
-                {Number.isNaN(budgetOther) && <span className="helper" role="alert" style={BUDGET_ERROR_STYLE}>{BUDGET_ERROR}</span>}
+                {Number.isNaN(budgetOther) ? <span className="field-error" role="alert"><i className="ti ti-alert-circle" /> {BUDGET_ERROR}</span> : null}
               </div>
               <div className="field">
                 <label>รวม (บาท)</label>
@@ -595,26 +593,29 @@ export default function CreateEventPage() {
 
             {dayMode === 'multi' && (
               <div className="form-row full">
-                <div className="field">
+                <div className={`field${errCls('date')}`} data-field="date">
                   <label>วันที่จัด <span className="req">*</span></label>
                   <MultiDatePicker value={eventDates} onChange={setEventDates} times={dayTimes} onTimesChange={setDayTimes} minDate={today} />
+                  {errMsg('date')}
                 </div>
               </div>
             )}
 
             {dayMode === 'single' && (
               <div className="form-row three">
-                <div className="field">
+                <div className={`field${errCls('date')}`} data-field="date">
                   <label>วันที่จัด <span className="req">*</span></label>
                   <div className="with-icon"><i className="ti ti-calendar-event" /><input type="date" value={dateIso} min={minFor(editing?.dateStart)} onChange={(e) => setDateIso(e.target.value)} /></div>
+                  {errMsg('date')}
                 </div>
                 <div className="field">
                   <label>จากเวลา <span className="req">*</span></label>
                   <TimeInput value={timeStart} onChange={setTimeStart} placeholder="เลือกเวลาเริ่ม" aria-label="จากเวลา" />
                 </div>
-                <div className="field">
+                <div className={`field${errCls('timeEnd')}`} data-field="timeEnd">
                   <label>ถึงเวลา <span className="req">*</span></label>
                   <TimeInput value={timeEnd} onChange={setTimeEnd} placeholder="เลือกเวลาสิ้นสุด" aria-label="ถึงเวลา" />
+                  {errMsg('timeEnd')}
                 </div>
               </div>
             )}
@@ -622,13 +623,15 @@ export default function CreateEventPage() {
             {dayMode === 'single' && editing?.dayMode === 'single' && !timeStart && editing.time && <span className="dm-days-hint"><i className="ti ti-info-circle" /> เว้นว่างไว้เพื่อคงเวลาเดิม: {editing.time}</span>}
 
             <div className="form-row">
-              <div className="field">
+              <div className={`field${errCls('regStart')}`} data-field="regStart">
                 <label>เปิดรับสมัคร {!editing && <span className="req">*</span>}</label>
                 <div className="with-icon"><i className="ti ti-calendar-plus" /><input type="date" value={regStartIso} min={minFor(editing?.regStart)} max={regEndIso || eventLastIso || undefined} onChange={(e) => setRegStartIso(e.target.value)} /></div>
+                {errMsg('regStart')}
               </div>
-              <div className="field">
+              <div className={`field${errCls('regEnd')}`} data-field="regEnd">
                 <label>ปิดรับสมัคร {!editing && <span className="req">*</span>}</label>
                 <div className="with-icon"><i className="ti ti-calendar-x" /><input type="date" value={regEndIso} min={regStartIso > minFor(editing?.regEnd) ? regStartIso : minFor(editing?.regEnd)} max={eventLastIso || undefined} onChange={(e) => setRegEndIso(e.target.value)} /></div>
+                {errMsg('regEnd')}
               </div>
             </div>
             <span className="dm-days-hint"><i className="ti ti-info-circle" /> {previewRegPeriod ? `รับสมัคร ${previewRegPeriod} · ` : ''}ระบบเปิดและปิดรับสมัครให้อัตโนมัติตามวันที่กำหนด</span>
@@ -641,7 +644,7 @@ export default function CreateEventPage() {
 
             <div className="form-row">
               {attendMode !== 'online' && (
-                <div className="field"><label>สถานที่ <span className="req">*</span></label><div className="with-icon"><i className="ti ti-map-pin" /><input type="text" value={place} onChange={(e) => setPlace(e.target.value)} placeholder="ระบุอาคารและห้องที่จัดกิจกรรม" /></div></div>
+                <div className={`field${errCls('place')}`} data-field="place"><label>สถานที่ <span className="req">*</span></label><div className="with-icon"><i className="ti ti-map-pin" /><input type="text" value={place} onChange={(e) => setPlace(e.target.value)} placeholder="ระบุอาคารและห้องที่จัดกิจกรรม" /></div>{errMsg('place')}</div>
               )}
               {attendMode !== 'hybrid' && (
                 <div className="field"><label>จำนวนที่รับ <span className="req">*</span></label><div className="with-icon"><i className="ti ti-users" /><input type="number" min="1" value={cap} onChange={(e) => setCap(e.target.value)} placeholder="ระบุจำนวนที่รับทั้งหมด" /></div></div>
@@ -654,9 +657,10 @@ export default function CreateEventPage() {
               </div>
             )}
             {attendMode !== 'onsite' && (
-              <div className="field" style={{ marginTop: 2 }}>
+              <div className={`field${errCls('link')}`} data-field="link" style={{ marginTop: 2 }}>
                 <label>ลิงก์เข้าร่วมออนไลน์ <span className="req">*</span></label>
-                <div className="with-icon"><i className="ti ti-link" /><input type="text" value={onlineLink} onChange={(e) => setOnlineLink(e.target.value)} placeholder="https://meet.google.com/... หรือ https://zoom.us/j/..." /></div>
+                <div className="with-icon"><i className="ti ti-link" /><input type="text" value={onlineLink} onChange={(e) => setOnlineLink(e.target.value)} /></div>
+                {errMsg('link') || <span className="helper budget-hint"><i className="ti ti-info-circle" /> เช่น https://meet.google.com/... หรือ https://zoom.us/j/...</span>}
                 <span className="helper budget-hint"><i className="ti ti-lock" /> แสดงเฉพาะนักศึกษาที่ลงทะเบียนกิจกรรมนี้แล้วเท่านั้น</span>
               </div>
             )}
@@ -673,19 +677,20 @@ export default function CreateEventPage() {
             {feeOn && (
               <div>
                 <div className="form-row">
-                  <div className="field">
+                  <div className={`field${errCls('fee')}`} data-field="fee">
                     <label htmlFor="ce-fee">ค่าลงทะเบียนต่อคน (บาท) <span className="req">*</span></label>
                     <div className="with-icon">
                       <i className="ti ti-currency-baht" />
-                      <input id="ce-fee" type="text" inputMode="decimal" value={feeText} onChange={(e) => setFeeText(e.target.value)} placeholder="เช่น 200" aria-invalid={Number.isNaN(feeValue)} />
+                      <input id="ce-fee" type="text" inputMode="decimal" value={feeText} onChange={(e) => setFeeText(e.target.value)} aria-invalid={Number.isNaN(feeValue)} />
                     </div>
-                    {Number.isNaN(feeValue) && <span className="helper" role="alert" style={BUDGET_ERROR_STYLE}>{BUDGET_ERROR}</span>}
+                    {Number.isNaN(feeValue) ? <span className="field-error" role="alert"><i className="ti ti-alert-circle" /> {BUDGET_ERROR}</span> : errMsg('fee')}
                   </div>
                 </div>
                 <div className="form-row full" style={{ marginBottom: 0 }}>
-                  <div className="field">
+                  <div className={`field${errCls('payinfo')}`} data-field="payinfo">
                     <label htmlFor="ce-payinfo">วิธีชำระเงิน <span className="req">*</span></label>
-                    <textarea id="ce-payinfo" value={paymentInfo} maxLength={500} onChange={(e) => setPaymentInfo(e.target.value)} placeholder={'เช่น โอนเข้าบัญชี ธ.กรุงไทย 123-4-56789-0 ชื่อบัญชี ภาควิชาคอมพิวเตอร์\nหรือพร้อมเพย์ 08x-xxx-xxxx · ชำระภายใน 3 วันหลังสมัคร แล้วส่งหลักฐานที่ ...'} style={{ minHeight: 84 }} />
+                    <textarea id="ce-payinfo" value={paymentInfo} maxLength={500} onChange={(e) => setPaymentInfo(e.target.value)} style={{ minHeight: 84 }} />
+                    {errMsg('payinfo') || <span className="helper budget-hint"><i className="ti ti-info-circle" /> เช่น โอนเข้าบัญชี ธ.กรุงไทย 123-4-56789-0 ชื่อบัญชี ภาควิชาคอมพิวเตอร์ หรือพร้อมเพย์ 08x-xxx-xxxx · ชำระภายใน 3 วันหลังสมัคร</span>}
                     <span className="helper budget-hint"><i className="ti ti-info-circle" /> แสดงให้ผู้สมัครเห็นในรายละเอียดกิจกรรมและตอนยืนยันการสมัคร · ระบบไม่ได้รับชำระเงินเอง คุณเป็นผู้ตรวจและกด "ยืนยันชำระเงิน" ในรายชื่อผู้สมัคร</span>
                   </div>
                 </div>
@@ -706,7 +711,8 @@ export default function CreateEventPage() {
                 <div className="form-row full">
                   <div className="field">
                     <label htmlFor="ce-note">ข้อความถึงผู้เข้าร่วม</label>
-                    <textarea id="ce-note" value={attendeeNote} maxLength={NOTE_MAX} onChange={(e) => setAttendeeNote(e.target.value)} placeholder="เช่น ให้นำโน้ตบุ๊กส่วนตัวมาด้วย" style={{ minHeight: 64 }} />
+                    <textarea id="ce-note" value={attendeeNote} maxLength={NOTE_MAX} onChange={(e) => setAttendeeNote(e.target.value)} style={{ minHeight: 64 }} />
+                    <span className="helper budget-hint"><i className="ti ti-info-circle" /> เช่น ให้นำโน้ตบุ๊กส่วนตัวมาด้วย</span>
                     <div className="note-presets">
                       {NOTE_PRESETS.map((t) => {
                         const used = attendeeNote.includes(t);
@@ -723,7 +729,7 @@ export default function CreateEventPage() {
                 </div>
                 {loanAvailable ? (
                     <div className="form-row">
-                      <div className="field">
+                      <div className="field" data-field="loan">
                         <label htmlFor="ce-loan">โน้ตบุ๊กให้ยืม (เครื่อง)</label>
                         <div className="with-icon"><i className="ti ti-device-laptop" /><input id="ce-loan" type="number" min={loanTaken} max="1000" step="1" value={loanQtyText} onChange={(e) => setLoanQtyText(e.target.value)} placeholder="ระบุจำนวนเครื่องที่ให้ยืม" aria-invalid={loanQtyInvalid || loanQty < loanTaken} /></div>
                         <span className="helper budget-hint" style={loanQtyInvalid || loanQty < loanTaken ? BUDGET_ERROR_STYLE : undefined}>
@@ -756,10 +762,7 @@ export default function CreateEventPage() {
             {askDietary && (
               <div className="diet-preview">
                 <div className="diet-preview-title">ผู้สมัครจะต้องตอบตอนยืนยันการสมัคร</div>
-                <ol>
-                  <li><strong>แพ้อาหารหรือไม่</strong> <span className="req">(บังคับตอบ)</span> — ถ้าแพ้ ให้เลือกจากรายการ เช่น อาหารทะเล ถั่วลิสง นมวัว หรือพิมพ์ระบุเอง</li>
-                  <li><strong>ข้อจำกัดด้านอาหาร</strong> (ไม่บังคับ) — มังสวิรัติ เจ ฮาลาล ไม่ทานเนื้อวัว ไม่ทานเนื้อหมู</li>
-                </ol>
+                <p className="diet-preview-q"><strong>แพ้อาหารหรือไม่</strong> <span className="req">(บังคับตอบ)</span> — ถ้าแพ้ ให้เลือกอาหารที่แพ้จากรายการ เช่น อาหารทะเล ถั่วลิสง นมวัว หรือพิมพ์ระบุเอง</p>
                 <span className="helper budget-hint"><i className="ti ti-lock" /> คำตอบเห็นเฉพาะผู้จัดกิจกรรมนี้ ในหน้ารายชื่อผู้สมัครและไฟล์ Excel</span>
               </div>
             )}

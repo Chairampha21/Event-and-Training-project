@@ -20,15 +20,18 @@ export default function EventsTablePage() {
   const [budgetId, setBudgetId] = useState(null);
   const [toggleId, setToggleId] = useState(null);
 
-  // A notification links here as /events?applicants=<id> or /events?budget=<id>:
+  // A notification links here as /events?applicants=<id>, /events?slips=<id>
+  // (the list window on its slip-checking tab) or /events?budget=<id>:
   // open that event's window straight away, then drop the parameter so closing
   // the window (or reloading) does not bring it back.
   const [params, setParams] = useSearchParams();
   useEffect(() => {
     const applicants = Number(params.get('applicants'));
+    const slips = Number(params.get('slips'));
     const budget = Number(params.get('budget'));
-    if (!applicants && !budget) return;
-    if (applicants) { setApplicantsMode('list'); setApplicantsId(applicants); }
+    if (!applicants && !slips && !budget) return;
+    if (slips) { setApplicantsMode('slips'); setApplicantsId(slips); }
+    else if (applicants) { setApplicantsMode('list'); setApplicantsId(applicants); }
     else setBudgetId(budget);
     setParams({}, { replace: true });
   }, [params, setParams]);

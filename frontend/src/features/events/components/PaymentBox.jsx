@@ -81,7 +81,7 @@ function SlipForm({ regId, fee, resend, onCancel }) {
           <input type="date" value={date} max={todayIso()} onChange={(e) => setDate(e.target.value)} />
         </label>
         <div className="slip-field">เวลาที่โอน
-          <TimeInput compact value={time} onChange={setTime} placeholder="เลือกเวลา" aria-label="เวลาที่โอน" />
+          <TimeInput compact minuteStep={1} value={time} onChange={setTime} placeholder="เลือกเวลา" aria-label="เวลาที่โอน" />
         </div>
         <label>จำนวนเงิน (บาท)
           <input type="text" inputMode="decimal" value={amountText} onChange={(e) => setAmountText(e.target.value)} aria-invalid={Number.isNaN(amount)} />

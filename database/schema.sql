@@ -161,6 +161,9 @@ CREATE TABLE registrations (
   status          ENUM('registered','attended','certified','absent') NOT NULL DEFAULT 'registered',
   checked_in      TINYINT(1)    NOT NULL DEFAULT 0,
   checked_in_at   DATETIME      NULL,
+  -- When this person was told the certificate is open (evaluation waiting); NULL = not yet.
+  -- Existing databases: ALTER TABLE registrations ADD COLUMN cert_notified_at DATETIME NULL AFTER checked_in_at;
+  cert_notified_at DATETIME NULL,
   -- How this person attends. An event held one way gives everyone that way; a
   -- hybrid event has the registrant choose, with separate seats for each.
   -- Online attendees check in themselves through the day's self check-in link.

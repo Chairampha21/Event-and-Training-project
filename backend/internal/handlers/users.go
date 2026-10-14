@@ -167,6 +167,10 @@ func (h *UsersHandler) Update(c *gin.Context) {
 		activitylog.Log(h.DB, &claims.UserID, "UPDATE", "เปลี่ยนบทบาทผู้ใช้: "+user.Name+" ("+prevRole+" → "+user.Role+")")
 		notify.SendToAdmins(h.DB, claims.UserID, "ti-user-shield", notify.ToneWarn, "เหตุผิดปกติ: เปลี่ยนบทบาทผู้ใช้",
 			user.Name+" · จาก "+prevRole+" เป็น "+user.Role+" · โดย "+claims.Name, "/admin/users")
+		// And the person whose role changed: their menus are different from now on.
+		roleName := map[string]string{"admin": "ผู้ดูแลระบบ", "organizer": "ผู้จัดกิจกรรม", "student": "นักศึกษา"}
+		notify.Send(h.DB, user.ID, "ti-user-shield", notify.ToneAccent, "บทบาทของคุณถูกเปลี่ยน",
+			"จาก "+roleName[prevRole]+" เป็น "+roleName[user.Role]+" · ออกจากระบบแล้วเข้าใหม่เพื่อใช้งานเมนูของบทบาทใหม่", "/profile")
 	}
 	c.JSON(http.StatusOK, gin.H{"user": user})
 }

@@ -35,7 +35,8 @@ export default function EventDetailModal({ eventId, open, onClose, preview }) {
   if (!ev) return null;
   const sm = STATUS_META[ev.status];
   const st = preview ? null : myStatus(ev.id);
-  const canReg = preview ? true : ev.status === 'open' && !st;
+  // Only students register; an organizer or admin opening the details just reads them.
+  const canReg = preview ? true : ev.status === 'open' && !st && session?.role === 'student';
   const myReg = preview ? null : regs.find((r) => r.eid === ev.id);
   const studentView = preview || session?.role === 'student';
   const prepNote = (ev.attendeeNote || ev.loanQty > 0) && (

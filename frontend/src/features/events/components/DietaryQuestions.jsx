@@ -2,9 +2,8 @@ import React from 'react';
 
 // Common allergens offered as one-tap choices; anything else goes in the text box.
 export const COMMON_ALLERGENS = ['อาหารทะเล', 'กุ้ง / ปู', 'ถั่วลิสง', 'นมวัว', 'ไข่', 'แป้งสาลี (กลูเตน)'];
-export const DIET_OPTIONS = ['มังสวิรัติ', 'เจ', 'ฮาลาล', 'ไม่ทานเนื้อวัว', 'ไม่ทานเนื้อหมู'];
 
-export const EMPTY_DIETARY = { hasAllergy: null, allergens: [], other: '', diet: '' };
+export const EMPTY_DIETARY = { hasAllergy: null, allergens: [], other: '' };
 
 /** True once the answers are complete enough to register with. */
 export function dietaryComplete(v) {
@@ -12,16 +11,15 @@ export function dietaryComplete(v) {
   return v.hasAllergy === false || v.allergens.length > 0 || v.other.trim() !== '';
 }
 
-/** Turns the answers into the two short texts stored with the registration. */
+/** Turns the answers into the short text stored with the registration. */
 export function dietaryPayload(v) {
   const allergy = v.hasAllergy ? [...v.allergens, v.other.trim()].filter(Boolean).join(', ') : '';
-  return { foodAllergy: allergy, dietaryPref: v.diet };
+  return { foodAllergy: allergy };
 }
 
 /**
- * Food questions shown while registering for an event that serves food.
- * Allergies come first and separately from dietary preferences — an allergy
- * is a safety matter, a preference is not — and the allergy question must be
+ * Food question shown while registering for an event that serves food: only
+ * what the person is allergic to, which is a safety matter. It must be
  * answered either way ("no" is an answer; silence is not).
  */
 export default function DietaryQuestions({ value, onChange }) {
@@ -62,14 +60,6 @@ export default function DietaryQuestions({ value, onChange }) {
           />
         </div>
       )}
-
-      <label className="diet-pref">
-        <span>ข้อจำกัดด้านอาหาร <small>(ไม่บังคับ)</small></span>
-        <select value={value.diet} onChange={(e) => set({ diet: e.target.value })}>
-          <option value="">ไม่มี</option>
-          {DIET_OPTIONS.map((d) => <option key={d} value={d}>{d}</option>)}
-        </select>
-      </label>
 
       <p className="diet-privacy"><i className="ti ti-lock" /> ใช้เพื่อจัดเตรียมอาหารเท่านั้น · เห็นเฉพาะคุณและผู้จัดกิจกรรมนี้</p>
     </fieldset>

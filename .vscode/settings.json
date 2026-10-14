@@ -15,5 +15,19 @@
             "username": "root",
             "password": "cpsuetms123"
         }
-    ]
+    ],
+    "remote.portsAttributes": {
+        "3000": {
+            "label": "CPSU ETMS (หน้าเว็บ)",
+            "onAutoForward": "openPreview"
+        },
+        "4000": {
+            "label": "CPSU ETMS (API)",
+            "onAutoForward": "silent"
+        },
+        "3306": {
+            "label": "MySQL",
+            "onAutoForward": "silent"
+        }
+    }
 }

@@ -823,8 +823,58 @@ func (h *EventsHandler) Update(c *gin.Context) {
 		activitylog.Log(h.DB, &claims.UserID, "UPDATE", "แก้ไขกิจกรรม: "+existing.Title)
 	}
 	h.notifyEventChanges(existing, event)
+	// Someone other than the organizer (an admin) changed the event: its organizer should know.
+	if existing.OrganizerID.Valid && existing.OrganizerID.Int64 != claims.UserID {
+		notify.Send(h.DB, existing.OrganizerID.Int64, "ti-edit", notify.ToneWarn, "ผู้ดูแลระบบแก้ไขกิจกรรมของคุณ",
+			existing.Title+" · แก้ไขโดย "+claims.Name+" · ตรวจสอบรายละเอียดกิจกรรมอีกครั้ง", "/events")
+	}
 	event.HasOnlineLink = event.OnlineLink.Valid && event.OnlineLink.String != ""
-	c.JSON(http.StatusOK, gin.H{"event": event})
+	res := gin.H{"event": event}
+	// Issuing certificates (again): tell the attendees who have not been told yet.
+	if _, ok := raw["cycle_stage"]; ok && event.CycleStage >= 4 && event.IsListed {
+		res["cert_notified"] = h.notifyCertOpen(event)
+	}
+	c.JSON(http.StatusOK, res)
+}
+
+// notifyCertOpen tells an event's attendees that the certificate is open and
+// the evaluation is waiting — each registration only once, so issuing the
+// certificates a second time reaches only the people checked in since.
+// Returns how many were notified this time.
+func (h *EventsHandler) notifyCertOpen(ev models.Event) int {
+	tx, err := h.DB.Begin()
+	if err != nil {
+		return 0
+	}
+	defer tx.Rollback()
+	rows, err := tx.Query(`SELECT id, user_id FROM registrations
+		 WHERE event_id = ? AND status = 'attended' AND cert_notified_at IS NULL FOR UPDATE`, ev.ID)
+	if err != nil {
+		return 0
+	}
+	type target struct{ regID, userID int64 }
+	var targets []target
+	for rows.Next() {
+		var t target
+		if err := rows.Scan(&t.regID, &t.userID); err != nil {
+			rows.Close()
+			return 0
+		}
+		targets = append(targets, t)
+	}
+	rows.Close()
+	for _, t := range targets {
+		notify.Send(tx, t.userID, "ti-clipboard-check", notify.ToneAccent,
+			"ทำแบบประเมินเพื่อรับเกียรติบัตร", ev.Title+" · กรุณาทำแบบประเมินกิจกรรมเพื่อรับเกียรติบัตร",
+			fmt.Sprintf("/evaluate/%d", ev.ID))
+		if _, err := tx.Exec(`UPDATE registrations SET cert_notified_at = NOW() WHERE id = ?`, t.regID); err != nil {
+			return 0
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return 0
+	}
+	return len(targets)
 }
 
 // notifyEventChanges turns the meaningful differences of an edit into bell
@@ -833,12 +883,6 @@ func (h *EventsHandler) Update(c *gin.Context) {
 func (h *EventsHandler) notifyEventChanges(before, after models.Event) {
 	if !after.IsListed {
 		return
-	}
-	// Certificate stage opened: attendees now need to submit the evaluation.
-	if before.CycleStage < 4 && after.CycleStage >= 4 {
-		notify.SendToRegistrants(h.DB, after.ID, "ti-clipboard-check", notify.ToneAccent,
-			"ทำแบบประเมินเพื่อรับเกียรติบัตร", after.Title+" · กรุณาทำแบบประเมินกิจกรรมเพื่อรับเกียรติบัตร",
-			fmt.Sprintf("/evaluate/%d", after.ID), "attended")
 	}
 	if before.Status == "soon" && after.Status == "open" {
 		notify.SendToStudents(h.DB, "ti-sparkles", notify.ToneDark, "กิจกรรมใหม่", after.Title+" เปิดรับสมัครแล้ว", fmt.Sprintf("/home?event=%d", after.ID))
@@ -881,6 +925,11 @@ func (h *EventsHandler) Remove(c *gin.Context) {
 		// right away instead of leaving it for them to find in the log.
 		notify.SendToAdmins(h.DB, claims.UserID, "ti-trash", notify.ToneWarn, "เหตุผิดปกติ: กิจกรรมถูกลบ",
 			fmt.Sprintf("%s · ลบโดย %s · มีผู้ลงทะเบียน %d คน · ข้อมูลยังอยู่ในฐานข้อมูล", existing.Title, claims.Name, existing.RegisteredCount), "/admin/activity-log")
+		// Deleted by someone other than its organizer (an admin): the organizer should know.
+		if existing.OrganizerID.Valid && existing.OrganizerID.Int64 != claims.UserID {
+			notify.Send(h.DB, existing.OrganizerID.Int64, "ti-trash", notify.ToneWarn, "ผู้ดูแลระบบลบกิจกรรมของคุณ",
+				existing.Title+" · ลบโดย "+claims.Name+" · ติดต่อผู้ดูแลระบบหากต้องการกู้คืน", "/events")
+		}
 	}
 	c.Status(http.StatusNoContent)
 }

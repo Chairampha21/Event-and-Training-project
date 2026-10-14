@@ -1,0 +1,9 @@
+/* SweetAlert2 pop-ups in the system's own look (see utils/alert.js). */
+.swal2-container{z-index:600}
+.swal2-popup{font-family:inherit;border-radius:16px;padding:26px 24px 24px;color:var(--c4)}
+.swal2-title{font-size:20px;font-weight:700;color:var(--c4);padding-top:6px}
+.swal2-html-container{font-size:14px;color:var(--c4-70);line-height:1.6}
+.swal2-styled.swal2-confirm{background:var(--c2);border-radius:8px;font-size:14px;font-weight:600;padding:9px 26px}
+.swal2-styled.swal2-confirm:focus-visible{box-shadow:0 0 0 3px var(--c2-20)}
+.swal2-timer-progress-bar{background:var(--c1)}
+.swal2-loader{border-color:var(--c2) transparent var(--c2) transparent}

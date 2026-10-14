@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import useLocalStorage from '../hooks/useLocalStorage';
+import { showResult } from '../utils/alert';
 import { api, setAuthToken } from '../services/api';
 import { formatThaiDate, formatThaiDateRange, formatThaiDateList, formatDayTime, formatRegPeriod, todayIso } from '../utils/dateFormat';
 import { formatBaht } from '../utils/money';
@@ -218,7 +219,11 @@ function adaptNotif(n) {
 }
 
 // How often the bell re-checks the server while the tab is visible.
-const NOTIF_POLL_MS = 30000;
+const NOTIF_POLL_MS = 15000;
+// A new notification pops up on screen for this long (the Toast pauses it
+// while the pointer is over it), and at most this many pop up at once.
+const NOTIF_TOAST_MS = 5000;
+const NOTIF_TOAST_MAX = 3;
 
 export function AppProvider({ children }) {
   // Bumped to :v3 — session now carries a real JWT + numeric id instead of the mock's {role,name,email}.
@@ -236,24 +241,38 @@ export function AppProvider({ children }) {
   const toastId = useRef(0);
   const questionsRef = useRef(null);
 
-  const pushToast = useCallback((title, msg, type = 'ok') => {
+  // The result of an action ('ok' / 'warn') is a SweetAlert pop-up in the
+  // middle of the screen. A new bell notification ('notif') is a card under
+  // the bell instead: it stays for `duration` ms, and the Toast component runs
+  // the countdown (so it can pause on hover) and calls dismissToast at the end.
+  const pushToast = useCallback((title, msg, type = 'ok', extra = {}) => {
+    if (type !== 'notif') { showResult(title, msg, type); return; }
     const id = ++toastId.current;
-    setToasts((t) => [...t, { id, title, msg, type }]);
-    setTimeout(() => {
-      setToasts((t) => t.filter((x) => x.id !== id));
-    }, 3200);
+    setToasts((t) => [...t, { id, title, msg, type, duration: 5000, ...extra }]);
   }, []);
+  const dismissToast = useCallback((id) => setToasts((t) => t.filter((x) => x.id !== id)), []);
+  // Notification ids already seen in this session; null until the first load,
+  // so what was waiting at sign-in does not all pop up at once.
+  const seenNotifs = useRef(null);
 
   // Notifications are created server-side by the action that causes them (so
   // the right person gets them, on any device) — the client only reads them.
   const refreshNotifications = useCallback(async () => {
     try {
       const { notifications } = await api.get('/me/notifications');
-      setNotifs(notifications.map(adaptNotif));
+      const list = notifications.map(adaptNotif);
+      setNotifs(list);
+      // Anything unread that was not there on the previous check is new: pop it up.
+      if (seenNotifs.current) {
+        const fresh = list.filter((n) => n.unread && !seenNotifs.current.has(n.id));
+        fresh.slice(0, NOTIF_TOAST_MAX).forEach((n) => pushToast(n.title, n.msg, 'notif', { duration: NOTIF_TOAST_MS, icon: n.icon, tone: n.tone, link: n.link, notifId: n.id }));
+        if (fresh.length > NOTIF_TOAST_MAX) pushToast(`และการแจ้งเตือนใหม่อีก ${fresh.length - NOTIF_TOAST_MAX} รายการ`, 'กดที่กระดิ่งเพื่อดูทั้งหมด', 'notif', { duration: NOTIF_TOAST_MS, icon: 'ti-bell' });
+      }
+      seenNotifs.current = new Set(list.map((n) => n.id));
     } catch {
       // notifications are ambient/non-critical — fail silently
     }
-  }, []);
+  }, [pushToast]);
 
   const markAllRead = useCallback(async () => {
     setNotifs((n) => n.map((x) => ({ ...x, unread: false })));
@@ -367,6 +386,7 @@ export function AppProvider({ children }) {
   }, []);
 
   useEffect(() => {
+    seenNotifs.current = null; // a different person signed in (or out): start over
     if (!session) {
       setEvents([]); setRegs([]); setRosters({}); setUsers([]); setNotifs([]); setBlacklist([]); setActivityLog([]); setMyCertificates([]);
       return;
@@ -605,13 +625,19 @@ export function AppProvider({ children }) {
   // submitEvaluation) — matches the roster hint text: check people in first.
   const issueCertificate = useCallback(async (id) => {
     try {
-      await api.put(`/events/${id}`, { cycle_stage: 4, status: 'done' });
+      // Safe to repeat: the server notifies each attendee only once, so doing
+      // it again reaches only the people checked in since the last time.
+      const already = evById(id)?.stage === 4;
+      const res = await api.put(`/events/${id}`, { cycle_stage: 4, status: 'done' });
+      const notified = res.cert_notified || 0;
       await refreshEvents();
-      pushToast('เปิดให้รับเกียรติบัตรแล้ว', 'ผู้เข้าร่วมต้องทำแบบประเมินก่อนดาวน์โหลด');
+      if (!already) pushToast('เปิดให้รับเกียรติบัตรแล้ว', `แจ้งเตือนผู้เข้าร่วม ${notified} คน · ต้องทำแบบประเมินก่อนดาวน์โหลด`);
+      else if (notified > 0) pushToast('แจ้งเตือนผู้ที่เช็คอินเพิ่มแล้ว', `${notified} คน · ผู้ที่เคยได้รับแจ้งเตือนแล้วไม่ได้รับซ้ำ`);
+      else pushToast('ออกเกียรติบัตรไปแล้ว', 'ไม่มีผู้เช็คอินเพิ่ม จึงไม่ได้ส่งแจ้งเตือนซ้ำ');
     } catch (err) {
       pushToast('ดำเนินการไม่สำเร็จ', err.message, 'warn');
     }
-  }, [refreshEvents, pushToast]);
+  }, [evById, refreshEvents, pushToast]);
 
   async function getEvalQuestions() {
     if (questionsRef.current) return questionsRef.current;
@@ -808,7 +834,7 @@ export function AppProvider({ children }) {
     getDashboardBudget, saveBudgetActual,
     upsertUser, toggleUserActive, deleteUser,
     refreshNotifications, markAllRead, markNotifRead, clearAllNotif,
-    pushToast,
+    pushToast, dismissToast,
   }), [
     session, events, regs, rosters, users, notifs, toasts, activityLog, blacklist, myCertificates,
     evById, myStatus, login, logout, loginWithGoogle, updateProfile,
@@ -818,7 +844,7 @@ export function AppProvider({ children }) {
     getSar, saveSar, getEvaluationResults, getEventEvalQuestions, saveEventEvalQuestions, getDashboardYearly, getDashboardSummary,
     getDashboardBudget, saveBudgetActual,
     upsertUser, toggleUserActive, deleteUser,
-    refreshNotifications, markAllRead, markNotifRead, clearAllNotif, pushToast,
+    refreshNotifications, markAllRead, markNotifRead, clearAllNotif, pushToast, dismissToast,
   ]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

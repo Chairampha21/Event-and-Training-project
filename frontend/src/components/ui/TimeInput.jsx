@@ -3,7 +3,9 @@ import { toThaiTime } from '../../utils/timeFormat';
 import './TimeInput.css';
 
 const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
-const MINUTES = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, '0')); // every 5 minutes
+// Minutes offered at a given step: every 5 minutes for planning a schedule,
+// every minute (00–59) where the exact time matters, e.g. the time on a transfer slip.
+const minutesFor = (step) => Array.from({ length: Math.ceil(60 / step) }, (_, i) => String(i * step).padStart(2, '0'));
 
 /**
  * 24-hour time picker in the Thai style ("08.30", "16.00"): press it, pick the
@@ -12,9 +14,10 @@ const MINUTES = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, '
  * many machines, which a page cannot turn off.)
  *
  * `value` / `onChange` use "HH:MM" ('' when empty). `compact` is the smaller
- * size used inside dense rows.
+ * size used inside dense rows. `minuteStep` is the gap between the minutes
+ * offered (5 by default; 1 lists every minute).
  */
-export default function TimeInput({ value, onChange, placeholder = 'เลือกเวลา', compact, id, 'aria-label': ariaLabel }) {
+export default function TimeInput({ value, onChange, placeholder = 'เลือกเวลา', compact, id, minuteStep = 5, 'aria-label': ariaLabel }) {
   const [open, setOpen] = useState(false);
   const [pendingMinute, setPendingMinute] = useState(null); // minute picked before any hour
   const rootRef = useRef(null);
@@ -22,7 +25,8 @@ export default function TimeInput({ value, onChange, placeholder = 'เลือ
   const minuteRef = useRef(null);
   const [hour, minute] = value ? value.split(':') : ['', ''];
   const shownMinute = minute || pendingMinute || '';
-  // A stored time that isn't on a 5-minute step (typed in an older version) still shows as selected.
+  const MINUTES = minutesFor(minuteStep);
+  // A stored time that isn't on the step (typed in an older version) still shows as selected.
   const minutes = shownMinute && !MINUTES.includes(shownMinute) ? [...MINUTES, shownMinute].sort() : MINUTES;
 
   useEffect(() => {

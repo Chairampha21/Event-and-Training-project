@@ -64,6 +64,8 @@ func Run(db *sql.DB) {
 	}{
 		{"absences", markAbsences},
 		{"event tomorrow", eventTomorrow},
+		{"event today", eventToday},
+		{"organizer: event tomorrow", organizerEventTomorrow},
 		{"registration opened", registrationOpened},
 		{"registration closed", registrationClosed},
 		{"evaluation pending", evaluationPending},
@@ -173,6 +175,124 @@ func eventTomorrow(db *sql.DB) error {
 			parts = append(parts, "ผู้จัดแจ้ง: "+it.note)
 		}
 		notify.Send(db, it.userID, "ti-calendar-time", notify.ToneAccent, "พรุ่งนี้มีกิจกรรมที่คุณลงทะเบียนไว้", strings.Join(parts, " · "), fmt.Sprintf("/home?event=%d", it.eventID))
+	}
+	return nil
+}
+
+// isEventDay is true when the Thai "today" is one of the event's days: one of
+// the hand-picked days when it has them, otherwise any day from start to end.
+const isEventDay = `(CASE WHEN e.event_dates IS NOT NULL AND e.event_dates <> ''
+	THEN FIND_IN_SET(DATE_FORMAT(` + todayTH + `, '%Y-%m-%d'), e.event_dates) > 0
+	ELSE ` + todayTH + ` BETWEEN e.date_start AND ` + lastDay + ` END)`
+
+// eventToday reminds registrants on each day of the event itself — the
+// reminder that matters most for an online event, where the link to join and
+// to check in is what the person needs that day. Not sent to someone already
+// checked in for the day.
+func eventToday(db *sql.DB) error {
+	rows, err := db.Query(`
+		SELECT r.id, r.user_id, e.id, e.title, COALESCE(e.time_range, ''), r.attend_via, COALESCE(e.place, ''),
+		       DATEDIFF(` + todayTH + `, e.date_start) + 1, DATEDIFF(` + lastDay + `, e.date_start) + 1
+		FROM registrations r JOIN events e ON e.id = r.event_id
+		WHERE e.is_listed = 1 AND r.status = 'registered' AND ` + isEventDay + `
+		  AND NOT EXISTS (SELECT 1 FROM registration_checkins c WHERE c.registration_id = r.id AND c.event_date = ` + todayTH + `)`)
+	if err != nil {
+		return err
+	}
+	type item struct {
+		regID, userID, eventID       int64
+		title, timeRange, via, place string
+		dayNo, span                  int
+	}
+	var items []item
+	for rows.Next() {
+		var it item
+		if err := rows.Scan(&it.regID, &it.userID, &it.eventID, &it.title, &it.timeRange, &it.via, &it.place, &it.dayNo, &it.span); err != nil {
+			rows.Close()
+			return err
+		}
+		items = append(items, it)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, it := range items {
+		if it.dayNo < 1 || it.dayNo > 250 || !claim(db, "event_today", it.regID, it.userID, it.dayNo) {
+			continue
+		}
+		parts := []string{it.title}
+		if it.span > 1 {
+			parts = append(parts, fmt.Sprintf("วันที่ %d ของกิจกรรม", it.dayNo))
+		}
+		if it.timeRange != "" && it.timeRange != "-" {
+			parts = append(parts, it.timeRange)
+		}
+		if it.via == "online" {
+			parts = append(parts, "ออนไลน์ · ลิงก์เข้าร่วมอยู่ในรายละเอียดกิจกรรม · เช็คชื่อด้วยลิงก์ที่ผู้จัดแจ้ง")
+		} else if it.place != "" {
+			parts = append(parts, it.place)
+		}
+		notify.Send(db, it.userID, "ti-calendar-star", notify.ToneAccent, "วันนี้มีกิจกรรมที่คุณลงทะเบียนไว้", strings.Join(parts, " · "), fmt.Sprintf("/home?event=%d", it.eventID))
+	}
+	return nil
+}
+
+// organizerEventTomorrow gives the organizer the numbers to prepare with, the
+// day before their event starts.
+func organizerEventTomorrow(db *sql.DB) error {
+	rows, err := db.Query(`
+		SELECT e.id, e.organizer_id, e.title, COALESCE(e.time_range, ''), e.attend_mode,
+		       COUNT(r.id), COALESCE(SUM(r.attend_via = 'online'), 0), COALESCE(SUM(r.wants_laptop), 0),
+		       COALESCE(SUM(r.food_allergy IS NOT NULL), 0), COALESCE(SUM(r.payment_status IN ('pending', 'submitted', 'rejected')), 0)
+		FROM events e LEFT JOIN registrations r ON r.event_id = e.id AND r.status = 'registered'
+		WHERE e.is_listed = 1 AND e.status <> 'done' AND e.organizer_id IS NOT NULL
+		  AND e.date_start = ` + todayTH + ` + INTERVAL 1 DAY
+		GROUP BY e.id`)
+	if err != nil {
+		return err
+	}
+	type item struct {
+		id, organizer                     int64
+		title, timeRange, mode            string
+		regs, online, laptops, diet, owed int
+	}
+	var items []item
+	for rows.Next() {
+		var it item
+		if err := rows.Scan(&it.id, &it.organizer, &it.title, &it.timeRange, &it.mode, &it.regs, &it.online, &it.laptops, &it.diet, &it.owed); err != nil {
+			rows.Close()
+			return err
+		}
+		items = append(items, it)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, it := range items {
+		if !claim(db, "org_event_tomorrow", it.id, it.organizer, 1) {
+			continue
+		}
+		parts := []string{it.title}
+		if it.timeRange != "" && it.timeRange != "-" {
+			parts = append(parts, it.timeRange)
+		}
+		if it.mode == "hybrid" {
+			parts = append(parts, fmt.Sprintf("ผู้สมัคร %d คน (Onsite %d · Online %d)", it.regs, it.regs-it.online, it.online))
+		} else {
+			parts = append(parts, fmt.Sprintf("ผู้สมัคร %d คน", it.regs))
+		}
+		if it.laptops > 0 {
+			parts = append(parts, fmt.Sprintf("เตรียมโน้ตบุ๊กให้ยืม %d เครื่อง", it.laptops))
+		}
+		if it.diet > 0 {
+			parts = append(parts, fmt.Sprintf("แจ้งแพ้อาหาร %d คน", it.diet))
+		}
+		if it.owed > 0 {
+			parts = append(parts, fmt.Sprintf("ยังไม่ยืนยันการชำระเงิน %d คน", it.owed))
+		}
+		notify.Send(db, it.organizer, "ti-calendar-time", notify.ToneAccent, "พรุ่งนี้มีกิจกรรมที่คุณจัด", strings.Join(parts, " · "), fmt.Sprintf("/events?applicants=%d", it.id))
 	}
 	return nil
 }

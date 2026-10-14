@@ -1,5 +1,6 @@
 // Thin fetch wrapper for the CPSU ETMS Go backend. Attaches the JWT (if present)
 // and normalizes error responses into a single Error type the UI can catch.
+import { trackRequest } from '../utils/alert';
 
 // In a forwarded dev environment (Codespaces, most cloud devcontainers) the
 // browser's "localhost" is the user's own machine, not this container — so a
@@ -35,11 +36,18 @@ async function request(path, { method = 'GET', body, auth = true } = {}) {
   const headers = { 'Content-Type': 'application/json' };
   if (auth && authToken) headers.Authorization = `Bearer ${authToken}`;
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    method,
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
+  // Changes to the server show a "working…" pop-up while they run (utils/alert).
+  const done = trackRequest(method, path, body);
+  let res;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      method,
+      headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+  } finally {
+    done();
+  }
 
   if (res.status === 204) return null;
 

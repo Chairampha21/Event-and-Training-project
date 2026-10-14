@@ -2,11 +2,23 @@ import React from 'react';
 import { STATUS_META } from '../../../utils/constants';
 import CycleProgress from './CycleProgress';
 import { formatBaht } from '../../../utils/money';
+import { PAYMENT_STATUS } from './PaymentBox';
 import './EventCard.css';
 
 const STRIP_TONE = { '': 'strip-1', alt: 'strip-2', dark: 'strip-3' };
 
-function ApplyButton({ event, status, onApply }) {
+// Registered for a paid event and still owing the payment (or a new slip):
+// the button leads to the details, where the payment instructions and the
+// slip form are, instead of a dead "registered" label.
+const PAY_ACTION = {
+  pending: { icon: 'ti-cash', label: 'ชำระเงิน' },
+  rejected: { icon: 'ti-receipt-refund', label: 'ส่งสลิปใหม่' },
+  submitted: { icon: 'ti-receipt', label: 'รอตรวจสลิป' },
+};
+
+function ApplyButton({ event, status, payment, onApply }) {
+  const pay = status === 'registered' && PAY_ACTION[payment];
+  if (pay) return <button className={`btn-apply${payment === 'submitted' ? ' outline' : ''}`} onClick={() => onApply(event.id)}><i className={`ti ${pay.icon}`} /> {pay.label}</button>;
   if (status === 'registered') return <button className="btn-apply disabled" disabled><i className="ti ti-check" /> ลงทะเบียนแล้ว</button>;
   if (status === 'attended' || status === 'certified') return <button className="btn-apply disabled" disabled><i className="ti ti-circle-check" /> เข้าร่วมแล้ว</button>;
   if (event.status === 'open') return <button className="btn-apply" onClick={() => onApply(event.id)}><i className="ti ti-user-plus" /> สมัคร</button>;
@@ -19,7 +31,7 @@ function ApplyButton({ event, status, onApply }) {
 // The whole card opens the event's details: the title is the real button and
 // its ::after covers the card (see EventCard.css), so there is one control for
 // keyboards and screen readers, and the footer button stays on top of it.
-export default function EventCard({ event, isStudent, myStatus, onApply, onManage }) {
+export default function EventCard({ event, isStudent, myStatus, myPayment, onApply, onManage }) {
   const sm = STATUS_META[event.status];
   const pct = Math.round((event.reg / event.cap) * 100);
 
@@ -48,7 +60,12 @@ export default function EventCard({ event, isStudent, myStatus, onApply, onManag
           <div className="row"><i className="ti ti-clock" /> {event.time}</div>
           <div className="row"><i className="ti ti-map-pin" /> {event.place}</div>
           {event.regPeriod && <div className="row"><i className="ti ti-user-plus" /> รับสมัคร {event.regPeriod}</div>}
-          <div className="row"><i className="ti ti-cash" /> {event.fee > 0 ? `ค่าลงทะเบียน ${formatBaht(event.fee)}` : 'ไม่มีค่าใช้จ่าย'}</div>
+          <div className="row">
+            <i className="ti ti-cash" /> {event.fee > 0 ? `ค่าลงทะเบียน ${formatBaht(event.fee)}` : 'ไม่มีค่าใช้จ่าย'}
+            {isStudent && myStatus && PAYMENT_STATUS[myPayment] && (
+              <span className={`card-pay ${PAYMENT_STATUS[myPayment].cls}`}><i className={`ti ${PAYMENT_STATUS[myPayment].icon}`} /> {PAYMENT_STATUS[myPayment].label}</span>
+            )}
+          </div>
         </div>
         <div className="card-footer">
           <div className="seats">
@@ -56,7 +73,7 @@ export default function EventCard({ event, isStudent, myStatus, onApply, onManag
             <div className="seats-bar"><div className={`seats-fill ${pct >= 100 ? 'full' : ''}`} style={{ width: `${Math.min(pct, 100)}%` }} /></div>
           </div>
           {isStudent
-            ? <ApplyButton event={event} status={myStatus} onApply={onApply} />
+            ? <ApplyButton event={event} status={myStatus} payment={myPayment} onApply={onApply} />
             : <button className="btn-apply manage" onClick={() => onManage(event.id)}><i className="ti ti-settings" /> จัดการ</button>}
         </div>
       </div>

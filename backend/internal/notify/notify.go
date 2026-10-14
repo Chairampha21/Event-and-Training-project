@@ -40,6 +40,37 @@ func Send(db execer, userID int64, icon, tone, title, message string, link ...st
 	}
 }
 
+// querier is satisfied by both *sql.DB and *sql.Tx.
+type querier interface {
+	execer
+	QueryRow(query string, args ...any) *sql.Row
+}
+
+// SendGrouped is Send for things that pile up per event (slips to check,
+// cancellations, ...): while the user still has an unread notification with
+// the same title and link, that one is rewritten with the new message and
+// moved to the top instead of adding another, so a hundred registrants make
+// one line in the bell, not a hundred. Once it has been read, the next one
+// starts a new notification.
+func SendGrouped(db querier, userID int64, icon, tone, title, message, link string) {
+	var id int64
+	err := db.QueryRow(
+		`SELECT id FROM notifications WHERE user_id = ? AND title = ? AND link <=> ? AND is_read = 0 ORDER BY id DESC LIMIT 1`,
+		userID, title, link0([]string{link}),
+	).Scan(&id)
+	if err == sql.ErrNoRows {
+		Send(db, userID, icon, tone, title, message, link)
+		return
+	}
+	if err == nil {
+		_, err = db.Exec(`UPDATE notifications SET icon = ?, tone = ?, message = ?, created_at = NOW() WHERE id = ?`,
+			icon, tone, truncate(message), id)
+	}
+	if err != nil {
+		log.Printf("notification write failed: %v", err)
+	}
+}
+
 // SendToStudents notifies every active student account (e.g. a new event opened).
 func SendToStudents(db execer, icon, tone, title, message string, link ...string) {
 	_, err := db.Exec(

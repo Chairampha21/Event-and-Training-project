@@ -461,8 +461,8 @@ export default function ApplicantsModal({ eventId, open, onClose, mode = 'list' 
       <div className="modal-foot">
         <button className="btn btn-outline" onClick={onClose}>ปิด</button>
         {checkin && (
-          <button className="btn btn-primary" onClick={() => setConfirmCert(true)}>
-            <i className={`ti ${certIssued ? 'ti-circle-check' : 'ti-certificate'}`} /> {certIssued ? 'ออกเกียรติบัตรแล้ว · แจ้งเตือนผู้ที่เช็คอินเพิ่ม' : 'เปิดสิทธิ์เกียรติบัตรให้ผู้เข้าร่วม'}
+          <button className="btn btn-primary" onClick={() => setConfirmCert(true)} disabled={!certIssued && !ev?.ended}>
+            <i className={`ti ${certIssued ? 'ti-circle-check' : 'ti-certificate'}`} /> {certIssued ? 'ออกเกียรติบัตรแล้ว · แจ้งเตือนผู้ที่เช็คอินเพิ่ม' : ev?.ended ? 'เปิดสิทธิ์เกียรติบัตรให้ผู้เข้าร่วม' : 'ออกเกียรติบัตรได้เมื่อถึงวันสุดท้ายของกิจกรรม'}
           </button>
         )}
       </div>

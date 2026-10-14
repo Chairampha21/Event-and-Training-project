@@ -13,6 +13,16 @@
 .note-preset:hover{background:var(--c2-08)}
 .note-preset.on{background:var(--c2);border-color:var(--c2);color:var(--white)}
 .note-preset.on:hover{background:var(--c4);border-color:var(--c4)}
+.note-preset.add{border-style:dashed}
+.note-preset:disabled{opacity:.5;cursor:not-allowed}
+.note-preset.pick{color:var(--c4-70);border-color:var(--c4-20, var(--c2-20))}
+.note-preset.pick.picked{background:#fef3f2;border-color:#b42318;color:#b42318}
+.note-preset.danger{background:#b42318;border-color:#b42318;color:var(--white)}
+.note-preset.danger:hover:not(:disabled){background:#912018;border-color:#912018}
+.note-preset-del{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border:0;border-radius:999px;background:none;color:var(--c4-60);cursor:pointer}
+.note-preset-del:hover{background:var(--c2-08);color:#b42318}
+.note-preset-form{display:inline-flex;flex-wrap:wrap;align-items:center;gap:6px;max-width:100%}
+.note-preset-form input{min-width:0;width:220px;max-width:100%;padding:5px 10px;border-radius:999px;border:1px solid var(--c2-20);font-size:12px}
 .diet-preview{border:1px solid var(--c2-10);border-radius:10px;background:var(--c2-04);padding:12px 14px}
 .diet-preview-title{font-size:12.5px;font-weight:700;color:var(--c4);margin-bottom:6px}
 .diet-preview-q{margin:0 0 8px;font-size:13px;color:var(--c4-70);line-height:1.55}

@@ -11,7 +11,7 @@ import { formatBaht } from '../../../utils/money';
 // Organizer/admin action menu for one event: edit, roster & check-in, record
 // actual spend, issue certificates, open/close registration, delete.
 export default function ManageEventModal({ eventId, open, onClose, onOpenApplicants }) {
-  const { evById, toggleEventStatus, deleteEvent, issueCertificate, saveBudgetActual } = useEvents();
+  const { evById, rosters, toggleEventStatus, deleteEvent, issueCertificate, saveBudgetActual } = useEvents();
   const [budgetOpen, setBudgetOpen] = useState(false);
   const navigate = useNavigate();
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -32,10 +32,20 @@ export default function ManageEventModal({ eventId, open, onClose, onOpenApplica
   const certIssued = ev.stage === 4; // certificates already opened to attendees
 
   if (confirmDelete) {
+    const paidCount = (rosters[ev.id] || []).filter((p) => p.paymentStatus === 'paid').length;
     return (
       <Modal open={open} onClose={onClose} size="sm">
         <ModalHead eyebrow="ยืนยันการลบ" icon="ti-alert-triangle" title="ลบกิจกรรมนี้?" onClose={onClose} />
-        <div className="modal-body"><p style={{ fontSize: 14, color: 'var(--c4-70)', lineHeight: 1.6 }}>คุณกำลังจะลบ <strong>{ev.title}</strong> การกระทำนี้ไม่สามารถย้อนกลับได้</p></div>
+        <div className="modal-body">
+          <p style={{ fontSize: 14, color: 'var(--c4-70)', lineHeight: 1.6 }}>
+            คุณกำลังจะลบ <strong>{ev.title}</strong> กิจกรรมจะถูกนำออกจากระบบ{ev.reg > 0 ? ` และผู้สมัคร ${ev.reg} คนจะได้รับแจ้งว่ากิจกรรมถูกยกเลิก` : ''} · ผู้ดูแลระบบจะได้รับแจ้งเตือน · ย้อนกลับไม่ได้
+          </p>
+          {paidCount > 0 && (
+            <p role="alert" style={{ fontSize: 13.5, color: '#b42318', lineHeight: 1.6, marginTop: 10 }}>
+              <i className="ti ti-alert-triangle" /> มีผู้ชำระค่าลงทะเบียนแล้ว {paidCount} คน ต้องดำเนินการคืนเงินให้ผู้สมัครเหล่านี้เอง ระบบไม่ได้คืนเงินให้อัตโนมัติ
+            </p>
+          )}
+        </div>
         <div className="modal-foot">
           <button className="btn btn-outline" onClick={() => setConfirmDelete(false)}>ยกเลิก</button>
           <button className="btn btn-dark" onClick={() => { deleteEvent(ev.id); onClose(); }}><i className="ti ti-trash" /> ลบกิจกรรม</button>
@@ -90,11 +100,12 @@ export default function ManageEventModal({ eventId, open, onClose, onOpenApplica
             </div>
             <i className="ti ti-chevron-right me-go" />
           </button>
-          <button className="me-action" onClick={() => setConfirming('cert')}>
+          {/* Issuing closes the event for good, so it waits for the last day (the server checks too). */}
+          <button className="me-action" onClick={() => setConfirming('cert')} disabled={!certIssued && !ev.ended}>
             <div className="me-ic"><i className={`ti ${certIssued ? 'ti-circle-check' : 'ti-certificate'}`} /></div>
             <div className="me-tx">
               <strong>{certIssued ? 'ออกเกียรติบัตรแล้ว' : 'ออกเกียรติบัตร'}</strong>
-              <span>{certIssued ? 'เปิดสิทธิ์แล้ว · กดเพื่อแจ้งเตือนผู้ที่เช็คอินเพิ่มหลังจากนั้น' : 'เปิดสิทธิ์ให้ผู้เข้าร่วมที่เช็คอินแล้ว'}</span>
+              <span>{certIssued ? 'เปิดสิทธิ์แล้ว · กดเพื่อแจ้งเตือนผู้ที่เช็คอินเพิ่มหลังจากนั้น' : ev.ended ? 'เปิดสิทธิ์ให้ผู้เข้าร่วมที่เช็คอินแล้ว' : 'ออกได้เมื่อถึงวันสุดท้ายของกิจกรรม'}</span>
             </div>
             <i className="ti ti-chevron-right me-go" />
           </button>

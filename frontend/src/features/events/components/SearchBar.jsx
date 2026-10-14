@@ -26,7 +26,6 @@ export default function SearchBar({ pills, pillFilter, onPillChange, statusFilte
   return (
     <div className="filter-section">
       <div className="filter-bar">
-        <span className="filter-label"><i className="ti ti-filter" /> หมวดหมู่</span>
         <div className="filter-pills">
           {list.map((p) => (
             <button key={p.key} className={`pill${pillFilter === p.key ? ' active' : ''}`} onClick={() => onPillChange(p.key)}>

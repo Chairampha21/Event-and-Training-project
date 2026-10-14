@@ -9,7 +9,13 @@ import CancelRegistrationButton from '../../features/events/components/CancelReg
 import { buddhistYearOf } from '../../utils/dateFormat';
 
 // The order the status filter is offered in: what still needs doing first.
-const STATUS_ORDER = ['registered', 'attended', 'certified', 'absent'];
+const STATUS_ORDER = ['registered', 'attended', 'certified', 'absent', 'cancelled'];
+
+// A registration whose event the organizer deleted before it took place reads
+// as cancelled — not "registered", with nothing left to pay, join or withdraw from.
+const CANCELLED_META = { label: 'กิจกรรมถูกยกเลิก', cls: 'ps-fail', ico: 'ti-calendar-off' };
+const statusOf = (r) => (r.cancelled && r.status === 'registered' ? 'cancelled' : r.status);
+const metaOf = (st) => (st === 'cancelled' ? CANCELLED_META : REG_STATUS_META[st]);
 
 export default function MyRegistrationsPage() {
   const { regs, session } = useEvents();
@@ -37,7 +43,7 @@ export default function MyRegistrationsPage() {
     if (catFilter && r.cat !== catFilter) return false;
     return true;
   });
-  const shown = statusFilter === 'all' ? narrowed : narrowed.filter((r) => r.status === statusFilter);
+  const shown = statusFilter === 'all' ? narrowed : narrowed.filter((r) => statusOf(r) === statusFilter);
   const filtering = !!q || !!yearFilter || !!catFilter || statusFilter !== 'all';
 
   function clearFilters() {
@@ -60,7 +66,7 @@ export default function MyRegistrationsPage() {
             </div>
           </div>
           <div className="ph-stats">
-            <div className="ph-stat"><div className="pi"><i className="ti ti-calendar-check" /></div><div><div className="pv">{regs.length} <small>รายการ</small></div><div className="pl">ลงทะเบียนปีการศึกษานี้</div></div></div>
+            <div className="ph-stat"><div className="pi"><i className="ti ti-calendar-check" /></div><div><div className="pv">{regs.filter((r) => statusOf(r) !== 'cancelled').length} <small>รายการ</small></div><div className="pl">ลงทะเบียนปีการศึกษานี้</div></div></div>
             <div className="ph-stat"><div className="pi"><i className="ti ti-certificate" /></div><div><div className="pv">{certified} <small>ใบ</small></div><div className="pl">เกียรติบัตรที่ได้รับ</div></div></div>
             <div className="ph-stat"><div className="pi"><i className="ti ti-clock-hour-4" /></div><div><div className="pv">{attendedMin} <small>ครั้ง</small></div><div className="pl">เข้าร่วมกิจกรรมสะสม</div></div></div>
             <div className="ph-stat"><div className="pi"><i className="ti ti-clipboard-check" /></div><div><div className="pv">{regs.filter((r) => r.status === 'attended').length} <small>รายการ</small></div><div className="pl">รอทำแบบประเมิน</div></div></div>
@@ -92,9 +98,9 @@ export default function MyRegistrationsPage() {
             <button type="button" className={`filter-chip${statusFilter === 'all' ? ' active' : ''}`} aria-pressed={statusFilter === 'all'} onClick={() => setStatusFilter('all')}>
               <i className="ti ti-list" /> ทั้งหมด <b>{narrowed.length}</b>
             </button>
-            {STATUS_ORDER.filter((st) => REG_STATUS_META[st]).map((st) => (
+            {STATUS_ORDER.filter((st) => metaOf(st) && (st !== 'cancelled' || regs.some((r) => statusOf(r) === 'cancelled'))).map((st) => (
               <button type="button" key={st} className={`filter-chip${statusFilter === st ? ' active' : ''}`} aria-pressed={statusFilter === st} onClick={() => setStatusFilter(st)}>
-                <i className={`ti ${REG_STATUS_META[st].ico}`} /> {REG_STATUS_META[st].label} <b>{narrowed.filter((r) => r.status === st).length}</b>
+                <i className={`ti ${metaOf(st).ico}`} /> {metaOf(st).label} <b>{narrowed.filter((r) => statusOf(r) === st).length}</b>
               </button>
             ))}
           </div>
@@ -109,7 +115,29 @@ export default function MyRegistrationsPage() {
             </div>
           )}
           {shown.map((r) => {
-            const s = REG_STATUS_META[r.status];
+            const s = metaOf(statusOf(r));
+            if (statusOf(r) === 'cancelled') {
+              return (
+                <div className="hist-item" key={r.eid}>
+                  <div className={`hi-icon ${r.tone}`}><i className={`ti ${r.icon}`} /></div>
+                  <div className="hi-info">
+                    <div className="hi-cat">{r.cat}</div>
+                    <div className="hi-title">{r.title}</div>
+                    <div className="hi-meta">
+                      <span><i className="ti ti-calendar-event" /> {r.date}</span>
+                      <span><i className="ti ti-map-pin" /> {r.place}</span>
+                    </div>
+                    <div className="hi-note"><i className="ti ti-calendar-off" /> ผู้จัดยกเลิกกิจกรรมนี้แล้ว · ไม่ต้องเข้าร่วม{['pending', 'rejected'].includes(r.paymentStatus) ? ' และไม่ต้องชำระเงิน' : ''}</div>
+                    {(r.paymentStatus === 'paid' || r.paymentStatus === 'submitted') && (
+                      <div className="hi-note"><i className="ti ti-receipt-refund" /> คุณ{r.paymentStatus === 'paid' ? 'ชำระค่าลงทะเบียนแล้ว' : 'ส่งสลิปค่าลงทะเบียนไว้แล้ว'} · ติดต่อผู้จัดกิจกรรม{r.org ? ` (${r.org})` : ''} เพื่อขอคืนเงิน</div>
+                    )}
+                  </div>
+                  <div className="hi-actions">
+                    <span className={`pill-status ${s.cls}`}><i className={`ti ${s.ico}`} /> {s.label}</span>
+                  </div>
+                </div>
+              );
+            }
             return (
               <div className="hist-item" key={r.eid}>
                 <div className={`hi-icon ${r.tone}`}><i className={`ti ${r.icon}`} /></div>

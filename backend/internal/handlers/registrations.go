@@ -285,8 +285,21 @@ func (h *RegistrationsHandler) RegisterForEvent(c *gin.Context) {
 			needs = append(needs, "ข้อจำกัดด้านอาหาร: "+dietaryPref)
 		}
 		if len(needs) > 0 {
-			notify.Send(h.DB, organizerID.Int64, "ti-clipboard-list", notify.ToneDark, "ผู้สมัครมีเรื่องที่ต้องเตรียม",
-				claims.Name+" · "+strings.Join(needs, " · ")+" · "+title, "/events?applicants="+eventID)
+			// Grouped per event: the totals so far plus who asked last.
+			var laptops, food int
+			_ = h.DB.QueryRow(`SELECT COALESCE(SUM(wants_laptop = 1), 0),
+			        COALESCE(SUM(COALESCE(food_allergy, '') <> '' OR COALESCE(dietary_pref, '') <> ''), 0)
+			   FROM registrations WHERE event_id = ?`, eventID).Scan(&laptops, &food)
+			var totals []string
+			if laptops > 0 {
+				totals = append(totals, fmt.Sprintf("ขอยืมโน้ตบุ๊ก %d คน", laptops))
+			}
+			if food > 0 {
+				totals = append(totals, fmt.Sprintf("แจ้งเรื่องอาหาร %d คน", food))
+			}
+			notify.SendGrouped(h.DB, organizerID.Int64, "ti-clipboard-list", notify.ToneDark, "ผู้สมัครมีเรื่องที่ต้องเตรียม",
+				title+" · "+strings.Join(totals, " · ")+" · ล่าสุด: "+claims.Name+" ("+strings.Join(needs, ", ")+")",
+				"/events?applicants="+eventID)
 		}
 		if becameFull {
 			notify.Send(h.DB, organizerID.Int64, "ti-users", notify.ToneWarn, "กิจกรรมเต็มแล้ว", title+" · มีผู้ลงทะเบียนครบจำนวนที่รับ ระบบปิดรับสมัครอัตโนมัติ", "/events?applicants="+eventID)
@@ -613,7 +626,12 @@ func (h *RegistrationsHandler) CancelRegistration(c *gin.Context) {
 	if isOwner {
 		notify.Send(h.DB, reg.UserID, "ti-user-x", notify.ToneWarn, "ยกเลิกการลงทะเบียนแล้ว", title, "/home")
 		if organizerID.Valid && organizerID.Int64 != claims.UserID {
-			notify.Send(h.DB, organizerID.Int64, "ti-user-minus", notify.ToneWarn, "มีผู้ยกเลิกการลงทะเบียน", claims.Name+" ยกเลิกการลงทะเบียน "+title, fmt.Sprintf("/events?applicants=%d", reg.EventID))
+			// Grouped per event: where the registrations stand now, and who left last.
+			var left int
+			_ = h.DB.QueryRow(`SELECT COUNT(*) FROM registrations WHERE event_id = ?`, reg.EventID).Scan(&left)
+			notify.SendGrouped(h.DB, organizerID.Int64, "ti-user-minus", notify.ToneWarn, "มีผู้ยกเลิกการลงทะเบียน",
+				fmt.Sprintf("%s · ผู้ลงทะเบียนตอนนี้ %d คน · ล่าสุด: %s ยกเลิก", title, left, claims.Name),
+				fmt.Sprintf("/events?applicants=%d", reg.EventID))
 		}
 	} else {
 		notify.Send(h.DB, reg.UserID, "ti-user-x", notify.ToneWarn, "การลงทะเบียนของคุณถูกยกเลิก", title+" · ผู้จัดกิจกรรมยกเลิกการลงทะเบียนของคุณ", "/home")
@@ -625,7 +643,7 @@ func (h *RegistrationsHandler) CancelRegistration(c *gin.Context) {
 // not checked in on any day, and registration for the event is still open —
 // up to and including its closing day (or, with no closing day set, before
 // the event starts).
-const cancellableSQL = `(r.status = 'registered'
+const cancellableSQL = `(r.status = 'registered' AND e.is_listed = 1
 	AND NOT EXISTS (SELECT 1 FROM registration_checkins rc WHERE rc.registration_id = r.id)
 	AND COALESCE(` + todayTH + ` <= e.reg_end, ` + todayTH + ` < e.date_start))`
 
@@ -661,7 +679,8 @@ type myRegistrationRow struct {
 	Place             models.NullString `json:"place"`
 	OrganizerName     models.NullString `json:"organizer_name"`
 	RegEnd            models.NullString `json:"reg_end"`
-	CanCancel         bool              `json:"can_cancel"` // may still withdraw by themselves (see cancellableSQL)
+	CanCancel         bool              `json:"can_cancel"`      // may still withdraw by themselves (see cancellableSQL)
+	EventCancelled    bool              `json:"event_cancelled"` // the organizer deleted the event after this registration
 }
 
 func (h *RegistrationsHandler) MyRegistrations(c *gin.Context) {
@@ -669,7 +688,7 @@ func (h *RegistrationsHandler) MyRegistrations(c *gin.Context) {
 	rows, err := h.DB.Query(
 		`SELECT r.id, r.status, r.checked_in, r.checked_in_at, r.registered_at, r.wants_laptop, r.food_allergy, r.dietary_pref, r.payment_status, r.slip_transferred_at, r.slip_amount, r.payment_reject_reason, e.fee, e.payment_info, e.attendee_note, e.attend_mode, e.online_link,
 		        e.id, e.title, e.category, e.date_start, e.date_end, e.event_dates, e.time_range, e.status, e.place, e.organizer_name,
-		        DATE_FORMAT(e.reg_end, '%Y-%m-%d'), `+cancellableSQL+`
+		        DATE_FORMAT(e.reg_end, '%Y-%m-%d'), `+cancellableSQL+`, e.is_listed = 0
 		 FROM registrations r JOIN events e ON e.id = r.event_id
 		 WHERE r.user_id = ? ORDER BY r.registered_at DESC`, claims.UserID,
 	)
@@ -686,11 +705,14 @@ func (h *RegistrationsHandler) MyRegistrations(c *gin.Context) {
 		var eventDates sql.NullString
 		if err := rows.Scan(&r.ID, &r.Status, &checkedIn, &r.CheckedInAt, &r.RegisteredAt, &r.WantsLaptop, &r.FoodAllergy, &r.DietaryPref, &r.PaymentStatus, &r.SlipTransferredAt, &r.SlipAmount, &r.RejectReason, &r.Fee, &r.PaymentInfo, &r.AttendeeNote, &r.AttendMode, &r.OnlineLink,
 			&r.EventID, &r.Title, &r.Category, &r.DateStart, &r.DateEnd, &eventDates, &r.TimeRange, &r.EventStatus, &r.Place, &r.OrganizerName,
-			&r.RegEnd, &r.CanCancel); err != nil {
+			&r.RegEnd, &r.CanCancel, &r.EventCancelled); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 			return
 		}
 		r.CheckedIn = checkedIn == 1
+		if r.EventCancelled {
+			r.OnlineLink = models.NullString{} // nothing to join any more
+		}
 		r.EventDates = splitEventDates(eventDates.String)
 		r.CheckinDates = []string{}
 		r.DaysTotal = len(eventDays(r.DateStart, sql.NullString{String: r.DateEnd.String, Valid: r.DateEnd.Valid}, eventDates))
@@ -865,11 +887,12 @@ func (h *RegistrationsHandler) SubmitSlip(c *gin.Context) {
 		title       string
 		organizerID sql.NullInt64
 		slipEventID int64
+		listed      bool
 	)
 	err = h.DB.QueryRow(
-		`SELECT r.user_id, r.payment_status, e.title, e.organizer_id, e.id
+		`SELECT r.user_id, r.payment_status, e.title, e.organizer_id, e.id, e.is_listed
 		 FROM registrations r JOIN events e ON e.id = r.event_id WHERE r.id = ?`, c.Param("id"),
-	).Scan(&ownerID, &status, &title, &organizerID, &slipEventID)
+	).Scan(&ownerID, &status, &title, &organizerID, &slipEventID, &listed)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบรายการลงทะเบียน"})
 		return
@@ -881,6 +904,10 @@ func (h *RegistrationsHandler) SubmitSlip(c *gin.Context) {
 	claims, _ := middleware.CurrentUser(c)
 	if ownerID != claims.UserID {
 		c.JSON(http.StatusForbidden, gin.H{"error": "แจ้งชำระเงินได้เฉพาะรายการลงทะเบียนของตนเอง"})
+		return
+	}
+	if !listed {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "กิจกรรมนี้ถูกยกเลิกแล้ว ไม่ต้องชำระเงิน"})
 		return
 	}
 	switch status {
@@ -902,8 +929,12 @@ func (h *RegistrationsHandler) SubmitSlip(c *gin.Context) {
 	}
 	activitylog.Log(h.DB, &claims.UserID, "UPDATE", "แจ้งชำระเงิน: "+title)
 	if organizerID.Valid {
-		notify.Send(h.DB, organizerID.Int64, "ti-receipt", notify.ToneDark, "มีการแจ้งชำระเงินรอตรวจสอบ",
-			fmt.Sprintf("%s ส่งสลิป %s บาท · %s", claims.Name, formatAmount(body.Amount), title), fmt.Sprintf("/events?slips=%d", slipEventID))
+		// One line per event in the organizer's bell, however many slips come in.
+		var waiting int
+		_ = h.DB.QueryRow(`SELECT COUNT(*) FROM registrations WHERE event_id = ? AND payment_status = 'submitted'`, slipEventID).Scan(&waiting)
+		notify.SendGrouped(h.DB, organizerID.Int64, "ti-receipt", notify.ToneDark, "มีการแจ้งชำระเงินรอตรวจสอบ",
+			fmt.Sprintf("%s · รอตรวจ %d รายการ · ล่าสุด: %s ส่งสลิป %s บาท", title, waiting, claims.Name, formatAmount(body.Amount)),
+			fmt.Sprintf("/events?slips=%d", slipEventID))
 	}
 	c.JSON(http.StatusOK, gin.H{"payment_status": "submitted"})
 }

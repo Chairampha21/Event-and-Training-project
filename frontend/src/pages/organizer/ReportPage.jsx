@@ -94,7 +94,10 @@ export default function ReportPage() {
 
   const evalData = evalResults.map((r) => ({ label: r.label, avg: r.avg_score || 0 }));
   const evalResponded = evalResults.reduce((max, r) => Math.max(max, r.response_count || 0), 0);
-  const evalOverall = evalData.length ? evalData.reduce((a, r) => a + r.avg, 0) / evalData.length : 0;
+  // Only questions someone actually answered count — an unanswered one has no
+  // score, and counting it as 0 would drag the overall average down.
+  const answered = evalResults.filter((r) => r.response_count > 0);
+  const evalOverall = answered.length ? answered.reduce((a, r) => a + (r.avg_score || 0), 0) / answered.length : 0;
 
   const recent = useMemo(() => listed.slice(0, 6), [listed]);
   const maxV = Math.max(10, ...recent.map((e) => e.reg));

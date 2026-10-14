@@ -183,6 +183,7 @@ function adaptMyRegistration(r) {
     date: displayDate(r, r.date_end && r.date_end !== r.date_start),
     dateStart: (r.date_start || '').slice(0, 10),
     place: r.place || '-',
+    org: r.organizer_name || '',
     wantsLaptop: !!r.wants_laptop,
     via: r.attend_via || 'onsite', // attends 'onsite' or 'online'
     hybrid: r.attend_mode === 'hybrid',
@@ -205,6 +206,8 @@ function adaptMyRegistration(r) {
     // Still allowed to withdraw by themselves (the server's rule); null when the
     // server did not say (an older backend) — see CancelRegistrationButton.
     canCancel: r.can_cancel === undefined ? null : !!r.can_cancel,
+    // The organizer deleted the event after this registration (it is kept as history).
+    cancelled: !!r.event_cancelled,
   };
 }
 

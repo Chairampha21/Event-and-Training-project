@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useEvents } from '../../hooks/useEvents';
+import useLocalStorage from '../../hooks/useLocalStorage';
 import { STATUS_META, EVENT_CATEGORIES } from '../../utils/constants';
 import { formatThaiDate, formatThaiDateList, formatCertDate, formatCertDateList, formatDayTime, formatRegPeriod, summarizeDayTimes, todayIso } from '../../utils/dateFormat';
 import MultiDatePicker from '../../components/ui/MultiDatePicker';
@@ -23,6 +24,10 @@ const HANDS_ON_CATEGORIES = ['อบรมเชิงปฏิบัติก�
 const NOTE_MAX = 500;
 // One-tap starting points for the message to attendees.
 const NOTE_PRESETS = ['ให้นำโน้ตบุ๊กส่วนตัวมาด้วย', 'ติดตั้งโปรแกรมที่ใช้มาล่วงหน้า', 'นำบัตรนักศึกษามาแสดงหน้างาน'];
+// The quick-message chips start as NOTE_PRESETS; an organizer can add their own
+// and delete any of them. The list is kept in this browser, per account.
+const MAX_PRESETS = 15;
+const CUSTOM_PRESET_MAX = 100;
 const BUDGET_ERROR = 'กรอกเป็นตัวเลข ไม่ติดลบ และทศนิยมไม่เกิน 2 ตำแหน่ง';
 const BUDGET_ERROR_STYLE = { color: '#b91c1c', fontWeight: 600 };
 
@@ -143,8 +148,8 @@ export default function CreateEventPage() {
   const [attendMode, setAttendMode] = useState(editing?.attendMode || 'onsite');
   const [place, setPlace] = useState(editing?.placeRaw || '');
   const [cap, setCap] = useState(editing?.cap || '');
-  const [capOnsite, setCapOnsite] = useState(editing?.capOnsite || '');
-  const [capOnline, setCapOnline] = useState(editing?.capOnline || '');
+  const [capOnsite, setCapOnsite] = useState(editing?.capOnsite ?? '');
+  const [capOnline, setCapOnline] = useState(editing?.capOnline ?? '');
   const [onlineLink, setOnlineLink] = useState(editing?.onlineLink || '');
   // Registration fee: off = free. Payment happens outside the system, so the
   // organizer also says how to pay; they confirm each payment in the roster.
@@ -196,6 +201,36 @@ export default function CreateEventPage() {
 
   // Preset chips toggle: tap to add the sentence, tap again to take it back out
   // (anything else the organizer typed is left alone).
+  const presetKey = `cpsu-etms:note-presets:${session?.id || 'guest'}`;
+  const [presets, setPresets] = useLocalStorage(`${presetKey}:v2`, () => {
+    // Carry over chips added before the defaults became deletable (that key held only the added ones).
+    let added = [];
+    try { added = JSON.parse(window.localStorage.getItem(presetKey)) || []; } catch { /* none */ }
+    return [...NOTE_PRESETS, ...added.filter((t) => !NOTE_PRESETS.includes(t))];
+  });
+  const [presetDraft, setPresetDraft] = useState(null); // null = not adding; string = the text being typed
+  const presetDraftTrim = (presetDraft || '').trim();
+  const presetDraftDup = presets.includes(presetDraftTrim);
+
+  function addCustomPreset() {
+    if (!presetDraftTrim || presetDraftDup || presets.length >= MAX_PRESETS) return;
+    setPresets((list) => [...list, presetDraftTrim]);
+    setPresetDraft(null);
+  }
+
+  // Delete mode: the trash button turns the chips into a pick list; the picked
+  // ones go only when the deletion is confirmed.
+  const [presetDeleting, setPresetDeleting] = useState(null); // null = off; array = picked texts
+
+  function togglePresetPick(text) {
+    setPresetDeleting((picked) => (picked.includes(text) ? picked.filter((t) => t !== text) : [...picked, text]));
+  }
+
+  function deletePickedPresets() {
+    setPresets((list) => list.filter((t) => !presetDeleting.includes(t)));
+    setPresetDeleting(null);
+  }
+
   function toggleNotePreset(text) {
     setAttendeeNote((n) => (
       n.includes(text)
@@ -333,6 +368,21 @@ export default function CreateEventPage() {
     if (regStartIso && regEndIso && regEndIso < regStartIso) return at('regEnd', 'วันปิดรับสมัครต้องไม่ก่อนวันเปิดรับสมัคร');
     if (regEndIso && eventLastIso && regEndIso > eventLastIso) return at('regEnd', 'วันปิดรับสมัครต้องไม่เกินวันจัดกิจกรรม');
     if (attendMode !== 'online' && !place.trim()) return at('place', 'กรุณาระบุสถานที่จัดกิจกรรม');
+    // Seats: whole numbers, and never fewer than the people already registered.
+    const seats = (v) => (/^\d+$/.test(String(v).trim()) ? parseInt(v, 10) : NaN);
+    if (attendMode === 'hybrid') {
+      const on = seats(capOnsite);
+      const ol = seats(capOnline);
+      if (Number.isNaN(on)) return at('capOnsite', 'กรุณาระบุจำนวนที่รับ Onsite เป็นจำนวนเต็มตั้งแต่ 0 ขึ้นไป');
+      if (Number.isNaN(ol)) return at('capOnline', 'กรุณาระบุจำนวนที่รับ Online เป็นจำนวนเต็มตั้งแต่ 0 ขึ้นไป');
+      if (on + ol < 1) return at('capOnsite', 'จำนวนที่รับรวมต้องมีอย่างน้อย 1 คน');
+      if (editing && on < editing.regOnsite) return at('capOnsite', `มีผู้สมัครแบบ Onsite แล้ว ${editing.regOnsite} คน จึงลดต่ำกว่านี้ไม่ได้`);
+      if (editing && ol < editing.regOnline) return at('capOnline', `มีผู้สมัครแบบ Online แล้ว ${editing.regOnline} คน จึงลดต่ำกว่านี้ไม่ได้`);
+    } else {
+      const n = seats(cap);
+      if (!(n >= 1)) return at('cap', 'กรุณาระบุจำนวนที่รับเป็นจำนวนเต็มตั้งแต่ 1 ขึ้นไป');
+      if (editing && n < editing.reg) return at('cap', `มีผู้สมัครแล้ว ${editing.reg} คน จึงลดจำนวนที่รับต่ำกว่านี้ไม่ได้`);
+    }
     if (attendMode !== 'onsite' && !onlineLink.trim()) return at('link', 'กรุณาระบุลิงก์เข้าร่วมออนไลน์');
     if (attendMode !== 'onsite' && !/^https?:\/\/\S+$/i.test(onlineLink.trim())) return at('link', 'ลิงก์ต้องขึ้นต้นด้วย http:// หรือ https://');
     if (feeOn && !(feeValue > 0)) return at('fee', 'กรอกจำนวนเงินมากกว่า 0 หรือปิดสวิตช์หากไม่มีค่าใช้จ่าย');
@@ -374,7 +424,7 @@ export default function CreateEventPage() {
       // summary ("เวลาต่างกันในแต่ละวัน") must not carry over to a single day.
       time: time || (editing?.dayMode === dayMode ? editing.time : '') || '-',
       place: attendMode === 'online' ? 'ออนไลน์' : place, // "+ ออนไลน์" is added when shown, never stored
-      cap: previewCap || 60,
+      cap: previewCap,
       budgetPlanned,
       budgetOther,
       // Switched off = not used for this event, so nothing from it is saved.
@@ -647,13 +697,13 @@ export default function CreateEventPage() {
                 <div className={`field${errCls('place')}`} data-field="place"><label>สถานที่ <span className="req">*</span></label><div className="with-icon"><i className="ti ti-map-pin" /><input type="text" value={place} onChange={(e) => setPlace(e.target.value)} placeholder="ระบุอาคารและห้องที่จัดกิจกรรม" /></div>{errMsg('place')}</div>
               )}
               {attendMode !== 'hybrid' && (
-                <div className="field"><label>จำนวนที่รับ <span className="req">*</span></label><div className="with-icon"><i className="ti ti-users" /><input type="number" min="1" value={cap} onChange={(e) => setCap(e.target.value)} placeholder="ระบุจำนวนที่รับทั้งหมด" /></div></div>
+                <div className={`field${errCls('cap')}`} data-field="cap"><label>จำนวนที่รับ <span className="req">*</span></label><div className="with-icon"><i className="ti ti-users" /><input type="number" min={Math.max(1, editing?.reg || 0)} step="1" value={cap} onChange={(e) => setCap(e.target.value)} placeholder="ระบุจำนวนที่รับทั้งหมด" /></div>{errMsg('cap')}</div>
               )}
             </div>
             {attendMode === 'hybrid' && (
               <div className="form-row">
-                <div className="field"><label><i className="ti ti-building" style={{ fontSize: 14, verticalAlign: -2, color: 'var(--c2)' }} /> จำนวน Onsite <span className="req">*</span></label><div className="with-icon"><i className="ti ti-users" /><input type="number" min="0" value={capOnsite} onChange={(e) => setCapOnsite(e.target.value)} placeholder="ระบุจำนวนที่รับ Onsite" /></div></div>
-                <div className="field"><label><i className="ti ti-broadcast" style={{ fontSize: 14, verticalAlign: -2, color: 'var(--c1)' }} /> จำนวน Online <span className="req">*</span></label><div className="with-icon"><i className="ti ti-users" /><input type="number" min="0" value={capOnline} onChange={(e) => setCapOnline(e.target.value)} placeholder="ระบุจำนวนที่รับ Online" /></div></div>
+                <div className={`field${errCls('capOnsite')}`} data-field="capOnsite"><label><i className="ti ti-building" style={{ fontSize: 14, verticalAlign: -2, color: 'var(--c2)' }} /> จำนวน Onsite <span className="req">*</span></label><div className="with-icon"><i className="ti ti-users" /><input type="number" min={editing?.regOnsite || 0} step="1" value={capOnsite} onChange={(e) => setCapOnsite(e.target.value)} placeholder="ระบุจำนวนที่รับ Onsite" /></div>{errMsg('capOnsite')}</div>
+                <div className={`field${errCls('capOnline')}`} data-field="capOnline"><label><i className="ti ti-broadcast" style={{ fontSize: 14, verticalAlign: -2, color: 'var(--c1)' }} /> จำนวน Online <span className="req">*</span></label><div className="with-icon"><i className="ti ti-users" /><input type="number" min={editing?.regOnline || 0} step="1" value={capOnline} onChange={(e) => setCapOnline(e.target.value)} placeholder="ระบุจำนวนที่รับ Online" /></div>{errMsg('capOnline')}</div>
               </div>
             )}
             {attendMode !== 'onsite' && (
@@ -714,14 +764,60 @@ export default function CreateEventPage() {
                     <textarea id="ce-note" value={attendeeNote} maxLength={NOTE_MAX} onChange={(e) => setAttendeeNote(e.target.value)} style={{ minHeight: 64 }} />
                     <span className="helper budget-hint"><i className="ti ti-info-circle" /> เช่น ให้นำโน้ตบุ๊กส่วนตัวมาด้วย</span>
                     <div className="note-presets">
-                      {NOTE_PRESETS.map((t) => {
-                        const used = attendeeNote.includes(t);
-                        return (
-                          <button type="button" key={t} className={`note-preset${used ? ' on' : ''}`} onClick={() => toggleNotePreset(t)} aria-pressed={used} title={used ? 'กดเพื่อเอาออก' : 'กดเพื่อเพิ่ม'}>
-                            <i className={`ti ${used ? 'ti-x' : 'ti-plus'}`} /> {t}
-                          </button>
-                        );
-                      })}
+                      {presetDeleting ? (
+                        <>
+                          {presets.map((t) => {
+                            const picked = presetDeleting.includes(t);
+                            return (
+                              <button type="button" key={t} className={`note-preset pick${picked ? ' picked' : ''}`} onClick={() => togglePresetPick(t)} aria-pressed={picked} title={picked ? 'กดเพื่อไม่ลบ' : 'กดเพื่อเลือกลบ'}>
+                                <i className={`ti ${picked ? 'ti-square-check' : 'ti-square'}`} /> {t}
+                              </button>
+                            );
+                          })}
+                          <button type="button" className="note-preset danger" onClick={deletePickedPresets} disabled={presetDeleting.length === 0}><i className="ti ti-trash" /> ลบที่เลือก{presetDeleting.length > 0 ? ` (${presetDeleting.length})` : ''}</button>
+                          <button type="button" className="note-preset" onClick={() => setPresetDeleting(null)}>ยกเลิก</button>
+                        </>
+                      ) : (
+                        <>
+                          {presets.map((t) => {
+                            const used = attendeeNote.includes(t);
+                            return (
+                              <button type="button" key={t} className={`note-preset${used ? ' on' : ''}`} onClick={() => toggleNotePreset(t)} aria-pressed={used} title={used ? 'กดเพื่อเอาออกจากข้อความ' : 'กดเพื่อเพิ่มลงในข้อความ'}>
+                                <i className={`ti ${used ? 'ti-x' : 'ti-plus'}`} /> {t}
+                              </button>
+                            );
+                          })}
+                          {presetDraft === null ? (
+                            presets.length < MAX_PRESETS && (
+                              <button type="button" className="note-preset add" onClick={() => setPresetDraft('')} title="สร้างข้อความด่วนของคุณเอง ใช้ซ้ำได้ในกิจกรรมถัดไป">
+                                <i className="ti ti-plus" /> เพิ่มข้อความด่วน
+                              </button>
+                            )
+                          ) : (
+                            <span className="note-preset-form">
+                              <input
+                                type="text"
+                                autoFocus
+                                value={presetDraft}
+                                maxLength={CUSTOM_PRESET_MAX}
+                                onChange={(e) => setPresetDraft(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') { e.preventDefault(); addCustomPreset(); }
+                                  if (e.key === 'Escape') setPresetDraft(null);
+                                }}
+                                aria-label="ข้อความด่วนใหม่"
+                                aria-invalid={presetDraftDup}
+                              />
+                              <button type="button" className="note-preset on" onClick={addCustomPreset} disabled={!presetDraftTrim || presetDraftDup}><i className="ti ti-check" /> บันทึก</button>
+                              <button type="button" className="note-preset" onClick={() => setPresetDraft(null)}>ยกเลิก</button>
+                              {presetDraftDup && <span className="field-error"><i className="ti ti-alert-circle" /> มีข้อความนี้อยู่แล้ว</span>}
+                            </span>
+                          )}
+                          {presets.length > 0 && presetDraft === null && (
+                            <button type="button" className="note-preset-del" onClick={() => setPresetDeleting([])} title="เลือกข้อความด่วนที่จะลบ" aria-label="ลบข้อความด่วน"><i className="ti ti-trash" /></button>
+                          )}
+                        </>
+                      )}
                       <span className="helper" style={{ marginLeft: 'auto' }}>{attendeeNote.length}/{NOTE_MAX}</span>
                     </div>
                     <span className="helper budget-hint"><i className="ti ti-info-circle" /> แสดงในหน้ารายละเอียดกิจกรรม ตอนยืนยันการสมัคร และในการแจ้งเตือนหลังลงทะเบียน</span>

@@ -129,6 +129,14 @@ a{color:inherit;text-decoration:none}
 .btn-apply.disabled{background:var(--c2-08);color:var(--c4-60);cursor:not-allowed}
 .btn-apply.manage{background:var(--c2);color:var(--white)}
 .btn-apply.manage:hover{background:var(--c4)}
+.btn-apply.outline{background:var(--white);color:var(--c2);border:1px solid var(--c2-20)}
+.btn-apply.outline:hover{background:var(--c2-08)}
+/* The registrant's payment state, next to the fee on an event card. */
+.card-pay{display:inline-flex;align-items:center;gap:3px;margin-left:6px;font-size:12px;font-weight:600}
+.card-pay.paid{color:#15803d}
+.card-pay.pending{color:#8a6412}
+.card-pay.submitted{color:var(--c2)}
+.card-pay.rejected{color:#b4452f}
 .home-empty{grid-column:1/-1;text-align:center;padding:54px 20px;color:var(--c4-60);display:flex;flex-direction:column;align-items:center;gap:8px}
 .home-empty > i{font-size:46px;color:var(--c2-15);margin-bottom:4px}
 .home-empty .he-title{font-size:16px;font-weight:700;color:var(--c4)}

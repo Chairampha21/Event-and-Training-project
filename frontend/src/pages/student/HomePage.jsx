@@ -26,7 +26,7 @@ const CATEGORY_PILLS = [
 ];
 
 export default function HomePage() {
-  const { events, session, myStatus, getDashboardSummary } = useEvents();
+  const { events, regs, session, myStatus, getDashboardSummary } = useEvents();
   const isStudent = session?.role === 'student';
 
   const [summary, setSummary] = useState(null);
@@ -144,6 +144,7 @@ export default function HomePage() {
                 event={ev}
                 isStudent={isStudent}
                 myStatus={myStatus(ev.id)}
+                myPayment={regs.find((r) => r.eid === ev.id)?.paymentStatus}
                 onApply={setDetailId}
                 onManage={setManageId}
               />

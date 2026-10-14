@@ -229,6 +229,131 @@ func validateEventBody(b eventBody) string {
 	if b.AttendMode == "hybrid" && (b.CapacityOnsite == nil || b.CapacityOnline == nil) {
 		return "กิจกรรมแบบ hybrid ต้องระบุจำนวนรับ onsite และ online"
 	}
+	if b.Status != nil && !validStatuses[*b.Status] {
+		return "สถานะกิจกรรมไม่ถูกต้อง"
+	}
+	for _, n := range []*int{b.Capacity, b.CapacityOnsite, b.CapacityOnline} {
+		if n != nil && (*n < 0 || *n > maxCapacity) {
+			return "จำนวนที่รับไม่ถูกต้อง"
+		}
+	}
+	return ""
+}
+
+var validStatuses = map[string]bool{"open": true, "closed": true, "soon": true, "full": true, "done": true}
+
+// maxCapacity is a sanity cap on seats; it also keeps the value inside INT.
+const maxCapacity = 100000
+
+// wholeNumber reads a JSON number that must be a whole number in [min, max].
+func wholeNumber(v any, min, max int) (int, bool) {
+	n, ok := v.(float64)
+	if !ok || n != float64(int(n)) || int(n) < min || int(n) > max {
+		return 0, false
+	}
+	return int(n), true
+}
+
+// validateEventEdit checks the fields an edit may send that Create checks in
+// validateEventBody, against the event as it will be after the edit — so a
+// partial update can't leave it without a title, with a mode or status the
+// database rejects, or with fewer seats than people already registered.
+func validateEventEdit(raw map[string]any, existing models.Event) string {
+	for _, f := range []string{"title", "category"} {
+		v, present := raw[f]
+		if !present {
+			continue
+		}
+		s, _ := v.(string)
+		if strings.TrimSpace(s) == "" {
+			if f == "title" {
+				return "ระบุชื่อกิจกรรม"
+			}
+			return "ระบุประเภทกิจกรรม"
+		}
+		raw[f] = strings.TrimSpace(s)
+	}
+	if v, present := raw["day_mode"]; present {
+		if s, _ := v.(string); s != "single" && s != "multi" {
+			return "day_mode ไม่ถูกต้อง"
+		}
+	}
+	attendMode := existing.AttendMode
+	if v, present := raw["attend_mode"]; present {
+		s, _ := v.(string)
+		if s != "onsite" && s != "online" && s != "hybrid" {
+			return "attend_mode ไม่ถูกต้อง"
+		}
+		attendMode = s
+	}
+	if v, present := raw["status"]; present {
+		if s, _ := v.(string); !validStatuses[s] {
+			return "สถานะกิจกรรมไม่ถูกต้อง"
+		}
+	}
+	if v, present := raw["cycle_stage"]; present {
+		if _, ok := wholeNumber(v, 0, 4); !ok {
+			return "ขั้นตอนของกิจกรรมไม่ถูกต้อง"
+		}
+	}
+	if v, present := raw["date_start"]; present {
+		if s, _ := v.(string); !isoDateRe.MatchString(s) {
+			return "วันที่จัดกิจกรรมไม่ถูกต้อง"
+		}
+	}
+	if v, present := raw["date_end"]; present && v != nil {
+		s, _ := v.(string)
+		if s == "" {
+			raw["date_end"] = nil
+		} else if !isoDateRe.MatchString(s) {
+			return "วันที่จัดกิจกรรมไม่ถูกต้อง"
+		}
+	}
+
+	// Seats: whole numbers, never below the people already registered.
+	capacity := existing.Capacity
+	onsite, online := existing.CapacityOnsite, existing.CapacityOnline
+	for _, f := range []string{"capacity", "capacity_onsite", "capacity_online"} {
+		v, present := raw[f]
+		if !present {
+			continue
+		}
+		if v == nil && f != "capacity" {
+			if f == "capacity_onsite" {
+				onsite.Valid = false
+			} else {
+				online.Valid = false
+			}
+			continue
+		}
+		n, ok := wholeNumber(v, 0, maxCapacity)
+		if !ok {
+			return "จำนวนที่รับไม่ถูกต้อง"
+		}
+		switch f {
+		case "capacity":
+			capacity = n
+		case "capacity_onsite":
+			onsite.Valid, onsite.Int64 = true, int64(n)
+		default:
+			online.Valid, online.Int64 = true, int64(n)
+		}
+	}
+	regOnline := existing.RegisteredOnline
+	regOnsite := existing.RegisteredCount - regOnline
+	if attendMode == "hybrid" {
+		if !onsite.Valid || !online.Valid {
+			return "กิจกรรมแบบ hybrid ต้องระบุจำนวนรับ onsite และ online"
+		}
+		if int(onsite.Int64) < regOnsite {
+			return fmt.Sprintf("มีผู้สมัครแบบ Onsite แล้ว %d คน จึงลดจำนวนที่รับต่ำกว่านี้ไม่ได้", regOnsite)
+		}
+		if int(online.Int64) < regOnline {
+			return fmt.Sprintf("มีผู้สมัครแบบ Online แล้ว %d คน จึงลดจำนวนที่รับต่ำกว่านี้ไม่ได้", regOnline)
+		}
+	} else if _, present := raw["capacity"]; present && capacity < existing.RegisteredCount {
+		return fmt.Sprintf("มีผู้สมัครแล้ว %d คน จึงลดจำนวนที่รับต่ำกว่านี้ไม่ได้", existing.RegisteredCount)
+	}
 	return ""
 }
 
@@ -594,6 +719,11 @@ func (h *EventsHandler) Update(c *gin.Context) {
 		return
 	}
 
+	if msg := validateEventEdit(raw, existing); msg != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": msg})
+		return
+	}
+
 	updatable := map[string]bool{
 		"title": true, "description": true, "category": true, "subcategory": true, "poster_url": true,
 		"organizer_name": true, "day_mode": true, "date_start": true, "date_end": true, "time_range": true,
@@ -787,6 +917,26 @@ func (h *EventsHandler) Update(c *gin.Context) {
 			return
 		}
 	}
+	// Closing the event / issuing certificates ends registration for good, so
+	// it can't happen before the event's last day (as it will be after this edit).
+	closing := false
+	if s, _ := raw["status"].(string); s == "done" {
+		closing = true
+	}
+	if n, ok := raw["cycle_stage"].(float64); ok && n >= 4 {
+		closing = true
+	}
+	if closing && existing.Status != "done" {
+		lastDay := merged("date_start", existing.DateStart)
+		if end := merged("date_end", existing.DateEnd.String); end > lastDay {
+			lastDay = end
+		}
+		today := time.Now().UTC().Add(7 * time.Hour).Format("2006-01-02")
+		if today < lastDay {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "ออกเกียรติบัตรหรือปิดกิจกรรมได้เมื่อถึงวันสุดท้ายของกิจกรรม (" + thaiDate(lastDay) + ")"})
+			return
+		}
+	}
 
 	var sets []string
 	var args []any
@@ -922,13 +1072,19 @@ func (h *EventsHandler) Remove(c *gin.Context) {
 		notify.SendToRegistrants(h.DB, existing.ID, "ti-calendar-off", notify.ToneWarn,
 			"กิจกรรมถูกยกเลิก", existing.Title+" · ผู้จัดได้ยกเลิกกิจกรรมนี้แล้ว", "/my-registrations", "registered")
 		// Deleting an event is rare and affects other people — tell the admins
-		// right away instead of leaving it for them to find in the log.
-		notify.SendToAdmins(h.DB, claims.UserID, "ti-trash", notify.ToneWarn, "เหตุผิดปกติ: กิจกรรมถูกลบ",
-			fmt.Sprintf("%s · ลบโดย %s · มีผู้ลงทะเบียน %d คน · ข้อมูลยังอยู่ในฐานข้อมูล", existing.Title, claims.Name, existing.RegisteredCount), "/admin/activity-log")
+		// right away instead of leaving it for them to find in the log. People
+		// who already paid need a refund, so they are called out.
+		var paid int
+		_ = h.DB.QueryRow(`SELECT COUNT(*) FROM registrations WHERE event_id = ? AND payment_status = 'paid'`, existing.ID).Scan(&paid)
+		msg := fmt.Sprintf("%s · ลบโดย %s · มีผู้ลงทะเบียน %d คน", existing.Title, claims.Name, existing.RegisteredCount)
+		if paid > 0 {
+			msg += fmt.Sprintf(" · ชำระเงินแล้ว %d คน (ต้องดำเนินการคืนเงิน)", paid)
+		}
+		notify.SendToAdmins(h.DB, claims.UserID, "ti-trash", notify.ToneWarn, "เหตุผิดปกติ: กิจกรรมถูกลบ", msg, "/admin/activity-log")
 		// Deleted by someone other than its organizer (an admin): the organizer should know.
 		if existing.OrganizerID.Valid && existing.OrganizerID.Int64 != claims.UserID {
 			notify.Send(h.DB, existing.OrganizerID.Int64, "ti-trash", notify.ToneWarn, "ผู้ดูแลระบบลบกิจกรรมของคุณ",
-				existing.Title+" · ลบโดย "+claims.Name+" · ติดต่อผู้ดูแลระบบหากต้องการกู้คืน", "/events")
+				existing.Title+" · ลบโดย "+claims.Name+" · ผู้สมัครได้รับแจ้งว่ากิจกรรมถูกยกเลิกแล้ว", "/events")
 		}
 	}
 	c.Status(http.StatusNoContent)

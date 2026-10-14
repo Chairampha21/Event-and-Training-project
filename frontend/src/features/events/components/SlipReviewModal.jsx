@@ -12,7 +12,16 @@ import { PAYMENT_STATUS } from './PaymentBox';
  * reject with a reason (the payer is told and can send another), or undo.
  * `person` is a roster row; `onAction(action, reason)` performs the verdict.
  */
-export default function SlipReviewModal({ open, person, fee, onAction, onClose }) {
+// Reasons a slip is turned down most often — one press fills the box.
+const REJECT_REASONS = ['ยอดเงินไม่ตรงกับค่าลงทะเบียน', 'สลิปไม่ชัด อ่านข้อมูลไม่ได้', 'ชื่อบัญชีผู้รับไม่ตรง', 'ไม่พบรายการเงินเข้าในบัญชี', 'สลิปซ้ำกับที่ผู้อื่นส่งมา'];
+
+// One line of the check list: 'good' / 'bad' were checked by the system, 'manual' is for the organizer to look at.
+function CheckItem({ state, children }) {
+  const icon = state === 'good' ? 'ti-circle-check' : state === 'bad' ? 'ti-alert-triangle' : 'ti-eye';
+  return <li className={`slip-check-item ${state}`}><i className={`ti ${icon}`} /><span>{children}</span></li>;
+}
+
+export default function SlipReviewModal({ open, person, fee, remaining = 0, onAction, onClose }) {
   const { getSlip } = useEvents();
   const [slip, setSlip] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -34,6 +43,11 @@ export default function SlipReviewModal({ open, person, fee, onAction, onClose }
   const meta = PAYMENT_STATUS[person.paymentStatus];
   const amount = slip?.amount ?? person.slipAmount;
   const mismatch = amount != null && fee > 0 && Math.abs(amount - fee) > 0.004;
+  // The day of the transfer should fall after registration opened and not after the slip was sent.
+  const transferDay = (slip?.transferred_at || person.slipTransferredAt || '').slice(0, 10);
+  const sentDay = slip?.submitted_at ? new Date(slip.submitted_at).toLocaleDateString('sv-SE', { timeZone: 'Asia/Bangkok' }) : '';
+  const timeOk = !!transferDay && (!slip?.reg_start || transferDay >= slip.reg_start) && (!sentDay || transferDay <= sentDay);
+  const dupes = slip?.duplicates; // undefined: the server did not check (older backend)
 
   async function act(action) {
     if (action === 'reject' && !reason.trim()) return;
@@ -45,7 +59,7 @@ export default function SlipReviewModal({ open, person, fee, onAction, onClose }
 
   return (
     <Modal open={open} onClose={onClose} size="lg">
-      <ModalHead eyebrow="ตรวจสอบการชำระเงิน" icon="ti-receipt" title={person.name} onClose={onClose} />
+      <ModalHead eyebrow={remaining > 0 ? `ตรวจสอบการชำระเงิน · รอตรวจอีก ${remaining} ใบหลังจากนี้` : 'ตรวจสอบการชำระเงิน'} icon="ti-receipt" title={person.name} onClose={onClose} />
       <div className="modal-body">
         <div className="slip-review">
           <div className="slip-review-img">
@@ -79,13 +93,40 @@ export default function SlipReviewModal({ open, person, fee, onAction, onClose }
             {person.paymentStatus === 'rejected' && person.rejectReason && <div><dt>เหตุผลที่ไม่ผ่าน</dt><dd>{person.rejectReason}</dd></div>}
           </dl>
         </div>
-        <p className="slip-review-note"><i className="ti ti-info-circle" /> เทียบวันเวลาและยอดเงินที่แจ้งกับข้อมูลบนสลิป และตรวจกับรายการเงินเข้าในบัญชีก่อนยืนยัน · ระบบไม่ได้ตรวจสอบกับธนาคารให้</p>
+        {person.hasSlip && slip && (
+          <div className="slip-check">
+            <div className="slip-check-title"><i className="ti ti-list-check" /> ตรวจก่อนยืนยัน</div>
+            <ul>
+              <CheckItem state={amount == null ? 'manual' : mismatch ? 'bad' : 'good'}>
+                ยอดเงินตรงกับค่าลงทะเบียน {formatBaht(fee)}{amount != null && mismatch ? ` · แจ้งโอน ${formatBaht(amount)}` : ''}
+              </CheckItem>
+              <CheckItem state={!transferDay ? 'manual' : timeOk ? 'good' : 'bad'}>
+                {timeOk || !transferDay ? 'วันที่โอนอยู่ในช่วงหลังเปิดรับสมัครและก่อนส่งหลักฐาน' : 'วันที่โอนอยู่นอกช่วงรับสมัคร หรือหลังวันที่ส่งหลักฐาน'}
+              </CheckItem>
+              <CheckItem state={!dupes ? 'manual' : dupes.length ? 'bad' : 'good'}>
+                {!dupes ? 'ไม่ซ้ำกับสลิปของผู้สมัครคนอื่น' : dupes.length
+                  ? `สลิปนี้ซ้ำกับที่ ${dupes.map((d) => `${d.name} (${d.event})`).join(', ')} ส่งมา`
+                  : 'ไม่ซ้ำกับสลิปของผู้สมัครคนอื่น'}
+              </CheckItem>
+              <CheckItem state="manual">
+                ชื่อบัญชีผู้รับบนสลิปตรงกับที่ประกาศไว้{slip.payment_info ? <span className="slip-check-ref">ที่ประกาศ: {slip.payment_info}</span> : null}
+              </CheckItem>
+              <CheckItem state="manual">สแกน QR บนสลิปด้วยแอปธนาคาร หรือดูรายการเงินเข้าในบัญชี เพื่อยืนยันว่าเป็นสลิปจริง</CheckItem>
+            </ul>
+            <p className="slip-check-legend"><i className="ti ti-circle-check" /> ระบบตรวจให้แล้ว · <i className="ti ti-eye" /> ต้องดูเอง · ระบบไม่ได้เชื่อมกับธนาคาร</p>
+          </div>
+        )}
 
         {rejecting && (
           <div className="field" style={{ marginTop: 14 }}>
             <label htmlFor="slip-reject-reason">เหตุผลที่ไม่ผ่าน <span className="req">*</span></label>
             <input id="slip-reject-reason" type="text" autoFocus maxLength={200} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="เช่น ยอดเงินไม่ครบ / สลิปไม่ชัด / ไม่พบรายการเงินเข้า" />
-            <span className="helper">ผู้สมัครจะเห็นเหตุผลนี้ และส่งสลิปใหม่ได้</span>
+            <div className="reject-presets">
+              {REJECT_REASONS.map((r) => (
+                <button type="button" key={r} className={`filter-chip${reason === r ? ' active' : ''}`} onClick={() => setReason(r)}>{r}</button>
+              ))}
+            </div>
+            <span className="helper">เลือกเหตุผลที่พบบ่อย หรือพิมพ์เอง · ผู้สมัครจะเห็นเหตุผลนี้ และส่งสลิปใหม่ได้</span>
           </div>
         )}
       </div>

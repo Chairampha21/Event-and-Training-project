@@ -3,22 +3,21 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useEvents } from '../../hooks/useEvents';
 import { STATUS_META } from '../../utils/constants';
 import CycleProgress from '../../features/events/components/CycleProgress';
-import Modal, { ModalHead } from '../../components/ui/Modal';
-import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import ApplicantsModal from '../../features/events/components/ApplicantsModal';
 import BudgetActualModal from '../../features/budget/components/BudgetActualModal';
+import ManageEventModal from '../../features/events/components/ManageEventModal';
 import { downloadCsv } from '../../utils/csvExport';
 
 const PAGE_SIZE = 6;
 
 export default function EventsTablePage() {
-  const { events, toggleEventStatus, deleteEvent, saveBudgetActual } = useEvents();
+  const { events, saveBudgetActual } = useEvents();
   const navigate = useNavigate();
   const [applicantsId, setApplicantsId] = useState(null);
   const [applicantsMode, setApplicantsMode] = useState('list');
   const openApplicants = (id, mode) => { setApplicantsMode(mode); setApplicantsId(id); };
   const [budgetId, setBudgetId] = useState(null);
-  const [toggleId, setToggleId] = useState(null);
+  const [manageId, setManageId] = useState(null); // the full action menu, same as on the event card
 
   // A notification links here as /events?applicants=<id>, /events?slips=<id>
   // (the list window on its slip-checking tab) or /events?budget=<id>:
@@ -35,16 +34,12 @@ export default function EventsTablePage() {
     else setBudgetId(budget);
     setParams({}, { replace: true });
   }, [params, setParams]);
-  const [deleteId, setDeleteId] = useState(null);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [page, setPage] = useState(1);
 
   const list = useMemo(() => events.filter((e) => e.listed), [events]);
-  const deleteEv = list.find((e) => e.id === deleteId);
   const budgetEv = list.find((e) => e.id === budgetId);
-  const toggleEv = list.find((e) => e.id === toggleId);
-  const closing = toggleEv?.status === 'open';
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -154,7 +149,6 @@ export default function EventsTablePage() {
                 )}
                 {pageItems.map((ev) => {
                   const sm = STATUS_META[ev.status];
-                  const canReg = ev.status === 'open' || ev.status === 'closed';
                   return (
                     <tr key={ev.id}>
                       <td>
@@ -167,16 +161,14 @@ export default function EventsTablePage() {
                       <td><span className={`pill-status ${sm.pill}`}><i className="ti ti-circle-filled" /> {sm.label}</span></td>
                       <td><CycleProgress stage={ev.stage} compact /></td>
                       <td className="right">
+                        {/* The three things done most often stay one click away; everything
+                            else (registration, slips, budget, certificates, delete) is in the
+                            same "จัดการ" menu as on the event card. */}
                         <div className="row-actions">
-                          {canReg && (
-                            <button className="icon-btn" title={ev.status === 'open' ? 'ปิดรับสมัคร' : 'เปิดรับสมัคร'} onClick={() => setToggleId(ev.id)}>
-                              <i className={`ti ${ev.status === 'open' ? 'ti-lock' : 'ti-lock-open'}`} />
-                            </button>
-                          )}
-                          <button className="icon-btn" title="แก้ไข" onClick={() => navigate('/create-event', { state: { editId: ev.id } })}><i className="ti ti-edit" /></button>
-                          <button className="icon-btn" title="รายชื่อผู้สมัคร" onClick={() => openApplicants(ev.id, 'list')}><i className="ti ti-users" /></button>
-                          <button className="icon-btn" title="เช็คอินผู้เข้าร่วม" onClick={() => openApplicants(ev.id, 'checkin')}><i className="ti ti-checkbox" /></button>
-                          <button className="icon-btn danger" title="ลบ" onClick={() => setDeleteId(ev.id)}><i className="ti ti-trash" /></button>
+                          <button className="icon-btn" title="แก้ไขข้อมูลกิจกรรม" aria-label={`แก้ไข ${ev.title}`} onClick={() => navigate('/create-event', { state: { editId: ev.id } })}><i className="ti ti-edit" /></button>
+                          <button className="icon-btn" title="รายชื่อผู้สมัคร" aria-label={`รายชื่อผู้สมัคร ${ev.title}`} onClick={() => openApplicants(ev.id, 'list')}><i className="ti ti-users" /></button>
+                          <button className="icon-btn" title="เช็คอินผู้เข้าร่วม" aria-label={`เช็คอินผู้เข้าร่วม ${ev.title}`} onClick={() => openApplicants(ev.id, 'checkin')}><i className="ti ti-checkbox" /></button>
+                          <button className="btn btn-outline row-manage" onClick={() => setManageId(ev.id)} aria-label={`จัดการ ${ev.title}`}><i className="ti ti-settings" /> จัดการ</button>
                         </div>
                       </td>
                     </tr>
@@ -201,30 +193,11 @@ export default function EventsTablePage() {
       </div>
 
       <ApplicantsModal eventId={applicantsId} mode={applicantsMode} open={!!applicantsId} onClose={() => setApplicantsId(null)} />
-      <ConfirmDialog
-        open={!!toggleEv}
-        eyebrow="ยืนยันการเปลี่ยนสถานะ"
-        icon={closing ? 'ti-lock' : 'ti-lock-open'}
-        title={closing ? 'ปิดรับสมัครกิจกรรมนี้?' : 'เปิดรับสมัครกิจกรรมนี้?'}
-        confirmLabel={closing ? 'ยืนยันปิดรับสมัคร' : 'ยืนยันเปิดรับสมัคร'}
-        confirmIcon={closing ? 'ti-lock' : 'ti-lock-open'}
-        onConfirm={() => { toggleEventStatus(toggleEv.id); setToggleId(null); }}
-        onCancel={() => setToggleId(null)}
-      >
-        <p style={{ fontSize: 13.5, color: 'var(--c4-70)', lineHeight: 1.7 }}><strong style={{ color: 'var(--c4)' }}>{toggleEv?.title}</strong><br />{closing ? 'นักศึกษาจะสมัครกิจกรรมนี้ไม่ได้จนกว่าจะเปิดรับสมัครอีกครั้ง' : 'นักศึกษาจะสมัครกิจกรรมนี้ได้ทันที'}</p>
-      </ConfirmDialog>
       {budgetEv && (
         <BudgetActualModal open event={{ ...budgetEv, budgetPlanned: budgetEv.budgetTotal }} onSave={(amount) => saveBudgetActual(budgetEv.id, amount)} onClose={() => setBudgetId(null)} />
       )}
 
-      <Modal open={!!deleteId} onClose={() => setDeleteId(null)} size="sm">
-        <ModalHead eyebrow="ยืนยันการลบ" icon="ti-alert-triangle" title="ลบกิจกรรมนี้?" onClose={() => setDeleteId(null)} />
-        <div className="modal-body"><p style={{ fontSize: 14, color: 'var(--c4-70)', lineHeight: 1.6 }}>คุณกำลังจะลบ <strong>{deleteEv?.title}</strong> การกระทำนี้ไม่สามารถย้อนกลับได้</p></div>
-        <div className="modal-foot">
-          <button className="btn btn-outline" onClick={() => setDeleteId(null)}>ยกเลิก</button>
-          <button className="btn btn-dark" onClick={() => { deleteEvent(deleteId); setDeleteId(null); }}><i className="ti ti-trash" /> ลบกิจกรรม</button>
-        </div>
-      </Modal>
+      <ManageEventModal eventId={manageId} open={!!manageId} onClose={() => setManageId(null)} onOpenApplicants={(id, mode) => openApplicants(id, mode || 'list')} />
     </div>
   );
 }

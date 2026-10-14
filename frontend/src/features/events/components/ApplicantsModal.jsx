@@ -135,6 +135,7 @@ export default function ApplicantsModal({ eventId, open, onClose, mode = 'list' 
         open
         person={reviewing}
         fee={ev?.fee || 0}
+        remaining={queue ? roster.filter((p) => p.paymentStatus === 'submitted' && p.regId !== reviewing.regId).length : 0}
         onAction={async (action, reason) => {
           const ok = await setPaymentStatus(eventId, reviewing.regId, action, reason);
           verdictGiven.current = !!ok;

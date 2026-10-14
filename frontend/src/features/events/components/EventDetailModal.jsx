@@ -6,7 +6,9 @@ import ImageViewer from '../../../components/ui/ImageViewer';
 import CycleProgress from './CycleProgress';
 import OnlineJoinLink from './OnlineJoinLink';
 import PaymentBox from './PaymentBox';
+import CancelRegistrationButton, { cancelInfo } from './CancelRegistrationButton';
 import { formatBaht } from '../../../utils/money';
+import { formatThaiDate } from '../../../utils/dateFormat';
 import DietaryQuestions, { EMPTY_DIETARY, dietaryComplete, dietaryPayload } from './DietaryQuestions';
 
 // Event details for whoever opened it; students register from here (with the
@@ -159,6 +161,12 @@ export default function EventDetailModal({ eventId, open, onClose, preview }) {
             <div className="pill-status ps-open" style={{ fontSize: 13 }}><i className="ti ti-circle-check-filled" /> คุณลงทะเบียนกิจกรรมนี้แล้ว{myReg?.hybrid ? (myReg.via === 'online' ? ' · เข้าร่วมออนไลน์' : ' · เข้าร่วมที่สถานที่จัด') : ''}{myReg?.wantsLaptop ? ' · จองโน้ตบุ๊กให้ยืมไว้ 1 เครื่อง' : ''}</div>
             {myReg && (myReg.foodAllergy || myReg.dietaryPref) && (
               <div className="my-diet"><i className="ti ti-tools-kitchen-2" /> {[myReg.foodAllergy && `แพ้: ${myReg.foodAllergy}`, myReg.dietaryPref].filter(Boolean).join(' · ')}</div>
+            )}
+            {cancelInfo(myReg, ev).ok && (
+              <div className="md-cancel">
+                <span><i className="ti ti-info-circle" /> ยกเลิกได้ภายในช่วงเปิดรับสมัคร{cancelInfo(myReg, ev).regEnd ? ` (ถึง ${formatThaiDate(cancelInfo(myReg, ev).regEnd)})` : ''}</span>
+                <CancelRegistrationButton reg={myReg} className="btn btn-outline md-cancel-btn" />
+              </div>
             )}
           </div>
         )}

@@ -568,12 +568,13 @@ func (h *RegistrationsHandler) CancelRegistration(c *gin.Context) {
 		reg         models.Registration
 		organizerID sql.NullInt64
 		title       string
+		cancellable bool
 	)
 	err := h.DB.QueryRow(
 		`SELECT r.id, r.event_id, r.user_id, r.status, r.checked_in, r.checked_in_at, r.registered_at, r.updated_at,
-		        e.organizer_id, e.title
+		        e.organizer_id, e.title, `+cancellableSQL+`
 		 FROM registrations r JOIN events e ON e.id = r.event_id WHERE r.id = ?`, c.Param("id"),
-	).Scan(&reg.ID, &reg.EventID, &reg.UserID, &reg.Status, &reg.CheckedIn, &reg.CheckedInAt, &reg.RegisteredAt, &reg.UpdatedAt, &organizerID, &title)
+	).Scan(&reg.ID, &reg.EventID, &reg.UserID, &reg.Status, &reg.CheckedIn, &reg.CheckedInAt, &reg.RegisteredAt, &reg.UpdatedAt, &organizerID, &title, &cancellable)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบรายการลงทะเบียน"})
 		return
@@ -588,6 +589,12 @@ func (h *RegistrationsHandler) CancelRegistration(c *gin.Context) {
 	isManager := claims.Role == "admin" || (organizerID.Valid && organizerID.Int64 == claims.UserID)
 	if !isOwner && !isManager {
 		c.JSON(http.StatusForbidden, gin.H{"error": "ไม่มีสิทธิ์ยกเลิกรายการนี้"})
+		return
+	}
+	// A registrant withdraws by themselves only while registration is open;
+	// after that, the organizer (or an admin) can still remove them.
+	if !isManager && !cancellable {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ยกเลิกการลงทะเบียนได้เฉพาะในช่วงเปิดรับสมัคร และก่อนเช็คอินเท่านั้น · ติดต่อผู้จัดกิจกรรมหากจำเป็น"})
 		return
 	}
 
@@ -613,6 +620,14 @@ func (h *RegistrationsHandler) CancelRegistration(c *gin.Context) {
 	}
 	c.Status(http.StatusNoContent)
 }
+
+// cancellableSQL is true when the registrant may still withdraw by themselves:
+// not checked in on any day, and registration for the event is still open —
+// up to and including its closing day (or, with no closing day set, before
+// the event starts).
+const cancellableSQL = `(r.status = 'registered'
+	AND NOT EXISTS (SELECT 1 FROM registration_checkins rc WHERE rc.registration_id = r.id)
+	AND COALESCE(` + todayTH + ` <= e.reg_end, ` + todayTH + ` < e.date_start))`
 
 type myRegistrationRow struct {
 	ID                int64             `json:"id"`
@@ -645,13 +660,16 @@ type myRegistrationRow struct {
 	EventStatus       string            `json:"event_status"`
 	Place             models.NullString `json:"place"`
 	OrganizerName     models.NullString `json:"organizer_name"`
+	RegEnd            models.NullString `json:"reg_end"`
+	CanCancel         bool              `json:"can_cancel"` // may still withdraw by themselves (see cancellableSQL)
 }
 
 func (h *RegistrationsHandler) MyRegistrations(c *gin.Context) {
 	claims, _ := middleware.CurrentUser(c)
 	rows, err := h.DB.Query(
 		`SELECT r.id, r.status, r.checked_in, r.checked_in_at, r.registered_at, r.wants_laptop, r.food_allergy, r.dietary_pref, r.payment_status, r.slip_transferred_at, r.slip_amount, r.payment_reject_reason, e.fee, e.payment_info, e.attendee_note, e.attend_mode, e.online_link,
-		        e.id, e.title, e.category, e.date_start, e.date_end, e.event_dates, e.time_range, e.status, e.place, e.organizer_name
+		        e.id, e.title, e.category, e.date_start, e.date_end, e.event_dates, e.time_range, e.status, e.place, e.organizer_name,
+		        DATE_FORMAT(e.reg_end, '%Y-%m-%d'), `+cancellableSQL+`
 		 FROM registrations r JOIN events e ON e.id = r.event_id
 		 WHERE r.user_id = ? ORDER BY r.registered_at DESC`, claims.UserID,
 	)
@@ -667,7 +685,8 @@ func (h *RegistrationsHandler) MyRegistrations(c *gin.Context) {
 		var checkedIn int
 		var eventDates sql.NullString
 		if err := rows.Scan(&r.ID, &r.Status, &checkedIn, &r.CheckedInAt, &r.RegisteredAt, &r.WantsLaptop, &r.FoodAllergy, &r.DietaryPref, &r.PaymentStatus, &r.SlipTransferredAt, &r.SlipAmount, &r.RejectReason, &r.Fee, &r.PaymentInfo, &r.AttendeeNote, &r.AttendMode, &r.OnlineLink,
-			&r.EventID, &r.Title, &r.Category, &r.DateStart, &r.DateEnd, &eventDates, &r.TimeRange, &r.EventStatus, &r.Place, &r.OrganizerName); err != nil {
+			&r.EventID, &r.Title, &r.Category, &r.DateStart, &r.DateEnd, &eventDates, &r.TimeRange, &r.EventStatus, &r.Place, &r.OrganizerName,
+			&r.RegEnd, &r.CanCancel); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 			return
 		}
@@ -901,11 +920,14 @@ func (h *RegistrationsHandler) GetSlip(c *gin.Context) {
 		amount        sql.NullFloat64
 		submittedAt   sql.NullInt64
 		fee           sql.NullFloat64
+		paymentInfo   sql.NullString
+		regStart      sql.NullString
 	)
 	err := h.DB.QueryRow(
-		`SELECT r.user_id, e.organizer_id, r.slip_url, r.slip_transferred_at, r.slip_amount, UNIX_TIMESTAMP(r.slip_submitted_at), e.fee
+		`SELECT r.user_id, e.organizer_id, r.slip_url, r.slip_transferred_at, r.slip_amount, UNIX_TIMESTAMP(r.slip_submitted_at), e.fee,
+		        e.payment_info, DATE_FORMAT(e.reg_start, '%Y-%m-%d')
 		 FROM registrations r JOIN events e ON e.id = r.event_id WHERE r.id = ?`, c.Param("id"),
-	).Scan(&ownerID, &organizerID, &slip, &transferredAt, &amount, &submittedAt, &fee)
+	).Scan(&ownerID, &organizerID, &slip, &transferredAt, &amount, &submittedAt, &fee, &paymentInfo, &regStart)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบรายการลงทะเบียน"})
 		return
@@ -925,9 +947,32 @@ func (h *RegistrationsHandler) GetSlip(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "ยังไม่มีการส่งสลิป"})
 		return
 	}
-	resp := gin.H{"slip": slip.String, "transferred_at": transferredAt.String, "amount": amount.Float64, "fee": fee.Float64}
+	resp := gin.H{"slip": slip.String, "transferred_at": transferredAt.String, "amount": amount.Float64, "fee": fee.Float64,
+		"payment_info": paymentInfo.String, "reg_start": regStart.String}
 	if submittedAt.Valid {
 		resp["submitted_at"] = time.Unix(submittedAt.Int64, 0).UTC().Format(time.RFC3339)
+	}
+	// For whoever checks it: the very same slip image sent for another
+	// registration — a reused slip is the commonest way to pay once and register twice.
+	if claims.Role != "student" {
+		type dup struct {
+			Name  string `json:"name"`
+			Event string `json:"event"`
+		}
+		dups := []dup{}
+		rows, err := h.DB.Query(
+			`SELECT u.name, e.title FROM registrations r JOIN users u ON u.id = r.user_id JOIN events e ON e.id = r.event_id
+			 WHERE r.slip_url = ? AND r.id <> ? LIMIT 5`, slip.String, c.Param("id"))
+		if err == nil {
+			for rows.Next() {
+				var d dup
+				if rows.Scan(&d.Name, &d.Event) == nil {
+					dups = append(dups, d)
+				}
+			}
+			rows.Close()
+			resp["duplicates"] = dups
+		}
 	}
 	c.JSON(http.StatusOK, resp)
 }

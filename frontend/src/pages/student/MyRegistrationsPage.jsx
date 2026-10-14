@@ -5,6 +5,7 @@ import { REG_STATUS_META, CYCLE } from '../../utils/constants';
 import { CertPreviewModal } from '../../features/certificates/components/CertificateCard';
 import OnlineJoinLink from '../../features/events/components/OnlineJoinLink';
 import PaymentBox from '../../features/events/components/PaymentBox';
+import CancelRegistrationButton from '../../features/events/components/CancelRegistrationButton';
 import { buddhistYearOf } from '../../utils/dateFormat';
 
 // The order the status filter is offered in: what still needs doing first.
@@ -156,6 +157,7 @@ export default function MyRegistrationsPage() {
                   {r.status === 'certified' && (
                     <button className="btn-download" onClick={() => setCertId(r.eid)}><i className="ti ti-download" /> เกียรติบัตร</button>
                   )}
+                  <CancelRegistrationButton reg={r} className="btn-download cancel" />
                   {r.status === 'attended' && (
                     <button className="btn-download eval" onClick={() => navigate(`/evaluate/${r.eid}`)}><i className="ti ti-clipboard-check" /> ทำแบบประเมิน</button>
                   )}

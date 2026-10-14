@@ -201,6 +201,10 @@ function adaptMyRegistration(r) {
     icon: deriveIcon(r.category),
     tone: deriveTone(r.event_id),
     stage: deriveStage(r.event_status, r.date_start, r.date_end),
+    regEnd: r.reg_end || '',
+    // Still allowed to withdraw by themselves (the server's rule); null when the
+    // server did not say (an older backend) — see CancelRegistrationButton.
+    canCancel: r.can_cancel === undefined ? null : !!r.can_cancel,
   };
 }
 
@@ -608,6 +612,19 @@ export function AppProvider({ children }) {
   }, []);
 
   // The payer sends proof of payment for their own registration. Resolves true on success.
+  // The student withdraws from an event. Resolves true on success.
+  const cancelRegistration = useCallback(async (regId, title) => {
+    try {
+      await api.del(`/registrations/${regId}`);
+      await Promise.all([refreshMyRegistrations(), refreshEvents(), refreshNotifications()]);
+      pushToast('ยกเลิกการสมัครแล้ว', title ? title.slice(0, 40) : '');
+      return true;
+    } catch (err) {
+      pushToast('ยกเลิกการสมัครไม่สำเร็จ', err.message, 'warn');
+      return false;
+    }
+  }, [refreshMyRegistrations, refreshEvents, refreshNotifications, pushToast]);
+
   const submitSlip = useCallback(async (regId, { slip, transferredAt, amount }) => {
     try {
       await api.post(`/registrations/${regId}/slip`, { slip, transferred_at: transferredAt, amount });
@@ -828,7 +845,7 @@ export function AppProvider({ children }) {
     evById, myStatus,
     login, logout, loginWithGoogle, updateProfile,
     registerForEvent, toggleEventStatus, createEvent, updateEvent, deleteEvent,
-    toggleCheckin, setPaymentStatus, getSlip, submitSlip, selfCheckin, issueCertificate, submitEvaluation, downloadCert,
+    toggleCheckin, setPaymentStatus, getSlip, submitSlip, cancelRegistration, selfCheckin, issueCertificate, submitEvaluation, downloadCert,
     addToBlacklist, restoreFromBlacklist,
     getSar, saveSar, getEvaluationResults, getEventEvalQuestions, saveEventEvalQuestions, getDashboardYearly, getDashboardSummary,
     getDashboardBudget, saveBudgetActual,
@@ -839,7 +856,7 @@ export function AppProvider({ children }) {
     session, events, regs, rosters, users, notifs, toasts, activityLog, blacklist, myCertificates,
     evById, myStatus, login, logout, loginWithGoogle, updateProfile,
     registerForEvent, toggleEventStatus, createEvent, updateEvent, deleteEvent,
-    toggleCheckin, setPaymentStatus, getSlip, submitSlip, selfCheckin, issueCertificate, submitEvaluation, downloadCert,
+    toggleCheckin, setPaymentStatus, getSlip, submitSlip, cancelRegistration, selfCheckin, issueCertificate, submitEvaluation, downloadCert,
     addToBlacklist, restoreFromBlacklist,
     getSar, saveSar, getEvaluationResults, getEventEvalQuestions, saveEventEvalQuestions, getDashboardYearly, getDashboardSummary,
     getDashboardBudget, saveBudgetActual,

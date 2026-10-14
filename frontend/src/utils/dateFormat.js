@@ -111,8 +111,11 @@ export function formatThaiDateTime(value) {
   if (/[zZ]|[+-]\d{2}:\d{2}$/.test(value)) {
     const d = new Date(value);
     if (Number.isNaN(d.getTime())) return '';
-    iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    hh = d.getHours(); mm = d.getMinutes();
+    // Thai time whatever the viewer's computer is set to (e.g. a cloud machine on UTC).
+    const parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+      .formatToParts(d).map((x) => [x.type, x.value]));
+    iso = `${parts.year}-${parts.month}-${parts.day}`;
+    hh = Number(parts.hour); mm = Number(parts.minute);
   } else {
     const m = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}):(\d{2})/.exec(value);
     if (!m) return formatThaiDate(value.slice(0, 10));

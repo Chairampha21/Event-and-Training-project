@@ -255,7 +255,7 @@ td .ev-thumb.dark{background:var(--c4-12);color:var(--c4)}
 .icon-btn:hover{background:var(--c2-08);color:var(--c2)}
 .icon-btn.danger:hover{background:var(--c4-12);color:var(--c4)}
 .icon-btn i{font-size:17px}
-.row-actions{display:inline-flex;gap:2px}
+.row-actions{display:inline-flex;align-items:center;gap:2px}
 .table-foot{padding:14px 22px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--c2-08);font-size:13px;color:var(--c4-60);flex-wrap:wrap;gap:10px}
 .pagination{display:flex;align-items:center;gap:4px}
 .pagination button{width:28px;height:28px;border-radius:7px;display:inline-grid;place-items:center;color:var(--c4-60);font-size:12.5px;font-weight:600;transition:.12s}
@@ -853,3 +853,26 @@ select.role-select:focus{border-color:var(--c2)}
 .field.has-error>label{color:#b42318}
 .field-error{display:flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;color:#b42318}
 .field-error i{font-size:15px}
+
+/* Slip review: what to check before confirming */
+.slip-check{margin-top:14px;border:1px solid var(--c2-10);border-radius:12px;background:var(--c2-04);padding:12px 14px}
+.slip-check-title{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--c4);margin-bottom:6px}
+.slip-check ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.slip-check-item{display:flex;align-items:flex-start;gap:8px;font-size:13px;color:var(--c4);line-height:1.5}
+.slip-check-item i{font-size:16px;margin-top:2px;flex-shrink:0}
+.slip-check-item.good i{color:#15803d}
+.slip-check-item.bad{color:#b42318;font-weight:600}
+.slip-check-item.manual i{color:var(--c2)}
+.slip-check-ref{display:block;font-size:12px;color:var(--c4-60);font-weight:400;white-space:pre-line}
+.slip-check-legend{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin:8px 0 0;font-size:11.5px;color:var(--c4-60)}
+.reject-presets{display:flex;flex-wrap:wrap;gap:6px}
+
+.row-actions .row-manage{padding:6px 12px;font-size:13px;margin-left:4px;white-space:nowrap}
+
+/* Withdrawing from an event (student) */
+.md-cancel{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:10px;font-size:12.5px;color:var(--c4-60)}
+.md-cancel span{display:inline-flex;align-items:center;gap:5px}
+.md-cancel-btn{padding:6px 12px;font-size:13px;color:#b42318;border-color:rgba(180,35,24,.3)}
+.md-cancel-btn:hover{background:rgba(180,35,24,.06)}
+.btn-download.cancel{background:var(--white);color:#b42318;border:1px solid rgba(180,35,24,.3)}
+.btn-download.cancel:hover{background:rgba(180,35,24,.06)}

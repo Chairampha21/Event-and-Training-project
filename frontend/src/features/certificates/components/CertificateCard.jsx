@@ -16,7 +16,7 @@ import { certTemplateFor } from '../utils/defaultTemplate';
 // certificate itself carries (from /api/me/certificates). The template and
 // signer are only on the event, so an archived event's certificate is drawn on
 // the department's main template.
-export function buildCertificate({ evById, session, myCertificates }, eventId) {
+export function buildCertificate({ evById, session, myCertificates, certDefaults, certTemplateCache }, eventId) {
   if (!eventId) return null;
   const ev = evById(eventId);
   const cert = myCertificates.find((c) => c.event_id === Number(eventId));
@@ -30,14 +30,14 @@ export function buildCertificate({ evById, session, myCertificates }, eventId) {
     title,
     // Multi-day events held on hand-picked days list each day; otherwise start–end.
     certDate: ev?.dates?.length > 1 ? formatCertDateList(ev.dates) : formatCertDate(dateStart, dateEnd),
-    signerName: ev?.signer?.name || 'ผศ.ดร. ปิยะ จันทรัศมี',
-    signerTitle: ev?.signer?.title || '',
+    signerName: ev?.signer?.name || certDefaults?.signer.name || '',
+    signerTitle: ev?.signer?.title || (ev ? '' : certDefaults?.signer.title || ''),
     category: ev?.cat || cert?.category || '',
-    signature: ev?.signer?.signature || null,
+    signature: ev ? ev.signer?.signature || null : certDefaults?.signer.signature || null,
     certId: cert?.cert_code || `SU-CS-${String(eventId).padStart(3, '0')}`,
     studentName: session?.name || '',
     // The event's own template, or the department's main one when it has none.
-    template: certTemplateFor(ev),
+    template: certTemplateFor(ev, certDefaults, cert, certTemplateCache),
   };
   // The shape certificateGen prints from.
   data.printable = {

@@ -227,6 +227,20 @@ function adaptMyRegistration(r) {
   };
 }
 
+// The usual signer when the admin has not set one (what the form used to start with).
+const FALLBACK_SIGNER = { name: 'ผศ.ดร.สิรักข์ แก้วจำนงค์', title: 'หัวหน้าภาควิชาคอมพิวเตอร์' };
+
+function adaptCertDefaults(d) {
+  return {
+    templateId: d?.template_id ?? null, // version of the main template; null = built-in
+    template: d?.template_url ? { name: 'template', type: guessMime(d.template_url), dataUrl: d.template_url } : null, // null = built-in
+    layout: normalizeLayout(d?.layout),
+    signer: { name: d?.signer_name || FALLBACK_SIGNER.name, title: d?.signer_title || FALLBACK_SIGNER.title, signature: d?.signature_url || null },
+    updatedAt: d?.updated_at || '',
+    updatedBy: d?.updated_by || '',
+  };
+}
+
 function timeAgo(iso) {
   const then = new Date((iso || '').replace(' ', 'T'));
   const diffMin = Math.round((Date.now() - then.getTime()) / 60000);
@@ -374,9 +388,26 @@ export function AppProvider({ children }) {
   }, []);
 
   const [myCertificates, setMyCertificates] = useState([]);
+  // Department-wide certificate defaults set by an admin (main template and its
+  // text layout, the usual signer); null until loaded. See GET /settings/certificate.
+  const [certDefaults, setCertDefaults] = useState(null);
+  // Earlier versions of the main template that issued certificates were drawn
+  // on, by version id: {url, layout}. Filled as the student's certificates load.
+  const [certTemplateCache, setCertTemplateCache] = useState({});
   const loadMyCertificates = useCallback(async () => {
     const list = await refreshMyCertificates();
     setMyCertificates(list);
+    // Each certificate keeps the main template it was issued on: fetch those versions once.
+    const ids = [...new Set(list.map((c) => c.default_template_id).filter((id) => id != null))];
+    const fetched = await Promise.all(ids.map(async (id) => {
+      try {
+        const t = await api.get(`/settings/certificate/templates/${id}`);
+        return [id, { url: t.template_url, layout: normalizeLayout(t.layout) }];
+      } catch {
+        return null;
+      }
+    }));
+    setCertTemplateCache((c) => ({ ...c, ...Object.fromEntries(fetched.filter(Boolean)) }));
   }, [refreshMyCertificates]);
 
   const refreshUsers = useCallback(async () => {
@@ -411,10 +442,11 @@ export function AppProvider({ children }) {
   useEffect(() => {
     seenNotifs.current = null; // a different person signed in (or out): start over
     if (!session) {
-      setEvents([]); setRegs([]); setRosters({}); setUsers([]); setNotifs([]); setBlacklist([]); setActivityLog([]); setMyCertificates([]);
+      setEvents([]); setRegs([]); setRosters({}); setUsers([]); setNotifs([]); setBlacklist([]); setActivityLog([]); setMyCertificates([]); setCertDefaults(null);
       return;
     }
     refreshEvents({ role: session.role });
+    loadCertDefaults();
     refreshNotifications();
     if (isParticipant(session.role)) {
       refreshMyRegistrations();
@@ -830,6 +862,34 @@ export function AppProvider({ children }) {
     }
   }, [refreshEvents, pushToast]);
 
+  const loadCertDefaults = useCallback(async () => {
+    try {
+      const { defaults: d } = await api.get('/settings/certificate');
+      setCertDefaults(adaptCertDefaults(d));
+    } catch {
+      setCertDefaults(adaptCertDefaults(null)); // fall back to the built-in template
+    }
+  }, []);
+
+  // Admin only. `payload` = { template: {dataUrl}|null, layout, signerName, signerTitle, signature }.
+  const saveCertDefaults = useCallback(async (payload) => {
+    try {
+      const { defaults: d } = await api.put('/settings/certificate', {
+        template_url: payload.template?.dataUrl || '',
+        layout: serializeLayout(payload.layout) || '',
+        signer_name: payload.signerName,
+        signer_title: payload.signerTitle,
+        signature_url: payload.signature || '',
+      });
+      setCertDefaults(adaptCertDefaults(d));
+      pushToast('บันทึกค่าเริ่มต้นเกียรติบัตรแล้ว', 'ใช้กับกิจกรรมที่ไม่ได้อัปโหลด template ของตัวเอง');
+      return true;
+    } catch (err) {
+      pushToast('บันทึกไม่สำเร็จ', err.message, 'warn');
+      return false;
+    }
+  }, [pushToast]);
+
   const getDashboardSummary = useCallback(async () => {
     try {
       const { summary } = await api.get('/dashboard/summary');
@@ -885,7 +945,7 @@ export function AppProvider({ children }) {
     registerForEvent, toggleEventStatus, createEvent, updateEvent, deleteEvent,
     toggleCheckin, setPaymentStatus, getSlip, submitSlip, setRefundAccount, cancelRegistration, selfCheckin, issueCertificate, submitEvaluation, downloadCert,
     addToBlacklist, restoreFromBlacklist,
-    getSar, saveSar, getEvaluationResults, getEventEvalQuestions, saveEventEvalQuestions, getDashboardYearly, getDashboardSummary,
+    getSar, saveSar, getEvaluationResults, getEventEvalQuestions, saveEventEvalQuestions, getDashboardYearly, getDashboardSummary, certDefaults, saveCertDefaults, certTemplateCache,
     getDashboardBudget, saveBudgetActual,
     upsertUser, toggleUserActive, deleteUser,
     refreshNotifications, markAllRead, markNotifRead, clearAllNotif,
@@ -896,7 +956,7 @@ export function AppProvider({ children }) {
     registerForEvent, toggleEventStatus, createEvent, updateEvent, deleteEvent,
     toggleCheckin, setPaymentStatus, getSlip, submitSlip, setRefundAccount, cancelRegistration, selfCheckin, issueCertificate, submitEvaluation, downloadCert,
     addToBlacklist, restoreFromBlacklist,
-    getSar, saveSar, getEvaluationResults, getEventEvalQuestions, saveEventEvalQuestions, getDashboardYearly, getDashboardSummary,
+    getSar, saveSar, getEvaluationResults, getEventEvalQuestions, saveEventEvalQuestions, getDashboardYearly, getDashboardSummary, certDefaults, saveCertDefaults, certTemplateCache,
     getDashboardBudget, saveBudgetActual,
     upsertUser, toggleUserActive, deleteUser,
     refreshNotifications, markAllRead, markNotifRead, clearAllNotif, pushToast, dismissToast,

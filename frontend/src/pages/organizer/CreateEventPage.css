@@ -77,3 +77,9 @@
 .ce-live-card{border-color:var(--c2-15)}
 .ce-side-divider{height:1px;background:var(--c2-08);margin:18px 0}
 .dm-opt.disabled{opacity:.45;cursor:not-allowed}
+
+/* signature image on/off (off: the signer signs the printed certificates by hand) */
+.sig-toggle-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}
+.sig-toggle-row label{margin-bottom:0}
+.sig-off-note{display:flex;align-items:center;gap:8px;padding:12px 14px;border:1.5px dashed var(--c2-10);border-radius:10px;background:var(--c2-04);font-size:13px;color:var(--c4-70)}
+.sig-off-note i{font-size:18px;color:var(--c2)}

@@ -248,6 +248,9 @@ CREATE TABLE certificates (
   id               BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   registration_id  BIGINT UNSIGNED NOT NULL,
   cert_code        VARCHAR(50)     NOT NULL,   -- รหัสตรวจสอบ เช่น SU-CS-2568-018
+  -- the department's main template (cert_templates) when it was issued, for an
+  -- event without a template of its own; NULL = the template built into the site
+  default_template_id INT UNSIGNED  NULL,
   issued_at        TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
   pdf_url          VARCHAR(500)    NULL,
   CONSTRAINT fk_cert_registration FOREIGN KEY (registration_id) REFERENCES registrations(id) ON DELETE CASCADE,
@@ -395,6 +398,38 @@ CREATE TABLE notifications (
 ) ENGINE=InnoDB;
 
 CREATE INDEX idx_notif_user_unread ON notifications (user_id, is_read);
+
+
+-- ---------------------------------------------------------------------
+-- cert_templates — every version of the department's main certificate
+-- template an admin has saved (image + how text is fitted to it). A version is
+-- never changed once saved, so a certificate keeps the look it was issued with.
+-- cert_defaults — the current defaults (one row, id = 1): which version is the
+-- main template now (NULL = the template built into the site) and the signer
+-- new events start with.
+-- Existing databases: run these CREATE TABLEs as they are, and
+--   ALTER TABLE certificates ADD COLUMN default_template_id INT UNSIGNED NULL AFTER cert_code;
+-- ---------------------------------------------------------------------
+CREATE TABLE cert_templates (
+  id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  template_url    MEDIUMTEXT    NOT NULL,                  -- data: URL (JPG/PNG)
+  layout          VARCHAR(500)  NULL,                      -- same JSON as events.cert_layout
+  created_by      INT UNSIGNED  NULL,
+  created_at      TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_certtpl_user FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE cert_defaults (
+  id              TINYINT UNSIGNED PRIMARY KEY DEFAULT 1,
+  template_id     INT UNSIGNED  NULL,                      -- NULL = the template built into the site
+  signer_name     VARCHAR(190)  NULL,
+  signer_title    VARCHAR(190)  NULL,
+  signature_url   MEDIUMTEXT    NULL,
+  updated_by      INT UNSIGNED  NULL,
+  updated_at      TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_certdef_template FOREIGN KEY (template_id) REFERENCES cert_templates(id),
+  CONSTRAINT fk_certdef_user FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
 
 -- ---------------------------------------------------------------------
 -- reminder_log — which time-based reminders have already gone out, so the

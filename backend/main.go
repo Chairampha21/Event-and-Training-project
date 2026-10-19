@@ -38,6 +38,7 @@ func main() {
 	sar := handlers.NewSARHandler(conn)
 	notifs := handlers.NewNotificationsHandler(conn)
 	dashboard := handlers.NewDashboardHandler(conn)
+	certDefaults := handlers.NewCertDefaultsHandler(conn)
 	users := handlers.NewUsersHandler(conn)
 	activityLogs := handlers.NewActivityLogsHandler(conn)
 
@@ -128,6 +129,11 @@ func main() {
 	}
 
 	r.GET("/api/activity-logs", requireAuth, middleware.RequireRole("admin"), activityLogs.List)
+	// Department-wide certificate defaults: everyone signed in reads them (certificates are drawn
+	// on the default template); only an admin changes them.
+	r.GET("/api/settings/certificate", requireAuth, certDefaults.Get)
+	r.GET("/api/settings/certificate/templates/:id", requireAuth, certDefaults.Template)
+	r.PUT("/api/settings/certificate", requireAuth, middleware.RequireRole("admin"), certDefaults.Update)
 
 	r.NoRoute(func(c *gin.Context) { c.JSON(404, gin.H{"error": "ไม่พบ endpoint นี้"}) })
 

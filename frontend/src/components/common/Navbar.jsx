@@ -13,6 +13,7 @@ const NAV_TABS = {
     { to: '/create-event', icon: 'ti-square-rounded-plus', label: 'สร้างกิจกรรม' },
     { to: '/admin/users', icon: 'ti-users-group', label: 'ผู้ใช้งาน' },
     { to: '/admin/blacklist', icon: 'ti-user-off', label: 'Blacklist' },
+    { to: '/admin/certificate', icon: 'ti-certificate', label: 'ตั้งค่าเกียรติบัตร' },
     { to: '/admin/activity-log', icon: 'ti-history', label: 'Log ระบบ' },
     { to: '/report', icon: 'ti-report-analytics', label: 'รายงาน' },
   ],

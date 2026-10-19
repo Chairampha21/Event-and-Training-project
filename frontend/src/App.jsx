@@ -23,6 +23,7 @@ import BlacklistPage from './pages/admin/BlacklistPage';
 import SarReportPage from './pages/admin/SarReportPage';
 import EvaluationsPage from './pages/admin/EvaluationsPage';
 import UsersPage from './pages/admin/UsersPage';
+import CertificateSettingsPage from './pages/admin/CertificateSettingsPage';
 
 import './App.css';
 
@@ -61,6 +62,7 @@ function Routed() {
         <Route element={<ProtectedRoute roles={['admin']} />}>
           <Route path="/admin/users" element={<UsersPage />} />
           <Route path="/admin/activity-log" element={<ActivityLogPage />} />
+          <Route path="/admin/certificate" element={<CertificateSettingsPage />} />
         </Route>
         <Route element={<ProtectedRoute roles={[...PARTICIPANT_ROLES, 'organizer', 'admin']} />}>
           <Route path="/profile" element={<ProfilePage />} />

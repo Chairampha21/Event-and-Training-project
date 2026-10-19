@@ -335,7 +335,7 @@ func (h *EvaluationsHandler) Submit(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 			return
 		}
-		if _, err := tx.Exec(`INSERT INTO certificates (registration_id, cert_code) VALUES (?, ?)`, regID, certCode); err != nil {
+		if _, err := tx.Exec(`INSERT INTO certificates (registration_id, cert_code, default_template_id) VALUES (?, ?, `+currentTemplateSQL+`)`, regID, certCode); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 			return
 		}

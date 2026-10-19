@@ -98,7 +98,7 @@ function initialDayTimes(editing, dates, parsedTime) {
 }
 
 export default function CreateEventPage() {
-  const { session, evById, createEvent, updateEvent, pushToast, getEventEvalQuestions, saveEventEvalQuestions } = useEvents();
+  const { session, evById, createEvent, updateEvent, pushToast, getEventEvalQuestions, saveEventEvalQuestions, certDefaults } = useEvents();
   const navigate = useNavigate();
   const location = useLocation();
   const editId = location.state?.editId;
@@ -267,9 +267,22 @@ export default function CreateEventPage() {
   // Whether the event gives certificates at all. Off: nothing to set up here,
   // and the sign-in sheet has one signature box per day instead of morning/afternoon.
   const [issueCert, setIssueCert] = useState(editing ? editing.issueCert !== false : true);
-  const [signerName, setSignerName] = useState(editing?.signer?.name || 'ผศ.ดร.สิรักข์ แก้วจำนงค์');
-  const [signerTitle, setSignerTitle] = useState(editing?.signer?.title || 'หัวหน้าภาควิชาคอมพิวเตอร์');
-  const [signature, setSignature] = useState(editing?.signer?.signature || null); // scanned signature (data: URL), optional
+  // A new event starts with the signer an admin set as the department default
+  // (ตั้งค่าเกียรติบัตร); the organizer may change it for this event.
+  const [signerName, setSignerName] = useState(editing?.signer?.name || certDefaults?.signer.name || '');
+  const [signerTitle, setSignerTitle] = useState(editing?.signer?.title || certDefaults?.signer.title || '');
+  const [signature, setSignature] = useState(editing ? editing.signer?.signature || null : certDefaults?.signer.signature || null); // scanned signature (data: URL), optional
+  // Off: the certificate is printed without a signature image and the signer
+  // signs each one by hand. The uploaded image is kept while off, in case it is switched back on.
+  const [signatureOn, setSignatureOn] = useState(editing ? !!editing.signer?.signature : true);
+  const signerTouched = useRef(false);
+  useEffect(() => {
+    if (editing || !certDefaults || signerTouched.current) return;
+    setSignerName(certDefaults.signer.name);
+    setSignerTitle(certDefaults.signer.title);
+    setSignature(certDefaults.signer.signature);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [certDefaults]);
   const [certLayout, setCertLayout] = useState(editing?.certLayout || null); // how the text is fitted to the template; null = defaults
 
   const evalKeyRef = useRef(0);
@@ -454,7 +467,7 @@ export default function CreateEventPage() {
       poster,
       certTemplate,
       pretest: { enabled: pretestOn, link: pretestLink },
-      signer: { name: signerName, title: signerTitle, signature },
+      signer: { name: signerName, title: signerTitle, signature: signatureOn ? signature : null },
       certLayout: certTemplate ? certLayout : null,
       dateIso: (dayMode === 'multi' ? eventDates[0] : dateIso) || undefined,
       dateEndIso: dayMode === 'multi' ? eventDates[eventDates.length - 1] : undefined,
@@ -939,19 +952,28 @@ export default function CreateEventPage() {
               onLayoutChange={setCertLayout}
               signerName={signerName}
               signerTitle={signerTitle}
-              signature={signature}
+              signature={signatureOn ? signature : null}
               eventTitle={title}
               certDate={dayMode === 'multi' ? formatCertDateList(eventDates) : formatCertDate(dateIso, dateIso)}
               category={cat}
             />
             <div className="form-row" style={{ marginTop: 18 }}>
-              <div className="field"><label>ชื่อผู้ลงนาม <span className="req">*</span></label><div className="with-icon"><i className="ti ti-signature" /><input type="text" value={signerName} onChange={(e) => setSignerName(e.target.value)} /></div></div>
-              <div className="field"><label>ตำแหน่ง <span className="req">*</span></label><div className="with-icon"><i className="ti ti-id-badge-2" /><input type="text" value={signerTitle} onChange={(e) => setSignerTitle(e.target.value)} /></div></div>
+              <div className="field"><label>ชื่อผู้ลงนาม <span className="req">*</span></label><div className="with-icon"><i className="ti ti-signature" /><input type="text" value={signerName} onChange={(e) => { signerTouched.current = true; setSignerName(e.target.value); }} /></div></div>
+              <div className="field"><label>ตำแหน่ง <span className="req">*</span></label><div className="with-icon"><i className="ti ti-id-badge-2" /><input type="text" value={signerTitle} onChange={(e) => { signerTouched.current = true; setSignerTitle(e.target.value); }} /></div></div>
             </div>
             <div className="field">
-              <label>รูปลายเซ็นผู้ลงนาม</label>
-              <SignatureUpload value={signature} onChange={setSignature} />
-              <span className="helper">ไม่บังคับ · แสดงเหนือชื่อผู้ลงนามบนเกียรติบัตร{certTemplate ? ' (ดูผลได้ในตัวอย่างด้านบน)' : ''}</span>
+              <div className="sig-toggle-row">
+                <label id="sig-toggle-label">ใส่รูปลายเซ็นบนเกียรติบัตร</label>
+                <button type="button" className={`switch sm${signatureOn ? ' on' : ''}`} role="switch" aria-checked={signatureOn} aria-labelledby="sig-toggle-label" onClick={() => setSignatureOn((o) => !o)} />
+              </div>
+              {signatureOn ? (
+                <>
+                  <SignatureUpload value={signature} onChange={(v) => { signerTouched.current = true; setSignature(v); }} />
+                  <span className="helper">ไม่บังคับ · แสดงเหนือชื่อผู้ลงนามบนเกียรติบัตร{certTemplate ? ' (ดูผลได้ในตัวอย่างด้านบน)' : ''}</span>
+                </>
+              ) : (
+                <div className="sig-off-note"><i className="ti ti-writing" /> ไม่ใส่ลายเซ็นบนเกียรติบัตร · พิมพ์ออกมาแล้วผู้ลงนามเซ็นด้วยมือเหนือชื่อ</div>
+              )}
             </div>
             </>)}
           </div>

@@ -60,7 +60,7 @@ export default function CertificatesPage() {
       <div className="section-head">
         <div>
           <div className="sh-title">เกียรติบัตรของฉัน <span className="count">{myCertificates.length} ใบ</span></div>
-          <div className="sh-sub">เกียรติบัตรอิเล็กทรอนิกส์ทั้งหมดที่คุณได้รับ · ดาวน์โหลดเป็น PDF ทีละใบ เลือกหลายใบ หรือทั้งหมดได้</div>
+          <div className="sh-sub">เกียรติบัตรอิเล็กทรอนิกส์ทั้งหมดที่คุณได้รับ · ดาวน์โหลดเป็น PDF ทีละใบ หรือเลือกหลายใบได้</div>
         </div>
       </div>
 
@@ -98,9 +98,6 @@ export default function CertificatesPage() {
             <div className="cert-bulk-actions">
               <button type="button" className="btn btn-primary" disabled={picked.size === 0} onClick={() => download(pickedList)}>
                 <i className="ti ti-download" /> ดาวน์โหลดที่เลือก{picked.size > 0 ? ` (${picked.size})` : ''}
-              </button>
-              <button type="button" className="btn btn-outline" disabled={shown.length === 0} onClick={() => download(shown)}>
-                <i className="ti ti-files" /> ดาวน์โหลดทั้งหมด{filtering ? 'ที่แสดงอยู่' : ''} ({shown.length})
               </button>
             </div>
           </div>

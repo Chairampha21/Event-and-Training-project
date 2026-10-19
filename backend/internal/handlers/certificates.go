@@ -102,7 +102,7 @@ func (h *CertificatesHandler) Issue(c *gin.Context) {
 		return
 	}
 
-	if _, err := h.DB.Exec(`INSERT INTO certificates (registration_id, cert_code) VALUES (?, ?)`, regID, code); err != nil {
+	if _, err := h.DB.Exec(`INSERT INTO certificates (registration_id, cert_code, default_template_id) VALUES (?, ?, `+currentTemplateSQL+`)`, regID, code); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 		return
 	}
@@ -123,12 +123,15 @@ type myCertificateRow struct {
 	Title     string `json:"title"`
 	Category  string `json:"category"`
 	DateStart string `json:"date_start"`
+	// The department's main template version current when it was issued (null =
+	// the built-in one) — drawn on that, not today's, unless the event has its own.
+	DefaultTemplateID *int64 `json:"default_template_id"`
 }
 
 func (h *CertificatesHandler) MyCertificates(c *gin.Context) {
 	claims, _ := middleware.CurrentUser(c)
 	rows, err := h.DB.Query(
-		`SELECT cert.cert_code, cert.issued_at, e.id, e.title, e.category, e.date_start
+		`SELECT cert.cert_code, cert.issued_at, e.id, e.title, e.category, e.date_start, cert.default_template_id
 		 FROM certificates cert
 		 JOIN registrations r ON r.id = cert.registration_id
 		 JOIN events e ON e.id = r.event_id
@@ -143,7 +146,7 @@ func (h *CertificatesHandler) MyCertificates(c *gin.Context) {
 	list := []myCertificateRow{}
 	for rows.Next() {
 		var r myCertificateRow
-		if err := rows.Scan(&r.CertCode, &r.IssuedAt, &r.EventID, &r.Title, &r.Category, &r.DateStart); err != nil {
+		if err := rows.Scan(&r.CertCode, &r.IssuedAt, &r.EventID, &r.Title, &r.Category, &r.DateStart, &r.DefaultTemplateID); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 			return
 		}

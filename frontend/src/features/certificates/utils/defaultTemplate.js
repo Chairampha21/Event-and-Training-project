@@ -11,9 +11,27 @@ export const DEFAULT_CERT_TEMPLATE_URL = `${window.location.origin}${process.env
 // so the heading starts lower and the signature sits higher than the defaults.
 export const DEFAULT_TEMPLATE_LAYOUT = { ...DEFAULT_LAYOUT, titleTop: 19, bodyTop: 33, signBottom: 15 };
 
-/** The template image and text layout to draw an event's certificate with. */
-export function certTemplateFor(ev) {
-  return ev?.certTemplate?.dataUrl
-    ? { url: ev.certTemplate.dataUrl, layout: ev.certLayout, own: true }
+/**
+ * The department's main template: the one an admin set (`defaults` from
+ * useEvents().certDefaults), or the one built into the site.
+ */
+export function mainTemplate(defaults) {
+  return defaults?.template?.dataUrl
+    ? { url: defaults.template.dataUrl, layout: defaults.layout, own: false }
     : { url: DEFAULT_CERT_TEMPLATE_URL, layout: DEFAULT_TEMPLATE_LAYOUT, own: false };
+}
+
+/**
+ * The template image and text layout to draw an event's certificate with.
+ * Pass `cert` (an issued certificate, with its default_template_id) and
+ * `cache` (useEvents().certTemplateCache) to draw it on the main template that
+ * was current when it was issued, not today's.
+ */
+export function certTemplateFor(ev, defaults, cert, cache) {
+  if (ev?.certTemplate?.dataUrl) return { url: ev.certTemplate.dataUrl, layout: ev.certLayout, own: true };
+  if (!cert) return mainTemplate(defaults);
+  const id = cert.default_template_id ?? null;
+  if (id === null) return mainTemplate(null); // issued on the built-in template
+  if (cache?.[id]) return { ...cache[id], own: false };
+  return mainTemplate(defaults?.templateId === id ? defaults : null); // still loading
 }

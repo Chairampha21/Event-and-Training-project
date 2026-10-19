@@ -18,14 +18,17 @@ USE cpsu_etms;
 SET NAMES utf8mb4;
 
 -- ---------------------------------------------------------------------
--- users — one account per role (admin / organizer / student)
+-- users — one account per role (admin / organizer / teacher / student)
 -- ---------------------------------------------------------------------
 CREATE TABLE users (
   id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   name            VARCHAR(150)      NOT NULL,
   email           VARCHAR(190)      NOT NULL,
   password_hash   VARCHAR(255)      NOT NULL,             -- bcrypt/argon2 hash — never store plaintext
-  role            ENUM('admin','organizer','student') NOT NULL DEFAULT 'student',
+  -- teacher: joins events like a student (register, check in, evaluate,
+  -- certificates) but has no student ID. Only an admin assigns it.
+  -- Existing databases: ALTER TABLE users MODIFY role ENUM('admin','organizer','teacher','student') NOT NULL DEFAULT 'student';
+  role            ENUM('admin','organizer','teacher','student') NOT NULL DEFAULT 'student',
   student_id      VARCHAR(20)       NULL,                 -- รหัสนักศึกษา เช่น 64xxxxx21 (students only)
   dept            VARCHAR(190)      NULL,                 -- สังกัด/ตำแหน่ง (staff) หรือ ชั้นปี · สาขา (students)
   active          TINYINT(1)        NOT NULL DEFAULT 1,
@@ -110,6 +113,16 @@ CREATE TABLE events (
   --                     ALTER TABLE registrations ADD COLUMN payment_status ENUM('none','pending','paid') NOT NULL DEFAULT 'none' AFTER dietary_pref, ADD COLUMN paid_at DATETIME NULL AFTER payment_status;
   fee                   DECIMAL(10,2) NULL,
   payment_info          VARCHAR(500)  NULL,
+  -- refund_method: what happens to the money if it is given back (set with the
+  -- fee, editable later): 'none' = not refunded, 'department' = collected at the
+  -- department (e.g. a deposit returned at the door), 'transfer' = transferred
+  -- back to the payer's PromptPay (asked for with the slip). refund_note: when
+  -- and where, in the organizer's words. If the event is cancelled, everyone who
+  -- paid is refunded this way (cancelling an event set to 'none' asks for a method).
+  -- Existing databases: ALTER TABLE events ADD COLUMN refund_method ENUM('none','department','transfer') NOT NULL DEFAULT 'none' AFTER payment_info,
+  --                       ADD COLUMN refund_note VARCHAR(300) NULL AFTER refund_method;
+  refund_method         ENUM('none','department','transfer') NOT NULL DEFAULT 'none',
+  refund_note           VARCHAR(300)  NULL,
 
   status                ENUM('open','closed','soon','full','done') NOT NULL DEFAULT 'soon',
   cycle_stage           TINYINT UNSIGNED NOT NULL DEFAULT 0, -- 0=ประกาศ 1=รับสมัคร 2=จัดกิจกรรม 3=เกียรติบัตร 4=ปิดกิจกรรม
@@ -181,17 +194,22 @@ CREATE TABLE registrations (
   --   submitted slip sent, waiting for the organizer to check it
   --   rejected  organizer could not accept the slip (see payment_reject_reason); the payer sends another
   --   paid      organizer confirmed
+  --   refunded  organizer gave the money back (refunded_at); see events.refund_method
   -- Existing databases: ALTER TABLE registrations MODIFY payment_status ENUM('none','pending','submitted','rejected','paid') NOT NULL DEFAULT 'none',
   --   ADD COLUMN slip_url MEDIUMTEXT NULL AFTER paid_at, ADD COLUMN slip_transferred_at DATETIME NULL AFTER slip_url,
   --   ADD COLUMN slip_amount DECIMAL(10,2) NULL AFTER slip_transferred_at, ADD COLUMN slip_submitted_at DATETIME NULL AFTER slip_amount,
   --   ADD COLUMN payment_reject_reason VARCHAR(200) NULL AFTER slip_submitted_at;
-  payment_status  ENUM('none','pending','submitted','rejected','paid') NOT NULL DEFAULT 'none',
+  -- Refunds — existing databases: ALTER TABLE registrations MODIFY payment_status ENUM('none','pending','submitted','rejected','paid','refunded') NOT NULL DEFAULT 'none',
+  --   ADD COLUMN refunded_at DATETIME NULL AFTER payment_reject_reason, ADD COLUMN refund_promptpay VARCHAR(13) NULL AFTER refunded_at;
+  payment_status  ENUM('none','pending','submitted','rejected','paid','refunded') NOT NULL DEFAULT 'none',
   paid_at         DATETIME      NULL,                      -- when the organizer confirmed the payment (server time, UTC)
   slip_url        MEDIUMTEXT    NULL,                      -- transfer slip image (base64 data: URL), visible to the payer, the organizer and admins only
   slip_transferred_at DATETIME  NULL,                      -- date and time of the transfer as the payer entered it (Thai local time)
   slip_amount     DECIMAL(10,2) NULL,                      -- amount the payer says they transferred
   slip_submitted_at DATETIME    NULL,                      -- when the slip was sent in (server time, UTC)
   payment_reject_reason VARCHAR(200) NULL,
+  refunded_at     DATETIME      NULL,                      -- when the organizer marked the money as given back (server time, UTC)
+  refund_promptpay VARCHAR(13)  NULL,                      -- payer's PromptPay (phone or citizen ID, digits only) for a 'transfer' refund
   registered_at   TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at      TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_reg_event FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
@@ -427,7 +445,9 @@ SELECT
   COUNT(DISTINCT CASE WHEN r.status = 'certified' THEN r.id END) AS certificate_count,
   ROUND(AVG(eea.score), 2) AS avg_satisfaction
 FROM events e
+-- Teachers join events like students but are not counted in the dashboard.
 LEFT JOIN registrations r ON r.event_id = e.id
+                         AND r.user_id NOT IN (SELECT id FROM users WHERE role = 'teacher')
 LEFT JOIN evaluations ev ON ev.registration_id = r.id
 LEFT JOIN event_evaluation_answers eea ON eea.evaluation_id = ev.id AND eea.score IS NOT NULL
 WHERE e.is_listed = 1 AND e.status = 'done'

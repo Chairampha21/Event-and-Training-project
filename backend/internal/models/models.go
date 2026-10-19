@@ -87,6 +87,9 @@ type Event struct {
 	AskDietary          bool       `json:"ask_dietary"`       // registrants are asked about food allergies / dietary needs
 	Fee                 NullFloat  `json:"fee"`               // registration fee in baht; null or 0 = free
 	PaymentInfo         NullString `json:"payment_info"`      // how to pay, shown to people registering
+	RefundMethod        string     `json:"refund_method"`     // none | department | transfer — how paid money is given back
+	RefundNote          NullString `json:"refund_note"`       // when / where, in the organizer's words
+	PayerCount          int        `json:"payer_count"`       // registrations whose money is held (slip sent or confirmed) and not yet refunded
 	Status              string     `json:"status"`
 	CycleStage          int        `json:"cycle_stage"`
 	PretestEnabled      bool       `json:"pretest_enabled"`

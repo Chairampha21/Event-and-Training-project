@@ -275,10 +275,11 @@ func (h *AuthHandler) GoogleLogin(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "บัญชีนี้ถูกระงับการใช้งาน"})
 		return
 	}
-	// Google Sign-In is a student convenience path only — staff (organizer/
-	// admin) keep using email + password so account access stays deliberate.
-	if user.Role != "student" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "เข้าสู่ระบบด้วย Google ใช้ได้เฉพาะบัญชีนักศึกษา กรุณาเข้าสู่ระบบด้วยอีเมลและรหัสผ่าน"})
+	// Google Sign-In is a participant convenience path only (students and
+	// teachers) — staff (organizer/admin) keep using email + password so
+	// account access stays deliberate.
+	if !isParticipant(user.Role) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "เข้าสู่ระบบด้วย Google ใช้ได้เฉพาะบัญชีนักศึกษาและอาจารย์ กรุณาเข้าสู่ระบบด้วยอีเมลและรหัสผ่าน"})
 		return
 	}
 

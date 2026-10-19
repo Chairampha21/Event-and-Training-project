@@ -55,8 +55,14 @@ type upsertUserBody struct {
 	Dept  string `json:"dept"`
 }
 
+// isParticipant reports whether a role joins events (registers, checks in,
+// evaluates, receives certificates): students and teachers alike.
+func isParticipant(r string) bool {
+	return r == "student" || r == "teacher"
+}
+
 func validRole(r string) bool {
-	return r == "admin" || r == "organizer" || r == "student"
+	return r == "admin" || r == "organizer" || r == "student" || r == "teacher"
 }
 
 func (h *UsersHandler) Create(c *gin.Context) {
@@ -168,7 +174,7 @@ func (h *UsersHandler) Update(c *gin.Context) {
 		notify.SendToAdmins(h.DB, claims.UserID, "ti-user-shield", notify.ToneWarn, "เหตุผิดปกติ: เปลี่ยนบทบาทผู้ใช้",
 			user.Name+" · จาก "+prevRole+" เป็น "+user.Role+" · โดย "+claims.Name, "/admin/users")
 		// And the person whose role changed: their menus are different from now on.
-		roleName := map[string]string{"admin": "ผู้ดูแลระบบ", "organizer": "ผู้จัดกิจกรรม", "student": "นักศึกษา"}
+		roleName := map[string]string{"admin": "ผู้ดูแลระบบ", "organizer": "ผู้จัดกิจกรรม", "student": "นักศึกษา", "teacher": "อาจารย์"}
 		notify.Send(h.DB, user.ID, "ti-user-shield", notify.ToneAccent, "บทบาทของคุณถูกเปลี่ยน",
 			"จาก "+roleName[prevRole]+" เป็น "+roleName[user.Role]+" · ออกจากระบบแล้วเข้าใหม่เพื่อใช้งานเมนูของบทบาทใหม่", "/profile")
 	}

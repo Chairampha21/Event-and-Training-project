@@ -80,7 +80,7 @@ func (h *BlacklistHandler) LookupUsers(c *gin.Context) {
 	like := "%" + q + "%"
 	rows, err := h.DB.Query(
 		`SELECT id, name, email, COALESCE(student_id, '') FROM users
-		 WHERE role = 'student' AND (student_id LIKE ? OR name LIKE ?)
+		 WHERE role IN ('student', 'teacher') AND (student_id LIKE ? OR name LIKE ?)
 		 ORDER BY student_id LIMIT 8`,
 		like, like,
 	)

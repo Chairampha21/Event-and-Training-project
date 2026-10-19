@@ -4,13 +4,15 @@ import { downloadCsv } from '../../utils/csvExport';
 import { downloadXlsx, STYLE } from '../../utils/xlsxExport';
 import { THAI_MONTHS, toBuddhistYear } from '../../utils/dateFormat';
 import EvalResultChart from '../../features/evaluations/components/EvalResultChart';
+import EventBudgetReport from '../../features/budget/components/EventBudgetReport';
 
 export default function ReportPage() {
   const { events, rosters, pushToast, getEvaluationResults } = useEvents();
   const listed = useMemo(() => events.filter((e) => e.listed), [events]);
   const [eventId, setEventId] = useState(listed[0]?.id);
   const ev = listed.find((e) => e.id === Number(eventId)) || listed[0];
-  const roster = (ev && rosters[ev.id]) || [];
+  // Teachers join events but are not counted as participants in reports.
+  const roster = ((ev && rosters[ev.id]) || []).filter((p) => !p.isTeacher);
   const attended = roster.filter((p) => p.in).length;
   const attendRate = roster.length ? ((attended / roster.length) * 100) : 0;
 
@@ -100,7 +102,9 @@ export default function ReportPage() {
   const evalOverall = answered.length ? answered.reduce((a, r) => a + (r.avg_score || 0), 0) / answered.length : 0;
 
   const recent = useMemo(() => listed.slice(0, 6), [listed]);
-  const maxV = Math.max(10, ...recent.map((e) => e.reg));
+  // Registrations without teachers; falls back to the event's own count while its roster loads.
+  const regCount = (e) => (rosters[e.id] ? rosters[e.id].filter((p) => !p.isTeacher).length : e.reg);
+  const maxV = Math.max(10, ...recent.map(regCount));
 
   // One export button for the whole report: the menu says what each file
   // holds, so it does not depend on which tab happens to be open.
@@ -271,6 +275,9 @@ export default function ReportPage() {
             <button type="button" className={`filter-chip${tab === 'eval' ? ' active' : ''}`} style={{ cursor: 'pointer' }} onClick={() => setTab('eval')}>
               <i className="ti ti-clipboard-check" /> แบบประเมิน
             </button>
+            <button type="button" className={`filter-chip${tab === 'budget' ? ' active' : ''}`} style={{ cursor: 'pointer' }} onClick={() => setTab('budget')}>
+              <i className="ti ti-coin" /> งบประมาณกิจกรรม
+            </button>
           </div>
         </div>
 
@@ -280,7 +287,7 @@ export default function ReportPage() {
           <div className="stat-card">
             <div className="sc-top"><div className="sc-icon"><i className="ti ti-user-plus" /></div></div>
             <div className="sc-label">ผู้สมัครทั้งหมด</div>
-            <div className="sc-value">{ev.reg} <small>คน</small></div>
+            <div className="sc-value">{regCount(ev)} <small>คน</small></div>
           </div>
           <div className="stat-card">
             <div className="sc-top"><div className="sc-icon"><i className="ti ti-users" /></div></div>
@@ -311,11 +318,11 @@ export default function ReportPage() {
               <div className="bar-y-axis"><span>{maxV}</span><span>{Math.round(maxV / 2)}</span><span>0</span></div>
               <div className="bar-chart">
                 {recent.map((e) => {
-                  const inCount = (rosters[e.id] || []).filter((p) => p.in).length;
+                  const inCount = (rosters[e.id] || []).filter((p) => p.in && !p.isTeacher).length;
                   return (
                     <div className="bar-col" key={e.id}>
                       <div className="bar-pair">
-                        <div className="bar" style={{ height: `${Math.round((e.reg / maxV) * 100)}%`, background: 'var(--c2-40)' }} title={e.reg} />
+                        <div className="bar" style={{ height: `${Math.round((regCount(e) / maxV) * 100)}%`, background: 'var(--c2-40)' }} title={regCount(e)} />
                         <div className="bar b2" style={{ height: `${Math.round((inCount / maxV) * 100)}%` }} title={inCount} />
                       </div>
                     </div>
@@ -368,6 +375,10 @@ export default function ReportPage() {
           </div>
         </div>
         </>
+        )}
+
+        {tab === 'budget' && (
+          <EventBudgetReport ev={ev} attended={attended} payers={roster.filter((p) => p.paymentStatus === 'paid').length} />
         )}
 
         {tab === 'eval' && (

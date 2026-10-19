@@ -76,8 +76,8 @@ func main() {
 		eventsGroup.PUT("/:id", requireAuth, middleware.RequireRole("organizer", "admin"), events.Update)
 		eventsGroup.DELETE("/:id", requireAuth, middleware.RequireRole("organizer", "admin"), events.Remove)
 
-		eventsGroup.POST("/:id/register", requireAuth, middleware.RequireRole("student"), regs.RegisterForEvent)
-		eventsGroup.POST("/:id/self-checkin", requireAuth, middleware.RequireRole("student"), regs.SelfCheckIn)
+		eventsGroup.POST("/:id/register", requireAuth, middleware.RequireRole("student", "teacher"), regs.RegisterForEvent)
+		eventsGroup.POST("/:id/self-checkin", requireAuth, middleware.RequireRole("student", "teacher"), regs.SelfCheckIn)
 		eventsGroup.GET("/:id/registrations", requireAuth, middleware.RequireRole("organizer", "admin"), regs.EventRoster)
 
 		eventsGroup.GET("/:id/sar", requireAuth, middleware.RequireRole("organizer", "admin"), sar.Get)
@@ -87,16 +87,17 @@ func main() {
 		eventsGroup.PUT("/:id/evaluation-questions", requireAuth, middleware.RequireRole("organizer", "admin"), evals.SetEventQuestions)
 	}
 
-	r.GET("/api/me/registrations", requireAuth, middleware.RequireRole("student"), regs.MyRegistrations)
+	r.GET("/api/me/registrations", requireAuth, middleware.RequireRole("student", "teacher"), regs.MyRegistrations)
 	r.DELETE("/api/registrations/:id", requireAuth, regs.CancelRegistration)
 	r.PATCH("/api/registrations/:id/payment", requireAuth, middleware.RequireRole("organizer", "admin"), regs.SetPayment)
-	r.POST("/api/registrations/:id/slip", requireAuth, middleware.RequireRole("student"), regs.SubmitSlip)
+	r.POST("/api/registrations/:id/slip", requireAuth, middleware.RequireRole("student", "teacher"), regs.SubmitSlip)
+	r.PATCH("/api/registrations/:id/refund-account", requireAuth, middleware.RequireRole("student", "teacher"), regs.SetRefundAccount)
 	r.GET("/api/registrations/:id/slip", requireAuth, regs.GetSlip)
 	r.PATCH("/api/registrations/:id/checkin", requireAuth, middleware.RequireRole("organizer", "admin"), regs.CheckIn)
 	r.POST("/api/registrations/:id/certificate", requireAuth, middleware.RequireRole("organizer", "admin"), certs.Issue)
-	r.POST("/api/registrations/:id/evaluation", requireAuth, middleware.RequireRole("student"), evals.Submit)
+	r.POST("/api/registrations/:id/evaluation", requireAuth, middleware.RequireRole("student", "teacher"), evals.Submit)
 
-	r.GET("/api/me/certificates", requireAuth, middleware.RequireRole("student"), certs.MyCertificates)
+	r.GET("/api/me/certificates", requireAuth, middleware.RequireRole("student", "teacher"), certs.MyCertificates)
 	r.GET("/api/certificates/:code/verify", certs.Verify)
 	r.GET("/api/evaluations/questions", evals.Questions)
 

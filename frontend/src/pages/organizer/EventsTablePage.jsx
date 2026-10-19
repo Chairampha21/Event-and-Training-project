@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { useEvents } from '../../hooks/useEvents';
 import { STATUS_META } from '../../utils/constants';
 import CycleProgress from '../../features/events/components/CycleProgress';
@@ -7,12 +7,12 @@ import ApplicantsModal from '../../features/events/components/ApplicantsModal';
 import BudgetActualModal from '../../features/budget/components/BudgetActualModal';
 import ManageEventModal from '../../features/events/components/ManageEventModal';
 import { downloadCsv } from '../../utils/csvExport';
+import { REFUND_METHODS } from '../../features/events/components/PaymentBox';
 
 const PAGE_SIZE = 6;
 
 export default function EventsTablePage() {
   const { events, saveBudgetActual } = useEvents();
-  const navigate = useNavigate();
   const [applicantsId, setApplicantsId] = useState(null);
   const [applicantsMode, setApplicantsMode] = useState('list');
   const openApplicants = (id, mode) => { setApplicantsMode(mode); setApplicantsId(id); };
@@ -39,6 +39,8 @@ export default function EventsTablePage() {
   const [page, setPage] = useState(1);
 
   const list = useMemo(() => events.filter((e) => e.listed), [events]);
+  // Deleted events whose payers are not all refunded yet (the server only sends these to their managers).
+  const owing = useMemo(() => events.filter((e) => !e.listed && e.payerCount > 0), [events]);
   const budgetEv = list.find((e) => e.id === budgetId);
 
   const filtered = useMemo(() => {
@@ -116,6 +118,21 @@ export default function EventsTablePage() {
           </div>
         </div>
 
+        {owing.length > 0 && (
+          <div className="refund-due">
+            <div className="rd-head"><i className="ti ti-receipt-refund" /> กิจกรรมที่ยกเลิกแล้ว · รอคืนเงิน <span className="count">{owing.length}</span></div>
+            {owing.map((e) => (
+              <div className="rd-row" key={e.id}>
+                <div className="rd-info">
+                  <strong>{e.title}</strong>
+                  <span>{e.date} · ต้องคืนเงินอีก {e.payerCount} คน · {REFUND_METHODS[e.refundMethod]?.label}</span>
+                </div>
+                <button type="button" className="btn btn-primary" onClick={() => { setApplicantsMode('slips'); setApplicantsId(e.id); }}><i className="ti ti-receipt-refund" /> คืนเงิน</button>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="table-card">
           <div className="table-toolbar">
             <h3><i className="ti ti-table" /> รายการกิจกรรม</h3>
@@ -161,13 +178,9 @@ export default function EventsTablePage() {
                       <td><span className={`pill-status ${sm.pill}`}><i className="ti ti-circle-filled" /> {sm.label}</span></td>
                       <td><CycleProgress stage={ev.stage} compact /></td>
                       <td className="right">
-                        {/* The three things done most often stay one click away; everything
-                            else (registration, slips, budget, certificates, delete) is in the
-                            same "จัดการ" menu as on the event card. */}
+                        {/* Everything (edit, applicants, check-in, slips, budget,
+                            certificates, delete) is in the same "จัดการ" menu as on the event card. */}
                         <div className="row-actions">
-                          <button className="icon-btn" title="แก้ไขข้อมูลกิจกรรม" aria-label={`แก้ไข ${ev.title}`} onClick={() => navigate('/create-event', { state: { editId: ev.id } })}><i className="ti ti-edit" /></button>
-                          <button className="icon-btn" title="รายชื่อผู้สมัคร" aria-label={`รายชื่อผู้สมัคร ${ev.title}`} onClick={() => openApplicants(ev.id, 'list')}><i className="ti ti-users" /></button>
-                          <button className="icon-btn" title="เช็คอินผู้เข้าร่วม" aria-label={`เช็คอินผู้เข้าร่วม ${ev.title}`} onClick={() => openApplicants(ev.id, 'checkin')}><i className="ti ti-checkbox" /></button>
                           <button className="btn btn-outline row-manage" onClick={() => setManageId(ev.id)} aria-label={`จัดการ ${ev.title}`}><i className="ti ti-settings" /> จัดการ</button>
                         </div>
                       </td>

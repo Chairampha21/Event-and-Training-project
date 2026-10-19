@@ -387,6 +387,7 @@ func (h *EvaluationsHandler) Results(c *gin.Context) {
 	// Only scale-type custom questions are averaged here — choice-type ones
 	// (e.g. เพศ, สาขาวิชา) don't have a meaningful average and are left out
 	// of this endpoint; a future report can tally their answer_text instead.
+	// Teachers' answers are left out, as in every other report figure.
 	list := []evalResultRow{}
 	customRows, err := h.DB.Query(
 		`SELECT q.id, q.label, ROUND(AVG(ea.score), 2) AS avg_score, COUNT(ea.score) AS response_count
@@ -394,7 +395,7 @@ func (h *EvaluationsHandler) Results(c *gin.Context) {
 		 LEFT JOIN (
 		   event_evaluation_answers ea
 		   JOIN evaluations ev ON ev.id = ea.evaluation_id
-		   JOIN registrations r ON r.id = ev.registration_id AND r.event_id = ?
+		   JOIN registrations r ON r.id = ev.registration_id AND r.event_id = ? AND `+notTeacherSQL("r")+`
 		 ) ON ea.question_id = q.id
 		 WHERE q.event_id = ? AND q.question_type = 'scale'
 		 GROUP BY q.id, q.label, q.sort_order

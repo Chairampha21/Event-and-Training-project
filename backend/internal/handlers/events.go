@@ -45,7 +45,7 @@ const eventFields = `
   day_mode, date_start, date_end, event_dates, event_times, time_range, reg_start, reg_end,
   attend_mode, place, online_link, capacity, capacity_onsite, capacity_online,
   budget_planned, budget_other, budget_actual,
-  attendee_note, loan_laptop_qty, ask_dietary, fee, payment_info,
+  attendee_note, loan_laptop_qty, ask_dietary, fee, payment_info, refund_method, refund_note,
   ` + effectiveStatusSQL + ` AS status, cycle_stage,
   pretest_enabled, pretest_link, pretest_pass_pct, pretest_time_limit_min,
   cert_template_url, cert_signer_name, cert_signer_title, cert_signature_url, cert_layout,
@@ -53,8 +53,30 @@ const eventFields = `
   is_listed, created_at, updated_at,
   (SELECT COUNT(*) FROM registrations reg WHERE reg.event_id = events.id) AS registered_count,
   (SELECT COUNT(*) FROM registrations reg WHERE reg.event_id = events.id AND reg.wants_laptop = 1) AS loan_laptop_taken,
-  (SELECT COUNT(*) FROM registrations reg WHERE reg.event_id = events.id AND reg.attend_via = 'online') AS registered_online
+  (SELECT COUNT(*) FROM registrations reg WHERE reg.event_id = events.id AND reg.attend_via = 'online') AS registered_online,
+  (SELECT COUNT(*) FROM registrations reg WHERE reg.event_id = events.id AND reg.` + payerSQL + `) AS payer_count
 `
+
+// payerSQL matches a registration whose money the organizer holds (slip sent
+// or payment confirmed) and has not given back yet.
+const payerSQL = `payment_status IN ('submitted', 'paid')`
+
+var refundMethodLabel = map[string]string{
+	"none":       "ไม่คืนเงิน",
+	"department": "รับเงินคืนที่ภาควิชา",
+	"transfer":   "โอนคืนทางพร้อมเพย์",
+}
+
+const maxRefundNote = 300
+
+// refundText is the refund arrangement as one line for notifications.
+func refundText(method, note string) string {
+	s := refundMethodLabel[method]
+	if note != "" {
+		s += " · " + note
+	}
+	return s
+}
 
 func scanEvent(row interface{ Scan(dest ...any) error }) (models.Event, error) {
 	var e models.Event
@@ -66,13 +88,13 @@ func scanEvent(row interface{ Scan(dest ...any) error }) (models.Event, error) {
 		&e.DayMode, &e.DateStart, &e.DateEnd, &eventDates, &eventTimes, &e.TimeRange, &e.RegStart, &e.RegEnd,
 		&e.AttendMode, &e.Place, &e.OnlineLink, &e.Capacity, &e.CapacityOnsite, &e.CapacityOnline,
 		&e.BudgetPlanned, &e.BudgetOther, &e.BudgetActual,
-		&e.AttendeeNote, &e.LoanLaptopQty, &e.AskDietary, &e.Fee, &e.PaymentInfo,
+		&e.AttendeeNote, &e.LoanLaptopQty, &e.AskDietary, &e.Fee, &e.PaymentInfo, &e.RefundMethod, &e.RefundNote,
 		&e.Status, &e.CycleStage,
 		&pretestEnabled, &e.PretestLink, &e.PretestPassPct, &e.PretestTimeLimitMin,
 		&e.CertTemplateURL, &e.CertSignerName, &e.CertSignerTitle, &e.CertSignatureURL, &e.CertLayout,
 		&emailOnRegister, &emailBeforeEvent, &emailAfterEvent,
 		&isListed, &e.CreatedAt, &e.UpdatedAt,
-		&e.RegisteredCount, &e.LoanLaptopTaken, &e.RegisteredOnline,
+		&e.RegisteredCount, &e.LoanLaptopTaken, &e.RegisteredOnline, &e.PayerCount,
 	)
 	e.BudgetTotal = budgetTotal(e.BudgetPlanned, e.BudgetOther)
 	e.EventDates = splitEventDates(eventDates.String)
@@ -88,6 +110,16 @@ func scanEvent(row interface{ Scan(dest ...any) error }) (models.Event, error) {
 func (h *EventsHandler) List(c *gin.Context) {
 	clauses := []string{"is_listed = 1"}
 	var args []any
+	// A deleted event whose payers are not all refunded yet stays visible to
+	// the people who manage it, so the refunds can be ticked off.
+	if claims, ok := middleware.CurrentUser(c); ok && (claims.Role == "admin" || claims.Role == "organizer") {
+		owing := "(is_listed = 0 AND EXISTS (SELECT 1 FROM registrations rr WHERE rr.event_id = events.id AND rr." + payerSQL + ")"
+		if claims.Role == "organizer" {
+			owing += " AND organizer_id = ?"
+			args = append(args, claims.UserID)
+		}
+		clauses[0] = "(is_listed = 1 OR " + owing + "))"
+	}
 
 	if status := c.Query("status"); status != "" {
 		clauses = append(clauses, "status = ?")
@@ -135,7 +167,7 @@ func (h *EventsHandler) List(c *gin.Context) {
 func (h *EventsHandler) hideOnlineLinks(c *gin.Context, events []models.Event) error {
 	claims, signedIn := middleware.CurrentUser(c)
 	registered := map[int64]bool{}
-	if signedIn && claims.Role == "student" {
+	if signedIn && isParticipant(claims.Role) {
 		rows, err := h.DB.Query(`SELECT event_id FROM registrations WHERE user_id = ?`, claims.UserID)
 		if err != nil {
 			return err
@@ -157,7 +189,7 @@ func (h *EventsHandler) hideOnlineLinks(c *gin.Context, events []models.Event) e
 		e.HasOnlineLink = e.OnlineLink.Valid && e.OnlineLink.String != ""
 		allowed := signedIn && (claims.Role == "admin" ||
 			(claims.Role == "organizer" && e.OrganizerID.Valid && e.OrganizerID.Int64 == claims.UserID) ||
-			(claims.Role == "student" && registered[e.ID]))
+			(isParticipant(claims.Role) && registered[e.ID]))
 		if !allowed {
 			e.OnlineLink = models.NullString{}
 		}
@@ -194,6 +226,8 @@ type eventBody struct {
 	AskDietary          *bool    `json:"ask_dietary"`
 	Fee                 *float64 `json:"fee"`
 	PaymentInfo         *string  `json:"payment_info"`
+	RefundMethod        *string  `json:"refund_method"`
+	RefundNote          *string  `json:"refund_note"`
 	Status              *string  `json:"status"`
 	CycleStage          *int     `json:"cycle_stage"`
 	PretestEnabled      *bool    `json:"pretest_enabled"`
@@ -237,8 +271,21 @@ func validateEventBody(b eventBody) string {
 			return "จำนวนที่รับไม่ถูกต้อง"
 		}
 	}
+	if b.AttendMode == "hybrid" {
+		if *b.CapacityOnsite < minCapacity || *b.CapacityOnline < minCapacity {
+			return capacityTooSmall
+		}
+	} else if b.Capacity == nil || *b.Capacity < minCapacity {
+		return capacityTooSmall
+	}
 	return ""
 }
+
+// minCapacity: an event takes at least 2 people (0 or 1 seat is a typo, not an event).
+// A hybrid event needs it on each side, onsite and online.
+const minCapacity = 2
+
+var capacityTooSmall = fmt.Sprintf("จำนวนที่รับต้องมีอย่างน้อย %d คน", minCapacity)
 
 var validStatuses = map[string]bool{"open": true, "closed": true, "soon": true, "full": true, "done": true}
 
@@ -345,13 +392,20 @@ func validateEventEdit(raw map[string]any, existing models.Event) string {
 		if !onsite.Valid || !online.Valid {
 			return "กิจกรรมแบบ hybrid ต้องระบุจำนวนรับ onsite และ online"
 		}
+		_, touchOn := raw["capacity_onsite"]
+		_, touchOl := raw["capacity_online"]
+		if (touchOn || touchOl) && (onsite.Int64 < minCapacity || online.Int64 < minCapacity) {
+			return capacityTooSmall
+		}
 		if int(onsite.Int64) < regOnsite {
 			return fmt.Sprintf("มีผู้สมัครแบบ Onsite แล้ว %d คน จึงลดจำนวนที่รับต่ำกว่านี้ไม่ได้", regOnsite)
 		}
 		if int(online.Int64) < regOnline {
 			return fmt.Sprintf("มีผู้สมัครแบบ Online แล้ว %d คน จึงลดจำนวนที่รับต่ำกว่านี้ไม่ได้", regOnline)
 		}
-	} else if _, present := raw["capacity"]; present && capacity < existing.RegisteredCount {
+	} else if _, present := raw["capacity"]; present && capacity < minCapacity {
+		return capacityTooSmall
+	} else if present && capacity < existing.RegisteredCount {
 		return fmt.Sprintf("มีผู้สมัครแล้ว %d คน จึงลดจำนวนที่รับต่ำกว่านี้ไม่ได้", existing.RegisteredCount)
 	}
 	return ""
@@ -580,10 +634,24 @@ func (h *EventsHandler) Create(c *gin.Context) {
 	if b.CertLayout != nil && *b.CertLayout == "" {
 		b.CertLayout = nil
 	}
-	// Fee: a free event stores NULL (not 0), and keeps no payment instructions.
+	// Fee: a free event stores NULL (not 0), and keeps no payment instructions
+	// or refund arrangement.
 	var fee any
 	payInfo := ""
+	refundMethod, refundNote := "none", ""
 	if b.Fee != nil && *b.Fee != 0 {
+		if b.RefundMethod != nil {
+			if _, ok := refundMethodLabel[*b.RefundMethod]; !ok {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "วิธีคืนเงินไม่ถูกต้อง"})
+				return
+			}
+			refundMethod = *b.RefundMethod
+		}
+		refundNote = strOrEmpty(b.RefundNote)
+		if len([]rune(refundNote)) > maxRefundNote {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "รายละเอียดการคืนเงินยาวเกิน 300 ตัวอักษร"})
+			return
+		}
 		if *b.Fee < 0 || *b.Fee > maxFee {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "ค่าลงทะเบียนไม่ถูกต้อง"})
 			return
@@ -646,18 +714,18 @@ func (h *EventsHandler) Create(c *gin.Context) {
 		day_mode, date_start, date_end, event_dates, event_times, time_range, reg_start, reg_end,
 		attend_mode, place, online_link, capacity, capacity_onsite, capacity_online,
 		budget_planned, budget_other,
-		attendee_note, loan_laptop_qty, ask_dietary, fee, payment_info,
+		attendee_note, loan_laptop_qty, ask_dietary, fee, payment_info, refund_method, refund_note,
 		status, cycle_stage,
 		pretest_enabled, pretest_link, pretest_pass_pct, pretest_time_limit_min,
 		cert_template_url, cert_signer_name, cert_signer_title, cert_signature_url, cert_layout,
 		email_on_register, email_before_event, email_after_event
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		strings.TrimSpace(b.Title), b.Description, strings.TrimSpace(b.Category), b.Subcategory, b.PosterURL,
 		organizerID, b.OrganizerName,
 		b.DayMode, b.DateStart, b.DateEnd, eventDates, eventTimes, b.TimeRange, nullIfEmpty(regStart), nullIfEmpty(regEnd),
 		b.AttendMode, b.Place, b.OnlineLink, capacity, b.CapacityOnsite, b.CapacityOnline,
 		b.BudgetPlanned, b.BudgetOther,
-		nullIfEmpty(note), loanQty, b.AskDietary != nil && *b.AskDietary, fee, nullIfEmpty(payInfo),
+		nullIfEmpty(note), loanQty, b.AskDietary != nil && *b.AskDietary, fee, nullIfEmpty(payInfo), refundMethod, nullIfEmpty(refundNote),
 		status, cycleStage,
 		pretestEnabled, b.PretestLink, b.PretestPassPct, b.PretestTimeLimitMin,
 		b.CertTemplateURL, b.CertSignerName, b.CertSignerTitle, b.CertSignatureURL, b.CertLayout,
@@ -731,6 +799,7 @@ func (h *EventsHandler) Update(c *gin.Context) {
 		"attend_mode": true, "place": true, "online_link": true, "capacity": true, "capacity_onsite": true, "capacity_online": true,
 		"status": true, "cycle_stage": true, "budget_planned": true, "budget_other": true, "budget_actual": true,
 		"attendee_note": true, "loan_laptop_qty": true, "ask_dietary": true, "fee": true, "payment_info": true,
+		"refund_method": true, "refund_note": true,
 		"pretest_enabled": true, "pretest_link": true, "pretest_pass_pct": true, "pretest_time_limit_min": true,
 		"cert_template_url": true, "cert_signer_name": true, "cert_signer_title": true, "cert_signature_url": true, "cert_layout": true,
 		"email_on_register": true, "email_before_event": true, "email_after_event": true,
@@ -774,6 +843,28 @@ func (h *EventsHandler) Update(c *gin.Context) {
 			return
 		}
 		raw["payment_info"] = nullIfEmpty(str)
+	}
+	// How paid money is given back. It can change later, but not to "no
+	// refund" once someone has paid on the promise of one.
+	if v, present := raw["refund_method"]; present {
+		str, ok := v.(string)
+		if _, known := refundMethodLabel[str]; !ok || !known {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "วิธีคืนเงินไม่ถูกต้อง"})
+			return
+		}
+		if str == "none" && existing.RefundMethod != "none" && existing.PayerCount > 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("มีผู้ชำระเงินแล้ว %d คนโดยแจ้งว่าจะได้เงินคืน จึงเปลี่ยนเป็นไม่คืนเงินไม่ได้", existing.PayerCount)})
+			return
+		}
+	}
+	if v, present := raw["refund_note"]; present && v != nil {
+		str, ok := v.(string)
+		str = strings.TrimSpace(str)
+		if !ok || len([]rune(str)) > maxRefundNote {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "รายละเอียดการคืนเงินยาวเกิน 300 ตัวอักษร"})
+			return
+		}
+		raw["refund_note"] = nullIfEmpty(str)
 	}
 	if v, present := raw["ask_dietary"]; present {
 		if _, ok := v.(bool); !ok {
@@ -1031,6 +1122,12 @@ func (h *EventsHandler) notifyCertOpen(ev models.Event) int {
 // notifications — only on real transitions, so re-saving the form unchanged
 // stays silent.
 func (h *EventsHandler) notifyEventChanges(before, after models.Event) {
+	// The refund arrangement changed: the people whose money is held should
+	// know — even for a cancelled event that is still paying people back.
+	if before.RefundMethod != after.RefundMethod || before.RefundNote.String != after.RefundNote.String {
+		notify.SendToPayers(h.DB, after.ID, "ti-receipt-refund", notify.ToneWarn, "การคืนเงินมีการเปลี่ยนแปลง",
+			after.Title+" · "+refundText(after.RefundMethod, after.RefundNote.String), "/my-registrations")
+	}
 	if !after.IsListed {
 		return
 	}
@@ -1055,13 +1152,45 @@ func (h *EventsHandler) notifyEventChanges(before, after models.Event) {
 }
 
 // Remove is a soft delete only, matching the frontend's deleteEvent -> listed=false behavior.
+//
+// Everyone who paid must get their money back when the event is cancelled, so
+// if anyone has paid the request may carry the refund arrangement
+// ({"refund_method", "refund_note"}); an event set to "no refund" must be given
+// one. Payers are told how they will be refunded, and the event stays visible to
+// whoever manages it until every one of them is marked refunded.
 func (h *EventsHandler) Remove(c *gin.Context) {
 	existing, ok := h.loadOwned(c)
 	if !ok {
 		return
 	}
 
-	if _, err := h.DB.Exec(`UPDATE events SET is_listed = 0 WHERE id = ?`, c.Param("id")); err != nil {
+	var body struct {
+		RefundMethod *string `json:"refund_method"`
+		RefundNote   *string `json:"refund_note"`
+	}
+	_ = c.ShouldBindJSON(&body) // the body is optional
+	method, note := existing.RefundMethod, existing.RefundNote.String
+	if body.RefundMethod != nil {
+		if _, known := refundMethodLabel[*body.RefundMethod]; !known {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "วิธีคืนเงินไม่ถูกต้อง"})
+			return
+		}
+		method = *body.RefundMethod
+	}
+	if body.RefundNote != nil {
+		note = strings.TrimSpace(*body.RefundNote)
+		if len([]rune(note)) > maxRefundNote {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "รายละเอียดการคืนเงินยาวเกิน 300 ตัวอักษร"})
+			return
+		}
+	}
+	if existing.PayerCount > 0 && method == "none" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("มีผู้ชำระเงินแล้ว %d คน กรุณาเลือกวิธีคืนเงินก่อนลบกิจกรรม", existing.PayerCount)})
+		return
+	}
+
+	if _, err := h.DB.Exec(`UPDATE events SET is_listed = 0, refund_method = ?, refund_note = ? WHERE id = ?`,
+		method, nullIfEmpty(note), c.Param("id")); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 		return
 	}
@@ -1069,16 +1198,18 @@ func (h *EventsHandler) Remove(c *gin.Context) {
 	claims, _ := middleware.CurrentUser(c)
 	activitylog.Log(h.DB, &claims.UserID, "DELETE", "ลบกิจกรรม: "+existing.Title)
 	if existing.IsListed {
-		notify.SendToRegistrants(h.DB, existing.ID, "ti-calendar-off", notify.ToneWarn,
-			"กิจกรรมถูกยกเลิก", existing.Title+" · ผู้จัดได้ยกเลิกกิจกรรมนี้แล้ว", "/my-registrations", "registered")
+		notify.SendToNonPayers(h.DB, existing.ID, "ti-calendar-off", notify.ToneWarn,
+			"กิจกรรมถูกยกเลิก", existing.Title+" · ผู้จัดได้ยกเลิกกิจกรรมนี้แล้ว", "/my-registrations")
+		if existing.PayerCount > 0 {
+			notify.SendToPayers(h.DB, existing.ID, "ti-receipt-refund", notify.ToneWarn,
+				"กิจกรรมถูกยกเลิก · คุณจะได้รับเงินคืน", existing.Title+" · "+refundText(method, note), "/my-registrations")
+		}
 		// Deleting an event is rare and affects other people — tell the admins
 		// right away instead of leaving it for them to find in the log. People
 		// who already paid need a refund, so they are called out.
-		var paid int
-		_ = h.DB.QueryRow(`SELECT COUNT(*) FROM registrations WHERE event_id = ? AND payment_status = 'paid'`, existing.ID).Scan(&paid)
 		msg := fmt.Sprintf("%s · ลบโดย %s · มีผู้ลงทะเบียน %d คน", existing.Title, claims.Name, existing.RegisteredCount)
-		if paid > 0 {
-			msg += fmt.Sprintf(" · ชำระเงินแล้ว %d คน (ต้องดำเนินการคืนเงิน)", paid)
+		if existing.PayerCount > 0 {
+			msg += fmt.Sprintf(" · ชำระเงินแล้ว %d คน (คืนเงิน: %s)", existing.PayerCount, refundMethodLabel[method])
 		}
 		notify.SendToAdmins(h.DB, claims.UserID, "ti-trash", notify.ToneWarn, "เหตุผิดปกติ: กิจกรรมถูกลบ", msg, "/admin/activity-log")
 		// Deleted by someone other than its organizer (an admin): the organizer should know.

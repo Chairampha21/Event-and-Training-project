@@ -7,6 +7,7 @@ import ConfirmDialog from '../../../components/ui/ConfirmDialog';
 import BudgetActualModal from '../../budget/components/BudgetActualModal';
 import { CertIssueReview } from '../../certificates/components/CertIssuePreview';
 import { formatBaht } from '../../../utils/money';
+import { REFUND_METHODS } from './PaymentBox';
 
 // Organizer/admin action menu for one event: edit, roster & check-in, record
 // actual spend, issue certificates, open/close registration, delete.
@@ -15,11 +16,23 @@ export default function ManageEventModal({ eventId, open, onClose, onOpenApplica
   const [budgetOpen, setBudgetOpen] = useState(false);
   const navigate = useNavigate();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // How payers get their money back when the event is deleted (see DELETE /events/:id).
+  const [refundMethod, setRefundMethod] = useState('none');
+  const [refundNote, setRefundNote] = useState('');
+  const [deleting, setDeleting] = useState(false);
   const [confirming, setConfirming] = useState(null); // 'cert' | 'toggle'
   useEffect(() => {
     setConfirming(null);
     if (!open) setBudgetOpen(false);
+    setConfirmDelete(false);
   }, [open, eventId]);
+  useEffect(() => {
+    if (!confirmDelete) return;
+    const e = evById(eventId);
+    setRefundMethod(e?.refundMethod || 'none');
+    setRefundNote(e?.refundNote || '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [confirmDelete, eventId]);
   if (!open || !eventId) return null;
   const ev = evById(eventId);
   if (!ev) return null;
@@ -30,9 +43,19 @@ export default function ManageEventModal({ eventId, open, onClose, onOpenApplica
   const isOpen = ev.status === 'open';
   const canToggle = ev.status === 'open' || ev.status === 'closed';
   const certIssued = ev.stage === 4; // certificates already opened to attendees
+  const teachers = (rosters[ev.id] || []).filter((p) => p.isTeacher).length; // take seats, pay nothing
 
   if (confirmDelete) {
-    const paidCount = (rosters[ev.id] || []).filter((p) => p.paymentStatus === 'paid').length;
+    // Everyone whose money is held: a slip sent or the payment confirmed.
+    const payers = (rosters[ev.id] || []).filter((p) => p.paymentStatus === 'paid' || p.paymentStatus === 'submitted');
+    const paidCount = Math.max(payers.length, ev.payerCount);
+    const needMethod = paidCount > 0 && refundMethod === 'none';
+    async function doDelete() {
+      setDeleting(true);
+      const ok = await deleteEvent(ev.id, paidCount > 0 ? { method: refundMethod, note: refundNote } : undefined);
+      setDeleting(false);
+      if (ok) onClose();
+    }
     return (
       <Modal open={open} onClose={onClose} size="sm">
         <ModalHead eyebrow="ยืนยันการลบ" icon="ti-alert-triangle" title="ลบกิจกรรมนี้?" onClose={onClose} />
@@ -41,14 +64,32 @@ export default function ManageEventModal({ eventId, open, onClose, onOpenApplica
             คุณกำลังจะลบ <strong>{ev.title}</strong> กิจกรรมจะถูกนำออกจากระบบ{ev.reg > 0 ? ` และผู้สมัคร ${ev.reg} คนจะได้รับแจ้งว่ากิจกรรมถูกยกเลิก` : ''} · ผู้ดูแลระบบจะได้รับแจ้งเตือน · ย้อนกลับไม่ได้
           </p>
           {paidCount > 0 && (
-            <p role="alert" style={{ fontSize: 13.5, color: '#b42318', lineHeight: 1.6, marginTop: 10 }}>
-              <i className="ti ti-alert-triangle" /> มีผู้ชำระค่าลงทะเบียนแล้ว {paidCount} คน ต้องดำเนินการคืนเงินให้ผู้สมัครเหล่านี้เอง ระบบไม่ได้คืนเงินให้อัตโนมัติ
-            </p>
+            <div className="del-refund">
+              <p role="alert" className="del-refund-warn">
+                <i className="ti ti-alert-triangle" /> มีผู้ชำระค่าลงทะเบียนแล้ว {paidCount} คน ต้องคืนเงินให้ทุกคน · เลือกวิธีคืนเงินเพื่อแจ้งผู้ชำระเงิน
+              </p>
+              <div className="del-refund-opts" role="radiogroup" aria-label="วิธีคืนเงิน">
+                {['department', 'transfer'].map((key) => (
+                  <label key={key} className={`dm-opt${refundMethod === key ? ' active' : ''}`}>
+                    <input type="radio" name="del-refund" checked={refundMethod === key} onChange={() => setRefundMethod(key)} />
+                    <i className={`ti ${REFUND_METHODS[key].icon}`} /> {REFUND_METHODS[key].label}
+                  </label>
+                ))}
+              </div>
+              <label className="del-refund-note">
+                รายละเอียดการคืนเงิน (วัน เวลา สถานที่ ช่องทางติดต่อ)
+                <textarea value={refundNote} maxLength={300} onChange={(e) => setRefundNote(e.target.value)}
+                  placeholder={refundMethod === 'transfer' ? 'เช่น โอนคืนภายใน 7 วันทำการ · สอบถามได้ที่ห้องภาควิชา' : 'เช่น รับคืนที่ห้องภาควิชา ชั้น 2 วันจันทร์–ศุกร์ 9:00–16:00 น.'} />
+              </label>
+              {refundMethod === 'transfer' && <p className="del-refund-hint"><i className="ti ti-info-circle" /> ผู้ที่ยังไม่ได้ให้พร้อมเพย์จะเห็นช่องให้กรอกในหน้า "ประวัติของฉัน"</p>}
+              <p className="del-refund-hint"><i className="ti ti-info-circle" /> กิจกรรมจะยังแสดงในหน้า "กิจกรรมทั้งหมด" ส่วนรอคืนเงิน จนกว่าจะกด "คืนเงินแล้ว" ครบทุกคน</p>
+            </div>
           )}
         </div>
         <div className="modal-foot">
+          {needMethod && <span className="diet-need" role="status"><i className="ti ti-info-circle" /> เลือกวิธีคืนเงินก่อนลบ</span>}
           <button className="btn btn-outline" onClick={() => setConfirmDelete(false)}>ยกเลิก</button>
-          <button className="btn btn-dark" onClick={() => { deleteEvent(ev.id); onClose(); }}><i className="ti ti-trash" /> ลบกิจกรรม</button>
+          <button className="btn btn-dark" disabled={needMethod || deleting} onClick={doDelete}><i className="ti ti-trash" /> {deleting ? 'กำลังลบ...' : 'ลบกิจกรรม'}</button>
         </div>
       </Modal>
     );
@@ -60,7 +101,7 @@ export default function ManageEventModal({ eventId, open, onClose, onOpenApplica
       <div className="modal-body">
         <div className="me-meta">
           <span><i className="ti ti-calendar-event" /> {ev.date}</span>
-          <span><i className="ti ti-users" /> {ev.reg} / {ev.cap} ที่นั่ง</span>
+          <span><i className="ti ti-users" /> {ev.reg} / {ev.cap} ที่นั่ง{teachers > 0 ? ` (อาจารย์ ${teachers} คน)` : ''}</span>
           {ev.regPeriod && <span><i className="ti ti-user-plus" /> รับสมัคร {ev.regPeriod}</span>}
           <span><i className="ti ti-route" /> {CYCLE[ev.stage]}</span>
           {ev.loanQty > 0 && <span><i className="ti ti-device-laptop" /> ขอยืมโน้ตบุ๊ก {ev.loanTaken} / {ev.loanQty} เครื่อง</span>}

@@ -29,3 +29,8 @@
 .tp.compact .tp-trigger>i:first-child{font-size:15px}
 .tp.compact .tp-caret{display:none}
 @media (prefers-reduced-motion:reduce){.tp-pop{animation:none}}
+
+/* DateInput reuses the trigger and the pop-up above, with a month calendar inside */
+.dp-pop{width:292px}
+.dp-pop .tp-foot{margin-top:6px}
+.field.has-error .dp .tp-trigger{border-color:#d93636}

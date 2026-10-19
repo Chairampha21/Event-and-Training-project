@@ -71,11 +71,11 @@ func SendGrouped(db querier, userID int64, icon, tone, title, message, link stri
 	}
 }
 
-// SendToStudents notifies every active student account (e.g. a new event opened).
+// SendToStudents notifies every active participant account (students and teachers) (e.g. a new event opened).
 func SendToStudents(db execer, icon, tone, title, message string, link ...string) {
 	_, err := db.Exec(
 		`INSERT INTO notifications (user_id, icon, tone, title, message, link)
-		 SELECT id, ?, ?, ?, ?, ? FROM users WHERE role = 'student' AND active = 1`,
+		 SELECT id, ?, ?, ?, ?, ? FROM users WHERE role IN ('student', 'teacher') AND active = 1`,
 		icon, tone, title, truncate(message), link0(link),
 	)
 	if err != nil {
@@ -110,6 +110,29 @@ func SendToRegistrants(db execer, eventID any, icon, tone, title, message, link 
 		}
 	}
 	if _, err := db.Exec(query, args...); err != nil {
+		log.Printf("notification write failed: %v", err)
+	}
+}
+
+// payerSQL matches registrations whose money the organizer holds: a slip was
+// sent or the payment confirmed, and it has not been given back yet.
+const payerSQL = `payment_status IN ('submitted', 'paid')`
+
+// SendToPayers notifies everyone whose money for the event is still held (see payerSQL).
+func SendToPayers(db execer, eventID any, icon, tone, title, message, link string) {
+	if _, err := db.Exec(`INSERT INTO notifications (user_id, icon, tone, title, message, link)
+		 SELECT user_id, ?, ?, ?, ?, ? FROM registrations WHERE event_id = ? AND `+payerSQL,
+		icon, tone, title, truncate(message), link0([]string{link}), eventID); err != nil {
+		log.Printf("notification write failed: %v", err)
+	}
+}
+
+// SendToNonPayers notifies the event's registrants (status 'registered') who
+// have no money held — the counterpart of SendToPayers.
+func SendToNonPayers(db execer, eventID any, icon, tone, title, message, link string) {
+	if _, err := db.Exec(`INSERT INTO notifications (user_id, icon, tone, title, message, link)
+		 SELECT user_id, ?, ?, ?, ?, ? FROM registrations WHERE event_id = ? AND status = 'registered' AND NOT `+payerSQL,
+		icon, tone, title, truncate(message), link0([]string{link}), eventID); err != nil {
 		log.Printf("notification write failed: %v", err)
 	}
 }

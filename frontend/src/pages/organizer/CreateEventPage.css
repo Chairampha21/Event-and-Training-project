@@ -76,3 +76,4 @@
 .ce-preview-frame{margin-bottom:6px}
 .ce-live-card{border-color:var(--c2-15)}
 .ce-side-divider{height:1px;background:var(--c2-08);margin:18px 0}
+.dm-opt.disabled{opacity:.45;cursor:not-allowed}

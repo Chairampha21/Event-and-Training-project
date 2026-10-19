@@ -205,9 +205,10 @@ func (h *RegistrationsHandler) RegisterForEvent(c *gin.Context) {
 	}
 
 	// A paid event starts each registration as 'pending' until the organizer
-	// confirms the payment; a free event has nothing to pay ('none').
+	// confirms the payment; a free event has nothing to pay ('none'). Teachers
+	// never pay: they register so the organizer knows how many seats they take.
 	paymentStatus := "none"
-	if fee.Valid && fee.Float64 > 0 {
+	if fee.Valid && fee.Float64 > 0 && claims.Role != "teacher" {
 		paymentStatus = "pending"
 	}
 	res, err := tx.Exec(
@@ -669,8 +670,12 @@ type myRegistrationRow struct {
 	SlipTransferredAt models.NullString `json:"slip_transferred_at"`
 	SlipAmount        models.NullFloat  `json:"slip_amount"`
 	RejectReason      models.NullString `json:"payment_reject_reason"`
+	RefundedAt        models.NullString `json:"refunded_at"`
+	RefundPromptPay   models.NullString `json:"refund_promptpay"`
 	Fee               models.NullFloat  `json:"fee"`
 	PaymentInfo       models.NullString `json:"payment_info"`
+	RefundMethod      string            `json:"refund_method"`
+	RefundNote        models.NullString `json:"refund_note"`
 	AttendeeNote      models.NullString `json:"attendee_note"`
 	AttendMode        string            `json:"attend_mode"`
 	OnlineLink        models.NullString `json:"online_link"`
@@ -686,7 +691,7 @@ type myRegistrationRow struct {
 func (h *RegistrationsHandler) MyRegistrations(c *gin.Context) {
 	claims, _ := middleware.CurrentUser(c)
 	rows, err := h.DB.Query(
-		`SELECT r.id, r.status, r.checked_in, r.checked_in_at, r.registered_at, r.wants_laptop, r.food_allergy, r.dietary_pref, r.payment_status, r.slip_transferred_at, r.slip_amount, r.payment_reject_reason, e.fee, e.payment_info, e.attendee_note, e.attend_mode, e.online_link,
+		`SELECT r.id, r.status, r.checked_in, r.checked_in_at, r.registered_at, r.wants_laptop, r.food_allergy, r.dietary_pref, r.payment_status, r.slip_transferred_at, r.slip_amount, r.payment_reject_reason, r.refunded_at, r.refund_promptpay, e.fee, e.payment_info, e.refund_method, e.refund_note, e.attendee_note, e.attend_mode, e.online_link,
 		        e.id, e.title, e.category, e.date_start, e.date_end, e.event_dates, e.time_range, e.status, e.place, e.organizer_name,
 		        DATE_FORMAT(e.reg_end, '%Y-%m-%d'), `+cancellableSQL+`, e.is_listed = 0
 		 FROM registrations r JOIN events e ON e.id = r.event_id
@@ -703,7 +708,7 @@ func (h *RegistrationsHandler) MyRegistrations(c *gin.Context) {
 		var r myRegistrationRow
 		var checkedIn int
 		var eventDates sql.NullString
-		if err := rows.Scan(&r.ID, &r.Status, &checkedIn, &r.CheckedInAt, &r.RegisteredAt, &r.WantsLaptop, &r.FoodAllergy, &r.DietaryPref, &r.PaymentStatus, &r.SlipTransferredAt, &r.SlipAmount, &r.RejectReason, &r.Fee, &r.PaymentInfo, &r.AttendeeNote, &r.AttendMode, &r.OnlineLink,
+		if err := rows.Scan(&r.ID, &r.Status, &checkedIn, &r.CheckedInAt, &r.RegisteredAt, &r.WantsLaptop, &r.FoodAllergy, &r.DietaryPref, &r.PaymentStatus, &r.SlipTransferredAt, &r.SlipAmount, &r.RejectReason, &r.RefundedAt, &r.RefundPromptPay, &r.Fee, &r.PaymentInfo, &r.RefundMethod, &r.RefundNote, &r.AttendeeNote, &r.AttendMode, &r.OnlineLink,
 			&r.EventID, &r.Title, &r.Category, &r.DateStart, &r.DateEnd, &eventDates, &r.TimeRange, &r.EventStatus, &r.Place, &r.OrganizerName,
 			&r.RegEnd, &r.CanCancel, &r.EventCancelled); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
@@ -757,7 +762,10 @@ type rosterRow struct {
 	SlipAmount        models.NullFloat  `json:"slip_amount"`
 	SlipSubmittedAt   models.NullString `json:"slip_submitted_at"`
 	RejectReason      models.NullString `json:"payment_reject_reason"`
+	RefundedAt        models.NullString `json:"refunded_at"`
+	RefundPromptPay   models.NullString `json:"refund_promptpay"` // where to transfer a refund; organizer/admin only
 	StudentID         models.NullString `json:"student_id"`
+	Role              string            `json:"role"` // a teacher stays on the roster but off the sign-in sheet and reports
 }
 
 // EventRoster is the organizer/admin roster view for one event — the check-in modal's data source.
@@ -786,7 +794,8 @@ func (h *RegistrationsHandler) EventRoster(c *gin.Context) {
 	rows, err := h.DB.Query(
 		`SELECT r.id, r.status, r.checked_in, r.checked_in_at, r.registered_at, r.wants_laptop, r.food_allergy, r.dietary_pref, r.payment_status,
 		        r.slip_url IS NOT NULL, r.slip_transferred_at, r.slip_amount, r.slip_submitted_at, r.payment_reject_reason,
-		        u.id, u.name, u.email, u.student_id
+		        r.refunded_at, r.refund_promptpay,
+		        u.id, u.name, u.email, u.student_id, u.role
 		 FROM registrations r JOIN users u ON u.id = r.user_id
 		 WHERE r.event_id = ? ORDER BY u.name ASC`, c.Param("id"),
 	)
@@ -802,7 +811,8 @@ func (h *RegistrationsHandler) EventRoster(c *gin.Context) {
 		var checkedIn int
 		if err := rows.Scan(&r.ID, &r.Status, &checkedIn, &r.CheckedInAt, &r.RegisteredAt, &r.WantsLaptop, &r.FoodAllergy, &r.DietaryPref, &r.PaymentStatus,
 			&r.HasSlip, &r.SlipTransferredAt, &r.SlipAmount, &r.SlipSubmittedAt, &r.RejectReason,
-			&r.UserID, &r.Name, &r.Email, &r.StudentID); err != nil {
+			&r.RefundedAt, &r.RefundPromptPay,
+			&r.UserID, &r.Name, &r.Email, &r.StudentID, &r.Role); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 			return
 		}
@@ -852,13 +862,22 @@ const maxSlipLen = 3_000_000 // ~2 MB image once base64-encoded
 // be sent again while it is still unconfirmed (e.g. after a rejection).
 func (h *RegistrationsHandler) SubmitSlip(c *gin.Context) {
 	var body struct {
-		Slip          string  `json:"slip"`
-		TransferredAt string  `json:"transferred_at"` // "2006-01-02T15:04", Thai local time
-		Amount        float64 `json:"amount"`
+		Slip            string  `json:"slip"`
+		TransferredAt   string  `json:"transferred_at"` // "2006-01-02T15:04", Thai local time
+		Amount          float64 `json:"amount"`
+		RefundPromptPay string  `json:"refund_promptpay"` // required when the event refunds by transfer
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลไม่ถูกต้อง"})
 		return
+	}
+	promptPay := ""
+	if strings.TrimSpace(body.RefundPromptPay) != "" {
+		var ok bool
+		if promptPay, ok = normalizePromptPay(body.RefundPromptPay); !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": promptPayError})
+			return
+		}
 	}
 	if !(strings.HasPrefix(body.Slip, "data:image/png;base64,") || strings.HasPrefix(body.Slip, "data:image/jpeg;base64,")) || len(body.Slip) > maxSlipLen {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "สลิปต้องเป็นรูป JPG หรือ PNG ขนาดไม่เกิน 2 MB"})
@@ -888,11 +907,12 @@ func (h *RegistrationsHandler) SubmitSlip(c *gin.Context) {
 		organizerID sql.NullInt64
 		slipEventID int64
 		listed      bool
+		refundBy    string
 	)
 	err = h.DB.QueryRow(
-		`SELECT r.user_id, r.payment_status, e.title, e.organizer_id, e.id, e.is_listed
+		`SELECT r.user_id, r.payment_status, e.title, e.organizer_id, e.id, e.is_listed, e.refund_method
 		 FROM registrations r JOIN events e ON e.id = r.event_id WHERE r.id = ?`, c.Param("id"),
-	).Scan(&ownerID, &status, &title, &organizerID, &slipEventID, &listed)
+	).Scan(&ownerID, &status, &title, &organizerID, &slipEventID, &listed, &refundBy)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบรายการลงทะเบียน"})
 		return
@@ -914,15 +934,20 @@ func (h *RegistrationsHandler) SubmitSlip(c *gin.Context) {
 	case "none":
 		c.JSON(http.StatusBadRequest, gin.H{"error": "กิจกรรมนี้ไม่มีค่าลงทะเบียนที่ต้องชำระ"})
 		return
-	case "paid":
+	case "paid", "refunded":
 		c.JSON(http.StatusBadRequest, gin.H{"error": "ผู้จัดยืนยันการชำระเงินของคุณแล้ว"})
+		return
+	}
+	if refundBy == "transfer" && promptPay == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "กิจกรรมนี้คืนเงินด้วยการโอน กรุณากรอกพร้อมเพย์สำหรับรับเงินคืน"})
 		return
 	}
 
 	if _, err := h.DB.Exec(
 		`UPDATE registrations SET payment_status = 'submitted', slip_url = ?, slip_transferred_at = ?, slip_amount = ?,
-		        slip_submitted_at = NOW(), payment_reject_reason = NULL WHERE id = ?`,
-		body.Slip, when.Format("2006-01-02 15:04:05"), body.Amount, c.Param("id"),
+		        slip_submitted_at = NOW(), payment_reject_reason = NULL,
+		        refund_promptpay = COALESCE(?, refund_promptpay) WHERE id = ?`,
+		body.Slip, when.Format("2006-01-02 15:04:05"), body.Amount, nullIfEmpty(promptPay), c.Param("id"),
 	); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 		return
@@ -985,7 +1010,7 @@ func (h *RegistrationsHandler) GetSlip(c *gin.Context) {
 	}
 	// For whoever checks it: the very same slip image sent for another
 	// registration — a reused slip is the commonest way to pay once and register twice.
-	if claims.Role != "student" {
+	if !isParticipant(claims.Role) {
 		type dup struct {
 			Name  string `json:"name"`
 			Event string `json:"event"`
@@ -1015,6 +1040,8 @@ func (h *RegistrationsHandler) GetSlip(c *gin.Context) {
 //	confirm — payment accepted (with or without a slip, e.g. paid in cash)
 //	reject  — the slip cannot be accepted; a reason is required and shown to the payer
 //	reset   — undo a confirmation or rejection
+//	refund  — the money was given back (from 'paid' or 'submitted')
+//	unrefund — undo a refund marked by mistake (back to 'paid')
 func (h *RegistrationsHandler) SetPayment(c *gin.Context) {
 	var body struct {
 		Action string `json:"action"`
@@ -1025,7 +1052,9 @@ func (h *RegistrationsHandler) SetPayment(c *gin.Context) {
 		return
 	}
 	reason := truncateRunes(strings.TrimSpace(body.Reason), 200)
-	if body.Action != "confirm" && body.Action != "reject" && body.Action != "reset" {
+	switch body.Action {
+	case "confirm", "reject", "reset", "refund", "unrefund":
+	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลไม่ถูกต้อง"})
 		return
 	}
@@ -1060,6 +1089,14 @@ func (h *RegistrationsHandler) SetPayment(c *gin.Context) {
 	}
 	if current == "none" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "รายการนี้ไม่มีค่าลงทะเบียนที่ต้องชำระ"})
+		return
+	}
+	if body.Action == "refund" || body.Action == "unrefund" {
+		h.setRefunded(c, body.Action == "refund", current, title, studentID, claims.UserID)
+		return
+	}
+	if current == "refunded" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "คืนเงินรายการนี้แล้ว · ยกเลิกการคืนเงินก่อนหากต้องการแก้ไข"})
 		return
 	}
 
@@ -1100,6 +1137,99 @@ func (h *RegistrationsHandler) SetPayment(c *gin.Context) {
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{"payment_status": next})
+}
+
+// setRefunded marks a payer's money as given back (or takes that back).
+func (h *RegistrationsHandler) setRefunded(c *gin.Context, on bool, current, title string, payerID, byUserID int64) {
+	if on && current != "paid" && current != "submitted" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "คืนเงินได้เฉพาะผู้ที่ชำระเงินแล้ว"})
+		return
+	}
+	if !on && current != "refunded" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "รายการนี้ยังไม่ได้คืนเงิน"})
+		return
+	}
+	next := "paid"
+	if on {
+		next = "refunded"
+	}
+	if _, err := h.DB.Exec(
+		`UPDATE registrations SET payment_status = ?, refunded_at = IF(? = 'refunded', NOW(), NULL),
+		        paid_at = COALESCE(paid_at, NOW()) WHERE id = ?`, next, next, c.Param("id"),
+	); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
+		return
+	}
+	if on {
+		activitylog.Log(h.DB, &byUserID, "UPDATE", "คืนเงิน: "+title)
+		notify.Send(h.DB, payerID, "ti-receipt-refund", notify.ToneAccent, "ได้รับเงินคืนแล้ว", title+" · ผู้จัดบันทึกว่าคืนเงินให้คุณเรียบร้อย", "/my-registrations")
+	} else {
+		activitylog.Log(h.DB, &byUserID, "UPDATE", "ยกเลิกการบันทึกคืนเงิน: "+title)
+		notify.Send(h.DB, payerID, "ti-receipt", notify.ToneWarn, "สถานะการคืนเงินถูกแก้ไข", title+" · ผู้จัดยกเลิกการบันทึกว่าคืนเงินแล้ว · ติดต่อผู้จัดหากมีข้อสงสัย", "/my-registrations")
+	}
+	c.JSON(http.StatusOK, gin.H{"payment_status": next})
+}
+
+const promptPayError = "พร้อมเพย์ต้องเป็นเบอร์มือถือ 10 หลัก หรือเลขประจำตัวประชาชน 13 หลัก"
+
+// normalizePromptPay keeps the digits of a PromptPay ID and checks it is a
+// mobile number (10 digits starting with 0) or a citizen ID (13 digits).
+func normalizePromptPay(s string) (string, bool) {
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case r == ' ' || r == '-':
+		default:
+			return "", false
+		}
+	}
+	d := b.String()
+	return d, (len(d) == 10 && d[0] == '0') || len(d) == 13
+}
+
+// SetRefundAccount lets a payer give (or correct) the PromptPay their refund
+// should go to — e.g. when the organizer switched to refunding by transfer
+// after they had paid.
+func (h *RegistrationsHandler) SetRefundAccount(c *gin.Context) {
+	var body struct {
+		PromptPay string `json:"refund_promptpay"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลไม่ถูกต้อง"})
+		return
+	}
+	promptPay, ok := normalizePromptPay(body.PromptPay)
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": promptPayError})
+		return
+	}
+	var ownerID int64
+	var status string
+	err := h.DB.QueryRow(`SELECT user_id, payment_status FROM registrations WHERE id = ?`, c.Param("id")).Scan(&ownerID, &status)
+	if err == sql.ErrNoRows {
+		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบรายการลงทะเบียน"})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
+		return
+	}
+	claims, _ := middleware.CurrentUser(c)
+	if ownerID != claims.UserID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "แก้ไขได้เฉพาะรายการลงทะเบียนของตนเอง"})
+		return
+	}
+	if status == "none" || status == "refunded" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "รายการนี้ไม่มีเงินที่ต้องคืน"})
+		return
+	}
+	if _, err := h.DB.Exec(`UPDATE registrations SET refund_promptpay = ? WHERE id = ?`, promptPay, c.Param("id")); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"refund_promptpay": promptPay})
 }
 
 // truncateRunes cuts s to at most n characters (not bytes — Thai text is multi-byte).

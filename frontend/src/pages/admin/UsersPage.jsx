@@ -5,7 +5,7 @@ import Modal, { ModalHead } from '../../components/ui/Modal';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import { initials } from '../../utils/initials';
 
-const ROLES = ['admin', 'organizer', 'student'];
+const ROLES = ['admin', 'organizer', 'teacher', 'student'];
 const EMPTY = { name: '', email: '', role: 'student', dept: '' };
 
 export default function UsersPage() {
@@ -19,6 +19,7 @@ export default function UsersPage() {
   const admins = users.filter((u) => u.role === 'admin').length;
   const organizers = users.filter((u) => u.role === 'organizer').length;
   const students = users.filter((u) => u.role === 'student').length;
+  const teachers = users.filter((u) => u.role === 'teacher').length;
 
   function openNew() { setEditingId(null); setForm(EMPTY); setFormOpen(true); }
   function openEdit(u) { setEditingId(u.id); setForm({ name: u.name, email: u.email, role: u.role, dept: u.dept }); setFormOpen(true); }
@@ -42,7 +43,7 @@ export default function UsersPage() {
         <div className="ph-inner">
           <div>
             <h1>จัดการผู้ใช้งาน &amp; สิทธิ์การเข้าถึง</h1>
-            <p>เพิ่ม แก้ไข ลบบัญชีผู้ใช้ และกำหนดบทบาท (ผู้ดูแลระบบ / ผู้จัดกิจกรรม / นักศึกษา) ให้ผู้ใช้แต่ละคน</p>
+            <p>เพิ่ม แก้ไข ลบบัญชีผู้ใช้ และกำหนดบทบาท (ผู้ดูแลระบบ / ผู้จัดกิจกรรม / อาจารย์ / นักศึกษา) ให้ผู้ใช้แต่ละคน</p>
           </div>
         </div>
       </div>
@@ -65,9 +66,9 @@ export default function UsersPage() {
             <div className="sc-value">{students} <small>บัญชี</small></div>
           </div>
           <div className="stat-card">
-            <div className="sc-top"><div className="sc-icon"><i className="ti ti-mail-check" /></div></div>
-            <div className="sc-label">ยืนยันด้วย @silpakorn.edu</div>
-            <div className="sc-value">100<small>%</small></div>
+            <div className="sc-top"><div className="sc-icon"><i className="ti ti-school" /></div></div>
+            <div className="sc-label">อาจารย์</div>
+            <div className="sc-value">{teachers} <small>บัญชี</small></div>
           </div>
         </div>
 
@@ -84,7 +85,7 @@ export default function UsersPage() {
                   <tr key={u.id}>
                     <td>
                       <div className="ev-cell">
-                        <div className={`ev-thumb ${u.role === 'organizer' ? 'alt' : u.role === 'student' ? 'dark' : ''}`}>{initials(u.name)}</div>
+                        <div className={`ev-thumb ${u.role === 'organizer' ? 'alt' : u.role === 'student' || u.role === 'teacher' ? 'dark' : ''}`}>{initials(u.name)}</div>
                         <div><div className="ev-title">{u.name}</div><div className="ev-sub">{u.email}</div></div>
                       </div>
                     </td>

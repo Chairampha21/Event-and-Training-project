@@ -2,7 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider } from './context/AppContext';
 import { useEvents } from './hooks/useEvents';
-import { ROLE_LANDING } from './utils/constants';
+import { ROLE_LANDING, PARTICIPANT_ROLES } from './utils/constants';
 import AppLayout from './layouts/AppLayout';
 import NotFound from './components/common/NotFound';
 import ProtectedRoute from './components/common/ProtectedRoute';
@@ -38,10 +38,10 @@ function Routed() {
       <Route path="/" element={<RootRedirect />} />
 
       <Route element={<AppLayout />}>
-        <Route element={<ProtectedRoute roles={['student', 'organizer']} />}>
+        <Route element={<ProtectedRoute roles={[...PARTICIPANT_ROLES, 'organizer']} />}>
           <Route path="/home" element={<HomePage />} />
         </Route>
-        <Route element={<ProtectedRoute roles={['student']} />}>
+        <Route element={<ProtectedRoute roles={PARTICIPANT_ROLES} />}>
           <Route path="/my-registrations" element={<MyRegistrationsPage />} />
           <Route path="/certificates" element={<CertificatesPage />} />
           <Route path="/evaluate/:eventId" element={<EvaluationFormPage />} />
@@ -62,7 +62,7 @@ function Routed() {
           <Route path="/admin/users" element={<UsersPage />} />
           <Route path="/admin/activity-log" element={<ActivityLogPage />} />
         </Route>
-        <Route element={<ProtectedRoute roles={['student', 'organizer', 'admin']} />}>
+        <Route element={<ProtectedRoute roles={[...PARTICIPANT_ROLES, 'organizer', 'admin']} />}>
           <Route path="/profile" element={<ProfilePage />} />
         </Route>
         <Route path="*" element={<NotFound />} />

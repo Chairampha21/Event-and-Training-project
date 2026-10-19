@@ -81,6 +81,7 @@
 .up-av{width:32px;height:32px;border-radius:50%;background:var(--c2);color:var(--white);display:grid;place-items:center;font-weight:700;font-size:12px;flex-shrink:0}
 .up-av.organizer{background:var(--c1)}
 .up-av.student{background:var(--c4)}
+.up-av.teacher{background:var(--c3)}
 .up-info{display:flex;flex-direction:column;line-height:1.15}
 .up-name{font-size:13.5px;font-weight:700;color:var(--c4)}
 .up-role{font-size:11px}
@@ -90,6 +91,7 @@
 .pf-avatar{width:96px;height:96px;border-radius:50%;background:var(--c2);color:var(--white);display:grid;place-items:center;font-size:34px;font-weight:700;flex-shrink:0;box-shadow:0 10px 24px -12px rgba(42,34,98,.6);margin-bottom:6px}
 .pf-avatar.organizer{background:var(--c1)}
 .pf-avatar.student{background:var(--c4)}
+.pf-avatar.teacher{background:var(--c3)}
 .pf-name{font-size:19px;font-weight:700;color:var(--c4);line-height:1.3;overflow-wrap:anywhere}
 .pf-facts{width:100%;margin:14px 0 0;padding-top:14px;border-top:1px solid var(--c2-08);display:flex;flex-direction:column;gap:12px;text-align:left}
 .pf-facts dt{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--c4-60);margin-bottom:2px}
@@ -108,6 +110,7 @@
 .role-tag{font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:1px 7px;border-radius:99px;background:var(--c2-08);color:var(--c2)}
 .role-tag.organizer{background:var(--c1-12);color:var(--c1)}
 .role-tag.student{background:var(--c4-12);color:var(--c4)}
+.role-tag.teacher{background:var(--c3-15);color:var(--c3)}
 .btn-logout{width:38px;height:38px;border-radius:9px;display:grid;place-items:center;color:var(--c4-60);border:1px solid var(--c2-10)}
 .btn-logout:hover{background:var(--c4-12);color:var(--c4)}
 .btn-logout i{font-size:18px}

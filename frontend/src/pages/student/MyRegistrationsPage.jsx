@@ -57,10 +57,12 @@ export default function MyRegistrationsPage() {
           <div className="ph-top">
             <div className="avatar">{(session?.name || '').slice(0, 1)}</div>
             <div className="ph-info">
-              <span className="ph-role"><i className="ti ti-school" /> นักศึกษาปัจจุบัน</span>
+              <span className="ph-role"><i className="ti ti-school" /> {session?.role === 'teacher' ? 'อาจารย์' : 'นักศึกษาปัจจุบัน'}</span>
               <div className="ph-name">{session?.name}</div>
               <div className="ph-id">
-                <span><i className="ti ti-id" /> {session?.student_id}</span>
+                {session?.role === 'teacher'
+                  ? session?.dept && <span><i className="ti ti-briefcase" /> {session.dept}</span>
+                  : <span><i className="ti ti-id" /> {session?.student_id}</span>}
                 <span><i className="ti ti-mail" /> {session?.email}</span>
               </div>
             </div>
@@ -128,8 +130,8 @@ export default function MyRegistrationsPage() {
                       <span><i className="ti ti-map-pin" /> {r.place}</span>
                     </div>
                     <div className="hi-note"><i className="ti ti-calendar-off" /> ผู้จัดยกเลิกกิจกรรมนี้แล้ว · ไม่ต้องเข้าร่วม{['pending', 'rejected'].includes(r.paymentStatus) ? ' และไม่ต้องชำระเงิน' : ''}</div>
-                    {(r.paymentStatus === 'paid' || r.paymentStatus === 'submitted') && (
-                      <div className="hi-note"><i className="ti ti-receipt-refund" /> คุณ{r.paymentStatus === 'paid' ? 'ชำระค่าลงทะเบียนแล้ว' : 'ส่งสลิปค่าลงทะเบียนไว้แล้ว'} · ติดต่อผู้จัดกิจกรรม{r.org ? ` (${r.org})` : ''} เพื่อขอคืนเงิน</div>
+                    {['paid', 'submitted', 'refunded'].includes(r.paymentStatus) && (
+                      <div style={{ marginTop: 9 }}><PaymentBox fee={r.fee} info={r.paymentInfo} reg={r} refundMethod={r.refundMethod} refundNote={r.refundNote} cancelled /></div>
                     )}
                   </div>
                   <div className="hi-actions">
@@ -150,10 +152,16 @@ export default function MyRegistrationsPage() {
                     <span><i className="ti ti-route" /> Cycle: {CYCLE[r.stage]}</span>
                   </div>
                   {['pending', 'submitted', 'rejected'].includes(r.paymentStatus) && (
-                    <div style={{ marginTop: 9 }}><PaymentBox fee={r.fee} info={r.paymentInfo} reg={r} /></div>
+                    <div style={{ marginTop: 9 }}><PaymentBox fee={r.fee} info={r.paymentInfo} reg={r} refundMethod={r.refundMethod} refundNote={r.refundNote} cancelled={r.cancelled} /></div>
                   )}
-                  {r.paymentStatus === 'paid' && (
+                  {r.paymentStatus === 'paid' && r.refundMethod === 'none' && (
                     <div className="hi-note info"><i className="ti ti-circle-check-filled" /> ชำระค่าลงทะเบียนแล้ว</div>
+                  )}
+                  {r.paymentStatus === 'paid' && r.refundMethod !== 'none' && (
+                    <div style={{ marginTop: 9 }}><PaymentBox fee={r.fee} info={r.paymentInfo} reg={r} refundMethod={r.refundMethod} refundNote={r.refundNote} /></div>
+                  )}
+                  {r.paymentStatus === 'refunded' && (
+                    <div className="hi-note info"><i className="ti ti-receipt-refund" /> ได้รับเงินคืนแล้ว</div>
                   )}
                   {r.onlineLink && (r.status === 'registered' || r.status === 'attended') && (
                     <div style={{ marginTop: 9 }}><OnlineJoinLink url={r.onlineLink} /></div>

@@ -9,6 +9,8 @@ import TimeInput from '../../components/ui/TimeInput';
 import { formatTimeRange, parseTimeRange } from '../../utils/timeFormat';
 import PosterUpload from '../../features/events/components/PosterUpload';
 import EventDetailModal from '../../features/events/components/EventDetailModal';
+import DateInput from '../../components/ui/DateInput';
+import { REFUND_METHODS } from '../../features/events/components/PaymentBox';
 import { parseMoney, formatBaht } from '../../utils/money';
 
 import Modal, { ModalHead } from '../../components/ui/Modal';
@@ -34,6 +36,9 @@ const BUDGET_ERROR_STYLE = { color: '#b91c1c', fontWeight: 600 };
 // Starter template for a new event's evaluation form — organizers can freely
 // edit, remove, or add to these before publishing (or skip entirely and set
 // it up later from the same edit form).
+// Fewest seats an event can take (each side of a hybrid event); the server checks it too.
+const MIN_SEATS = 2;
+
 const COORDINATOR_OPTIONS = [
   'ผศ.ดร.สิรักข์ แก้วจำนงค์',
   'ผศ.โอภาส วงษ์ทวีทรัพย์',
@@ -156,6 +161,11 @@ export default function CreateEventPage() {
   const [feeOn, setFeeOn] = useState(editing?.fee > 0);
   const [feeText, setFeeText] = useState(editing?.fee > 0 ? String(editing.fee) : '');
   const [paymentInfo, setPaymentInfo] = useState(editing?.paymentInfo || '');
+  // How paid money is given back. Can change later, but not to "no refund"
+  // once people have paid on the promise of one (the server enforces it too).
+  const [refundMethod, setRefundMethod] = useState(editing?.refundMethod || 'none');
+  const [refundNote, setRefundNote] = useState(editing?.refundNote || '');
+  const refundLocked = !!editing && editing.payerCount > 0 && editing.refundMethod !== 'none';
   const feeValue = parseMoney(feeText);
   const [detailPreviewOpen, setDetailPreviewOpen] = useState(false);
 
@@ -373,14 +383,13 @@ export default function CreateEventPage() {
     if (attendMode === 'hybrid') {
       const on = seats(capOnsite);
       const ol = seats(capOnline);
-      if (Number.isNaN(on)) return at('capOnsite', 'กรุณาระบุจำนวนที่รับ Onsite เป็นจำนวนเต็มตั้งแต่ 0 ขึ้นไป');
-      if (Number.isNaN(ol)) return at('capOnline', 'กรุณาระบุจำนวนที่รับ Online เป็นจำนวนเต็มตั้งแต่ 0 ขึ้นไป');
-      if (on + ol < 1) return at('capOnsite', 'จำนวนที่รับรวมต้องมีอย่างน้อย 1 คน');
+      if (!(on >= MIN_SEATS)) return at('capOnsite', `กรุณาระบุจำนวนที่รับ Onsite เป็นจำนวนเต็มตั้งแต่ ${MIN_SEATS} ขึ้นไป`);
+      if (!(ol >= MIN_SEATS)) return at('capOnline', `กรุณาระบุจำนวนที่รับ Online เป็นจำนวนเต็มตั้งแต่ ${MIN_SEATS} ขึ้นไป`);
       if (editing && on < editing.regOnsite) return at('capOnsite', `มีผู้สมัครแบบ Onsite แล้ว ${editing.regOnsite} คน จึงลดต่ำกว่านี้ไม่ได้`);
       if (editing && ol < editing.regOnline) return at('capOnline', `มีผู้สมัครแบบ Online แล้ว ${editing.regOnline} คน จึงลดต่ำกว่านี้ไม่ได้`);
     } else {
       const n = seats(cap);
-      if (!(n >= 1)) return at('cap', 'กรุณาระบุจำนวนที่รับเป็นจำนวนเต็มตั้งแต่ 1 ขึ้นไป');
+      if (!(n >= MIN_SEATS)) return at('cap', `กรุณาระบุจำนวนที่รับเป็นจำนวนเต็มตั้งแต่ ${MIN_SEATS} ขึ้นไป`);
       if (editing && n < editing.reg) return at('cap', `มีผู้สมัครแล้ว ${editing.reg} คน จึงลดจำนวนที่รับต่ำกว่านี้ไม่ได้`);
     }
     if (attendMode !== 'onsite' && !onlineLink.trim()) return at('link', 'กรุณาระบุลิงก์เข้าร่วมออนไลน์');
@@ -433,6 +442,8 @@ export default function CreateEventPage() {
       askDietary,
       fee: feeOn && feeValue > 0 ? feeValue : 0,
       paymentInfo: feeOn ? paymentInfo : '',
+      refundMethod: feeOn ? refundMethod : 'none',
+      refundNote: feeOn ? refundNote : '',
       capOnsite: attendMode === 'hybrid' ? parseInt(capOnsite, 10) || 0 : undefined,
       capOnline: attendMode === 'hybrid' ? parseInt(capOnline, 10) || 0 : undefined,
       onlineLink: attendMode !== 'onsite' ? onlineLink.trim() : undefined,
@@ -516,6 +527,8 @@ export default function CreateEventPage() {
     askDietary,
     fee: feeOn && feeValue > 0 ? feeValue : 0,
     paymentInfo: feeOn ? paymentInfo.trim() : '',
+    refundMethod: feeOn ? refundMethod : 'none',
+    refundNote: feeOn ? refundNote.trim() : '',
   };
 
   return (
@@ -655,7 +668,7 @@ export default function CreateEventPage() {
               <div className="form-row three">
                 <div className={`field${errCls('date')}`} data-field="date">
                   <label>วันที่จัด <span className="req">*</span></label>
-                  <div className="with-icon"><i className="ti ti-calendar-event" /><input type="date" value={dateIso} min={minFor(editing?.dateStart)} onChange={(e) => setDateIso(e.target.value)} /></div>
+                  <DateInput value={dateIso} min={minFor(editing?.dateStart)} onChange={setDateIso} icon="ti-calendar-event" aria-label="วันที่จัดกิจกรรม" />
                   {errMsg('date')}
                 </div>
                 <div className="field">
@@ -675,12 +688,12 @@ export default function CreateEventPage() {
             <div className="form-row">
               <div className={`field${errCls('regStart')}`} data-field="regStart">
                 <label>เปิดรับสมัคร {!editing && <span className="req">*</span>}</label>
-                <div className="with-icon"><i className="ti ti-calendar-plus" /><input type="date" value={regStartIso} min={minFor(editing?.regStart)} max={regEndIso || eventLastIso || undefined} onChange={(e) => setRegStartIso(e.target.value)} /></div>
+                <DateInput value={regStartIso} min={minFor(editing?.regStart)} max={regEndIso || eventLastIso || undefined} onChange={setRegStartIso} icon="ti-calendar-plus" aria-label="วันเปิดรับสมัคร" />
                 {errMsg('regStart')}
               </div>
               <div className={`field${errCls('regEnd')}`} data-field="regEnd">
                 <label>ปิดรับสมัคร {!editing && <span className="req">*</span>}</label>
-                <div className="with-icon"><i className="ti ti-calendar-x" /><input type="date" value={regEndIso} min={regStartIso > minFor(editing?.regEnd) ? regStartIso : minFor(editing?.regEnd)} max={eventLastIso || undefined} onChange={(e) => setRegEndIso(e.target.value)} /></div>
+                <DateInput value={regEndIso} min={regStartIso > minFor(editing?.regEnd) ? regStartIso : minFor(editing?.regEnd)} max={eventLastIso || undefined} onChange={setRegEndIso} icon="ti-calendar-x" aria-label="วันปิดรับสมัคร" />
                 {errMsg('regEnd')}
               </div>
             </div>
@@ -697,13 +710,13 @@ export default function CreateEventPage() {
                 <div className={`field${errCls('place')}`} data-field="place"><label>สถานที่ <span className="req">*</span></label><div className="with-icon"><i className="ti ti-map-pin" /><input type="text" value={place} onChange={(e) => setPlace(e.target.value)} placeholder="ระบุอาคารและห้องที่จัดกิจกรรม" /></div>{errMsg('place')}</div>
               )}
               {attendMode !== 'hybrid' && (
-                <div className={`field${errCls('cap')}`} data-field="cap"><label>จำนวนที่รับ <span className="req">*</span></label><div className="with-icon"><i className="ti ti-users" /><input type="number" min={Math.max(1, editing?.reg || 0)} step="1" value={cap} onChange={(e) => setCap(e.target.value)} placeholder="ระบุจำนวนที่รับทั้งหมด" /></div>{errMsg('cap')}</div>
+                <div className={`field${errCls('cap')}`} data-field="cap"><label>จำนวนที่รับ <span className="req">*</span></label><div className="with-icon"><i className="ti ti-users" /><input type="number" min={Math.max(MIN_SEATS, editing?.reg || 0)} step="1" value={cap} onChange={(e) => setCap(e.target.value)} placeholder="ระบุจำนวนที่รับทั้งหมด" /></div>{errMsg('cap')}</div>
               )}
             </div>
             {attendMode === 'hybrid' && (
               <div className="form-row">
-                <div className={`field${errCls('capOnsite')}`} data-field="capOnsite"><label><i className="ti ti-building" style={{ fontSize: 14, verticalAlign: -2, color: 'var(--c2)' }} /> จำนวน Onsite <span className="req">*</span></label><div className="with-icon"><i className="ti ti-users" /><input type="number" min={editing?.regOnsite || 0} step="1" value={capOnsite} onChange={(e) => setCapOnsite(e.target.value)} placeholder="ระบุจำนวนที่รับ Onsite" /></div>{errMsg('capOnsite')}</div>
-                <div className={`field${errCls('capOnline')}`} data-field="capOnline"><label><i className="ti ti-broadcast" style={{ fontSize: 14, verticalAlign: -2, color: 'var(--c1)' }} /> จำนวน Online <span className="req">*</span></label><div className="with-icon"><i className="ti ti-users" /><input type="number" min={editing?.regOnline || 0} step="1" value={capOnline} onChange={(e) => setCapOnline(e.target.value)} placeholder="ระบุจำนวนที่รับ Online" /></div>{errMsg('capOnline')}</div>
+                <div className={`field${errCls('capOnsite')}`} data-field="capOnsite"><label><i className="ti ti-building" style={{ fontSize: 14, verticalAlign: -2, color: 'var(--c2)' }} /> จำนวน Onsite <span className="req">*</span></label><div className="with-icon"><i className="ti ti-users" /><input type="number" min={Math.max(MIN_SEATS, editing?.regOnsite || 0)} step="1" value={capOnsite} onChange={(e) => setCapOnsite(e.target.value)} placeholder="ระบุจำนวนที่รับ Onsite" /></div>{errMsg('capOnsite')}</div>
+                <div className={`field${errCls('capOnline')}`} data-field="capOnline"><label><i className="ti ti-broadcast" style={{ fontSize: 14, verticalAlign: -2, color: 'var(--c1)' }} /> จำนวน Online <span className="req">*</span></label><div className="with-icon"><i className="ti ti-users" /><input type="number" min={Math.max(MIN_SEATS, editing?.regOnline || 0)} step="1" value={capOnline} onChange={(e) => setCapOnline(e.target.value)} placeholder="ระบุจำนวนที่รับ Online" /></div>{errMsg('capOnline')}</div>
               </div>
             )}
             {attendMode !== 'onsite' && (
@@ -744,6 +757,30 @@ export default function CreateEventPage() {
                     <span className="helper budget-hint"><i className="ti ti-info-circle" /> แสดงให้ผู้สมัครเห็นในรายละเอียดกิจกรรมและตอนยืนยันการสมัคร · ระบบไม่ได้รับชำระเงินเอง คุณเป็นผู้ตรวจและกด "ยืนยันชำระเงิน" ในรายชื่อผู้สมัคร</span>
                   </div>
                 </div>
+                <div className="form-row full" style={{ marginTop: 14, marginBottom: 0 }}>
+                  <div className="field">
+                    <label>การคืนเงิน</label>
+                    <div className="attend-mode-pick" role="radiogroup" aria-label="การคืนเงิน">
+                      {Object.entries(REFUND_METHODS).map(([key, m]) => (
+                        <label key={key} className={`dm-opt${refundMethod === key ? ' active' : ''}${key === 'none' && refundLocked ? ' disabled' : ''}`} title={key === 'none' && refundLocked ? 'มีผู้ชำระเงินแล้วโดยแจ้งว่าจะได้เงินคืน' : m.hint}>
+                          <input type="radio" name="refund-method" checked={refundMethod === key} disabled={key === 'none' && refundLocked} onChange={() => setRefundMethod(key)} />
+                          <i className={`ti ${m.icon}`} /> {m.label}
+                        </label>
+                      ))}
+                    </div>
+                    <span className="helper budget-hint"><i className="ti ti-info-circle" /> {REFUND_METHODS[refundMethod].hint} · แก้ไขทีหลังได้ ผู้ที่ชำระแล้วจะได้รับแจ้งเตือน{refundLocked ? ' · มีผู้ชำระเงินแล้ว จึงเปลี่ยนเป็น "ไม่คืนเงิน" ไม่ได้' : ''}</span>
+                  </div>
+                </div>
+                {refundMethod !== 'none' && (
+                  <div className="form-row full" style={{ marginBottom: 0 }}>
+                    <div className="field">
+                      <label htmlFor="ce-refundnote">รายละเอียดการคืนเงิน</label>
+                      <textarea id="ce-refundnote" value={refundNote} maxLength={300} onChange={(e) => setRefundNote(e.target.value)} style={{ minHeight: 64 }}
+                        placeholder={refundMethod === 'department' ? 'เช่น คืนมัดจำตอนลงทะเบียนหน้างาน · ไม่มาร่วมกิจกรรมไม่คืนมัดจำ' : 'เช่น โอนคืนภายใน 7 วันหลังจบกิจกรรม'} />
+                      <span className="helper budget-hint"><i className="ti ti-info-circle" /> ไม่บังคับ · บอกว่าคืนเมื่อไร ที่ไหน และเงื่อนไข เช่น ไม่มาร่วมไม่คืนมัดจำ</span>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

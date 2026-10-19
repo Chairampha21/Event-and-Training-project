@@ -110,6 +110,7 @@ function adaptEvent(be) {
     fee: be.fee > 0 ? be.fee : 0, // registration fee in baht; 0 = free
     paymentInfo: be.payment_info || '', // how to pay (account / PromptPay, deadline)
     askDietary: !!be.ask_dietary, // food is served: registrants are asked about allergies / dietary needs
+    issueCert: be.issue_certificate !== false, // gives certificates; off = one signature box per day on the sign-in sheet
     budgetPlanned: be.budget_planned ?? null, // baht from department income (เงินรายได้); null = not set
     budgetOther: be.budget_other ?? null, // baht from other sources (แหล่งอื่น); null = not set
     budgetTotal: be.budget_total ?? null, // both sources added up; null when neither is set
@@ -152,6 +153,7 @@ function toEventBody(payload) {
   if (payload.attendeeNote !== undefined) body.attendee_note = payload.attendeeNote.trim() || null;
   if (payload.loanQty !== undefined) body.loan_laptop_qty = payload.loanQty || null;
   if (payload.askDietary !== undefined) body.ask_dietary = !!payload.askDietary;
+  if (payload.issueCert !== undefined) body.issue_certificate = !!payload.issueCert;
   if (payload.fee !== undefined) {
     body.fee = payload.fee > 0 ? payload.fee : null;
     body.payment_info = payload.fee > 0 ? (payload.paymentInfo || '').trim() || null : null;
@@ -208,6 +210,8 @@ function adaptMyRegistration(r) {
     canCancel: r.can_cancel === undefined ? null : !!r.can_cancel,
     // The organizer deleted the event after this registration (it is kept as history).
     cancelled: !!r.event_cancelled,
+    issueCert: r.issue_certificate !== false, // the event gives certificates
+    evaluated: !!r.evaluated, // the evaluation was submitted
   };
 }
 
@@ -648,10 +652,11 @@ export function AppProvider({ children }) {
       // Safe to repeat: the server notifies each attendee only once, so doing
       // it again reaches only the people checked in since the last time.
       const already = evById(id)?.stage === 4;
+      const noCert = evById(id)?.issueCert === false;
       const res = await api.put(`/events/${id}`, { cycle_stage: 4, status: 'done' });
       const notified = res.cert_notified || 0;
       await refreshEvents();
-      if (!already) pushToast('เปิดให้รับเกียรติบัตรแล้ว', `แจ้งเตือนผู้เข้าร่วม ${notified} คน · ต้องทำแบบประเมินก่อนดาวน์โหลด`);
+      if (!already) pushToast(noCert ? 'ปิดกิจกรรมแล้ว' : 'เปิดให้รับเกียรติบัตรแล้ว', noCert ? `แจ้งเตือนผู้เข้าร่วม ${notified} คน ให้ทำแบบประเมิน` : `แจ้งเตือนผู้เข้าร่วม ${notified} คน · ต้องทำแบบประเมินก่อนดาวน์โหลด`);
       else if (notified > 0) pushToast('แจ้งเตือนผู้ที่เช็คอินเพิ่มแล้ว', `${notified} คน · ผู้ที่เคยได้รับแจ้งเตือนแล้วไม่ได้รับซ้ำ`);
       else pushToast('ออกเกียรติบัตรไปแล้ว', 'ไม่มีผู้เช็คอินเพิ่ม จึงไม่ได้ส่งแจ้งเตือนซ้ำ');
     } catch (err) {
@@ -704,12 +709,12 @@ export function AppProvider({ children }) {
         ));
       await api.post(`/registrations/${reg.regId}/evaluation`, { answers, custom_answers: customAnswers });
       await Promise.all([refreshMyRegistrations(), refreshNotifications()]);
-      pushToast('ส่งแบบประเมินสำเร็จ', 'เกียรติบัตรของคุณพร้อมดาวน์โหลดแล้ว');
+      pushToast('ส่งแบบประเมินสำเร็จ', evById(id)?.issueCert === false ? 'ขอบคุณที่ร่วมทำแบบประเมิน' : 'เกียรติบัตรของคุณพร้อมดาวน์โหลดแล้ว');
     } catch (err) {
       pushToast('ส่งแบบประเมินไม่สำเร็จ', err.message, 'warn');
       throw err;
     }
-  }, [regs, refreshMyRegistrations, refreshNotifications, pushToast]);
+  }, [regs, evById, refreshMyRegistrations, refreshNotifications, pushToast]);
 
   const downloadCert = useCallback((id) => {
     const ev = evById(id);

@@ -210,7 +210,8 @@ func (h *EvaluationsHandler) Submit(c *gin.Context) {
 	var userID int64
 	var regStatus string
 	var eventID int64
-	if err := h.DB.QueryRow(`SELECT user_id, status, event_id FROM registrations WHERE id = ?`, regID).Scan(&userID, &regStatus, &eventID); err == sql.ErrNoRows {
+	var issueCert bool
+	if err := h.DB.QueryRow(`SELECT r.user_id, r.status, r.event_id, e.issue_certificate FROM registrations r JOIN events e ON e.id = r.event_id WHERE r.id = ?`, regID).Scan(&userID, &regStatus, &eventID, &issueCert); err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบรายการลงทะเบียน"})
 		return
 	} else if err != nil {
@@ -325,9 +326,10 @@ func (h *EvaluationsHandler) Submit(c *gin.Context) {
 	// certificate — so issue it here in the same transaction, rather than
 	// requiring a separate organizer-only call the student has no access to.
 	// Only fires once (attended -> certified); re-submits can't happen anyway
-	// since evaluations are unique per registration.
+	// since evaluations are unique per registration. An event that gives no
+	// certificates only records the evaluation.
 	var certCode string
-	if regStatus == "attended" {
+	if regStatus == "attended" && issueCert {
 		certCode, err = nextCertCode(tx)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})

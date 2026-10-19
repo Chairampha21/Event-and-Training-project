@@ -101,6 +101,11 @@ CREATE TABLE events (
   -- Existing databases: ALTER TABLE events ADD COLUMN ask_dietary TINYINT(1) NOT NULL DEFAULT 0 AFTER loan_laptop_qty;
   --                     ALTER TABLE registrations ADD COLUMN food_allergy VARCHAR(300) NULL AFTER wants_laptop, ADD COLUMN dietary_pref VARCHAR(100) NULL AFTER food_allergy;
   ask_dietary           TINYINT(1)    NOT NULL DEFAULT 0,
+  -- issue_certificate: the event gives certificates. When off, the sign-in
+  -- sheet has one signature box per day instead of morning/afternoon, and
+  -- certificates cannot be issued.
+  -- Existing databases: ALTER TABLE events ADD COLUMN issue_certificate TINYINT(1) NOT NULL DEFAULT 1 AFTER ask_dietary;
+  issue_certificate     TINYINT(1)    NOT NULL DEFAULT 1,
 
   -- fee: registration fee in baht; NULL or 0 = free. payment_info: how to pay
   -- (account / PromptPay, deadline), shown to people registering. Payment is

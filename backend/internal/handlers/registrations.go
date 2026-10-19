@@ -458,11 +458,13 @@ func (h *RegistrationsHandler) recordCheckin(regID, day string, dayNo int, days 
 	return reg, checked[regKey(regID)], nil
 }
 
-// SelfCheckIn lets a registrant who attends online mark themselves present for
-// today by opening the link the organizer shows in the online room. The link
-// carries a key for that event and day; on top of it the person must be signed
-// in, registered as attending online, and the day must be today — a link
-// passed around afterwards, or to someone not registered, does nothing.
+// SelfCheckIn lets a registrant mark themselves present for today by opening
+// the link the organizer shows in the room or the online meeting — the same
+// link for people attending on site and online. The link carries a key for
+// that event and day; on top of it the person must be signed in and registered
+// for the event, and the day must be today — a link passed around afterwards,
+// or to someone not registered, does nothing. The organizer can still tick
+// people in by hand.
 func (h *RegistrationsHandler) SelfCheckIn(c *gin.Context) {
 	var body struct {
 		Date string `json:"date"`
@@ -506,18 +508,14 @@ func (h *RegistrationsHandler) SelfCheckIn(c *gin.Context) {
 	}
 
 	var regID int64
-	var status, via string
-	err = h.DB.QueryRow(`SELECT id, status, attend_via FROM registrations WHERE event_id = ? AND user_id = ?`, eventID, claims.UserID).Scan(&regID, &status, &via)
+	var status string
+	err = h.DB.QueryRow(`SELECT id, status FROM registrations WHERE event_id = ? AND user_id = ?`, eventID, claims.UserID).Scan(&regID, &status)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusForbidden, gin.H{"error": "คุณไม่ได้ลงทะเบียนกิจกรรมนี้", "title": title})
 		return
 	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
-		return
-	}
-	if via != "online" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "ลิงก์นี้สำหรับผู้เข้าร่วมแบบออนไลน์ · ผู้เข้าร่วมที่สถานที่จัดลงชื่อกับผู้จัดหน้างาน", "title": title})
 		return
 	}
 	_, dates, err := h.recordCheckin(strconv.FormatInt(regID, 10), body.Date, dayNo, days, true, status, title, claims.UserID)
@@ -679,8 +677,10 @@ type myRegistrationRow struct {
 	Place             models.NullString `json:"place"`
 	OrganizerName     models.NullString `json:"organizer_name"`
 	RegEnd            models.NullString `json:"reg_end"`
-	CanCancel         bool              `json:"can_cancel"`      // may still withdraw by themselves (see cancellableSQL)
-	EventCancelled    bool              `json:"event_cancelled"` // the organizer deleted the event after this registration
+	CanCancel         bool              `json:"can_cancel"`        // may still withdraw by themselves (see cancellableSQL)
+	EventCancelled    bool              `json:"event_cancelled"`   // the organizer deleted the event after this registration
+	IssueCertificate  bool              `json:"issue_certificate"` // the event gives certificates
+	Evaluated         bool              `json:"evaluated"`         // this registration's evaluation was submitted
 }
 
 func (h *RegistrationsHandler) MyRegistrations(c *gin.Context) {
@@ -688,7 +688,8 @@ func (h *RegistrationsHandler) MyRegistrations(c *gin.Context) {
 	rows, err := h.DB.Query(
 		`SELECT r.id, r.status, r.checked_in, r.checked_in_at, r.registered_at, r.wants_laptop, r.food_allergy, r.dietary_pref, r.payment_status, r.slip_transferred_at, r.slip_amount, r.payment_reject_reason, e.fee, e.payment_info, e.attendee_note, e.attend_mode, e.online_link,
 		        e.id, e.title, e.category, e.date_start, e.date_end, e.event_dates, e.time_range, e.status, e.place, e.organizer_name,
-		        DATE_FORMAT(e.reg_end, '%Y-%m-%d'), `+cancellableSQL+`, e.is_listed = 0
+		        DATE_FORMAT(e.reg_end, '%Y-%m-%d'), `+cancellableSQL+`, e.is_listed = 0,
+		        e.issue_certificate, EXISTS (SELECT 1 FROM evaluations ev WHERE ev.registration_id = r.id)
 		 FROM registrations r JOIN events e ON e.id = r.event_id
 		 WHERE r.user_id = ? ORDER BY r.registered_at DESC`, claims.UserID,
 	)
@@ -705,7 +706,7 @@ func (h *RegistrationsHandler) MyRegistrations(c *gin.Context) {
 		var eventDates sql.NullString
 		if err := rows.Scan(&r.ID, &r.Status, &checkedIn, &r.CheckedInAt, &r.RegisteredAt, &r.WantsLaptop, &r.FoodAllergy, &r.DietaryPref, &r.PaymentStatus, &r.SlipTransferredAt, &r.SlipAmount, &r.RejectReason, &r.Fee, &r.PaymentInfo, &r.AttendeeNote, &r.AttendMode, &r.OnlineLink,
 			&r.EventID, &r.Title, &r.Category, &r.DateStart, &r.DateEnd, &eventDates, &r.TimeRange, &r.EventStatus, &r.Place, &r.OrganizerName,
-			&r.RegEnd, &r.CanCancel, &r.EventCancelled); err != nil {
+			&r.RegEnd, &r.CanCancel, &r.EventCancelled, &r.IssueCertificate, &r.Evaluated); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 			return
 		}

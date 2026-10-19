@@ -44,6 +44,7 @@ export default function ManageEventModal({ eventId, open, onClose, onOpenApplica
   const canToggle = ev.status === 'open' || ev.status === 'closed';
   const certIssued = ev.stage === 4; // certificates already opened to attendees
   const teachers = (rosters[ev.id] || []).filter((p) => p.isTeacher).length; // take seats, pay nothing
+  const noCert = ev?.issueCert === false; // closed the same way, without certificates
 
   if (confirmDelete) {
     // Everyone whose money is held: a slip sent or the payment confirmed.
@@ -143,10 +144,12 @@ export default function ManageEventModal({ eventId, open, onClose, onOpenApplica
           </button>
           {/* Issuing closes the event for good, so it waits for the last day (the server checks too). */}
           <button className="me-action" onClick={() => setConfirming('cert')} disabled={!certIssued && !ev.ended}>
-            <div className="me-ic"><i className={`ti ${certIssued ? 'ti-circle-check' : 'ti-certificate'}`} /></div>
+            <div className="me-ic"><i className={`ti ${certIssued ? 'ti-circle-check' : noCert ? 'ti-flag' : 'ti-certificate'}`} /></div>
             <div className="me-tx">
-              <strong>{certIssued ? 'ออกเกียรติบัตรแล้ว' : 'ออกเกียรติบัตร'}</strong>
-              <span>{certIssued ? 'เปิดสิทธิ์แล้ว · กดเพื่อแจ้งเตือนผู้ที่เช็คอินเพิ่มหลังจากนั้น' : ev.ended ? 'เปิดสิทธิ์ให้ผู้เข้าร่วมที่เช็คอินแล้ว' : 'ออกได้เมื่อถึงวันสุดท้ายของกิจกรรม'}</span>
+              <strong>{noCert ? (certIssued ? 'ปิดกิจกรรมแล้ว' : 'ปิดกิจกรรม') : (certIssued ? 'ออกเกียรติบัตรแล้ว' : 'ออกเกียรติบัตร')}</strong>
+              <span>{noCert
+                ? (certIssued ? 'กดเพื่อแจ้งเตือนผู้ที่เช็คอินเพิ่มให้ทำแบบประเมิน' : ev.ended ? 'ยืนยันผลการเข้าร่วม (กิจกรรมนี้ไม่ออกเกียรติบัตร)' : 'ปิดได้เมื่อถึงวันสุดท้ายของกิจกรรม')
+                : (certIssued ? 'เปิดสิทธิ์แล้ว · กดเพื่อแจ้งเตือนผู้ที่เช็คอินเพิ่มหลังจากนั้น' : ev.ended ? 'เปิดสิทธิ์ให้ผู้เข้าร่วมที่เช็คอินแล้ว' : 'ออกได้เมื่อถึงวันสุดท้ายของกิจกรรม')}</span>
             </div>
             <i className="ti ti-chevron-right me-go" />
           </button>
@@ -167,17 +170,19 @@ export default function ManageEventModal({ eventId, open, onClose, onOpenApplica
       <div className="modal-foot"><button className="btn btn-outline" onClick={onClose}>ปิด</button></div>
       <ConfirmDialog
         open={confirming === 'cert'}
-        eyebrow={certIssued ? 'ออกเกียรติบัตรแล้ว' : 'ยืนยันการออกเกียรติบัตร'}
-        icon="ti-certificate"
-        title={certIssued ? 'แจ้งเตือนผู้ที่เช็คอินเพิ่ม?' : 'ออกเกียรติบัตรกิจกรรมนี้?'}
-        confirmLabel={certIssued ? 'แจ้งเตือนผู้ที่เช็คอินเพิ่ม' : 'ยืนยันออกเกียรติบัตร'}
-        confirmIcon={certIssued ? 'ti-bell' : 'ti-certificate'}
+        eyebrow={noCert ? (certIssued ? 'ปิดกิจกรรมแล้ว' : 'ยืนยันการปิดกิจกรรม') : (certIssued ? 'ออกเกียรติบัตรแล้ว' : 'ยืนยันการออกเกียรติบัตร')}
+        icon={noCert ? 'ti-flag' : 'ti-certificate'}
+        title={certIssued ? 'แจ้งเตือนผู้ที่เช็คอินเพิ่ม?' : noCert ? 'ปิดกิจกรรมนี้?' : 'ออกเกียรติบัตรกิจกรรมนี้?'}
+        confirmLabel={certIssued ? 'แจ้งเตือนผู้ที่เช็คอินเพิ่ม' : noCert ? 'ยืนยันปิดกิจกรรม' : 'ยืนยันออกเกียรติบัตร'}
+        confirmIcon={certIssued ? 'ti-bell' : noCert ? 'ti-flag' : 'ti-certificate'}
         size=""
         onConfirm={() => { issueCertificate(ev.id); onClose(); }}
         onCancel={() => setConfirming(null)}
       >
-        <p style={{ fontSize: 13.5, color: 'var(--c4-70)', lineHeight: 1.7 }}><strong style={{ color: 'var(--c4)' }}>{ev.title}</strong><br />{certIssued ? 'กิจกรรมนี้ออกเกียรติบัตรไปแล้ว · ยืนยันอีกครั้งจะแจ้งเตือนเฉพาะผู้ที่เช็คอินเพิ่มหลังจากนั้น ผู้ที่เคยได้รับแจ้งเตือนแล้วจะไม่ได้รับซ้ำ และไม่มีการออกเกียรติบัตรใบที่สอง' : 'ผู้เข้าร่วมที่เช็คอินแล้วจะได้รับสิทธิ์รับเกียรติบัตรและได้รับการแจ้งเตือน · ตรวจตัวอย่างด้านล่างก่อนยืนยัน'}</p>
-        <CertIssueReview ev={ev} onEdit={() => { onClose(); navigate('/create-event', { state: { editId: ev.id, section: 'cert' } }); }} />
+        <p style={{ fontSize: 13.5, color: 'var(--c4-70)', lineHeight: 1.7 }}><strong style={{ color: 'var(--c4)' }}>{ev.title}</strong><br />{noCert
+          ? (certIssued ? 'ปิดกิจกรรมไปแล้ว · ยืนยันอีกครั้งจะแจ้งเตือนให้ทำแบบประเมินเฉพาะผู้ที่เช็คอินเพิ่มหลังจากนั้น' : 'กิจกรรมนี้ไม่ออกเกียรติบัตร · ผู้ที่เช็คอินแล้วจะได้รับการแจ้งเตือนให้ทำแบบประเมิน และผู้ที่ไม่ได้เช็คอินจะถูกบันทึกว่าขาด')
+          : (certIssued ? 'กิจกรรมนี้ออกเกียรติบัตรไปแล้ว · ยืนยันอีกครั้งจะแจ้งเตือนเฉพาะผู้ที่เช็คอินเพิ่มหลังจากนั้น ผู้ที่เคยได้รับแจ้งเตือนแล้วจะไม่ได้รับซ้ำ และไม่มีการออกเกียรติบัตรใบที่สอง' : 'ผู้เข้าร่วมที่เช็คอินแล้วจะได้รับสิทธิ์รับเกียรติบัตรและได้รับการแจ้งเตือน · ตรวจตัวอย่างด้านล่างก่อนยืนยัน')}</p>
+        {!noCert && <CertIssueReview ev={ev} onEdit={() => { onClose(); navigate('/create-event', { state: { editId: ev.id, section: 'cert' } }); }} />}
       </ConfirmDialog>
       <ConfirmDialog
         open={confirming === 'toggle'}

@@ -55,6 +55,8 @@ export default function ApplicantsModal({ eventId, open, onClose, mode = 'list' 
   const { evById, rosters, toggleCheckin, setPaymentStatus, issueCertificate, pushToast } = useEvents();
   const navigate = useNavigate();
   const certIssued = evById(eventId)?.stage === 4; // certificates already opened to attendees
+  // An event without certificates is closed the same way, just without them.
+  const noCert = evById(eventId)?.issueCert === false;
   const [query, setQuery] = useState('');
   const [reviewRegId, setReviewRegId] = useState(null); // whose payment is being checked
   const [confirmCert, setConfirmCert] = useState(false);
@@ -127,10 +129,10 @@ export default function ApplicantsModal({ eventId, open, onClose, mode = 'list' 
   const reviewing = reviewRegId ? roster.find((p) => p.regId === reviewRegId) : null;
   const showDiet = !!ev?.askDietary || roster.some((p) => p.foodAllergy || p.dietaryPref);
 
-  // Online attendees check themselves in: this is the link for the day being
-  // checked, to show in the online room. It only works on that day, for a
-  // signed-in registrant who attends online.
-  const selfLinkDay = (onlineOnly || (hybrid && group === 'online')) ? activeDay : '';
+  // Attendees check themselves in, on site and online alike: this is the link
+  // for the day being checked, to show in the room or the online meeting. It
+  // only works on that day, for a signed-in registrant of the event.
+  const selfLinkDay = activeDay || '';
   const selfKey = selfLinkDay ? roster[0]?.checkinKeys?.[selfLinkDay] : '';
   const selfLink = selfKey ? `${window.location.origin}/checkin/${eventId}?d=${selfLinkDay}&k=${selfKey}` : '';
 
@@ -387,17 +389,17 @@ export default function ApplicantsModal({ eventId, open, onClose, mode = 'list' 
               <div className="ci-toolrow">
                 {selfLinkDay && (
                   <div className="ci-selflink">
-                    <div className="ci-selflink-title"><i className="ti ti-link" /> ลิงก์เช็คชื่อออนไลน์ · {multiDay ? `วันที่ ${days.indexOf(selfLinkDay) + 1} · ` : ''}{formatThaiDate(selfLinkDay)}</div>
+                    <div className="ci-selflink-title"><i className="ti ti-link" /> ลิงก์เช็คชื่อ · {multiDay ? `วันที่ ${days.indexOf(selfLinkDay) + 1} · ` : ''}{formatThaiDate(selfLinkDay)}</div>
                     {selfLink ? (
                       <div className="ci-selflink-row">
-                        <input type="text" readOnly value={selfLink} onFocus={(e) => e.target.select()} aria-label="ลิงก์เช็คชื่อออนไลน์" />
+                        <input type="text" readOnly value={selfLink} onFocus={(e) => e.target.select()} aria-label="ลิงก์เช็คชื่อ" />
                         <button type="button" className="btn btn-primary" onClick={copySelfLink}><i className="ti ti-copy" /> คัดลอก</button>
                       </div>
                     ) : (
                       <p className="ci-hint" style={{ marginTop: 6 }}>ลิงก์จะแสดงเมื่อมีผู้สมัครอย่างน้อย 1 คน</p>
                     )}
                     <p className="ci-hint" style={{ marginTop: 8 }}>
-                      <i className="ti ti-info-circle" /> ส่งลิงก์นี้ในห้องออนไลน์ระหว่างกิจกรรม ผู้เข้าร่วมเปิดลิงก์แล้วระบบเช็คชื่อให้เอง · ใช้ได้เฉพาะวันที่ {formatThaiDate(selfLinkDay)} ต้องเข้าสู่ระบบ และต้องเป็นผู้ที่ลงทะเบียนแบบออนไลน์ · แต่ละวันใช้ลิงก์ต่างกัน · ยังติ๊กเช็คอินแทนได้จากรายชื่อด้านล่าง
+                      <i className="ti ti-info-circle" /> ส่งลิงก์นี้ในห้องออนไลน์หรือแสดงที่หน้างานระหว่างกิจกรรม ผู้เข้าร่วมทั้ง Onsite และ Online เปิดลิงก์แล้วระบบเช็คชื่อให้เอง · ใช้ได้เฉพาะวันที่ {formatThaiDate(selfLinkDay)} ต้องเข้าสู่ระบบ และต้องเป็นผู้ที่ลงทะเบียนกิจกรรมนี้ · แต่ละวันใช้ลิงก์ต่างกัน · ยังติ๊กเช็คอินแทนได้จากรายชื่อด้านล่าง
                     </p>
                   </div>
                 )}
@@ -407,7 +409,7 @@ export default function ApplicantsModal({ eventId, open, onClose, mode = 'list' 
                   </button>
                 </div>
                 <p className="ci-hint">
-                  <i className="ti ti-info-circle" /> ติ๊กเช็คอินให้ตรงกับผู้ที่มาเข้าร่วมจริงก่อนออกเกียรติบัตร{hybrid ? ' · เช็คอินแยกระหว่าง Onsite กับ Online' : ''}{multiDay ? ` · กิจกรรมนี้จัด ${days.length} วัน เช็คอินแยกทีละวัน ผู้ที่เข้าร่วมครบทุกวันจึงจะได้รับเกียรติบัตร` : ''}
+                  <i className="ti ti-info-circle" /> ติ๊กเช็คอินให้ตรงกับผู้ที่มาเข้าร่วมจริงก่อน{noCert ? 'ปิดกิจกรรม' : 'ออกเกียรติบัตร'}{hybrid ? ' · เช็คอินแยกระหว่าง Onsite กับ Online' : ''}{multiDay ? ` · กิจกรรมนี้จัด ${days.length} วัน เช็คอินแยกทีละวัน${noCert ? ' นับว่าเข้าร่วมเมื่อเช็คอินครบทุกวัน' : ' ผู้ที่เข้าร่วมครบทุกวันจึงจะได้รับเกียรติบัตร'}` : ''}
                 </p>
               </div>
             ) : (
@@ -421,7 +423,7 @@ export default function ApplicantsModal({ eventId, open, onClose, mode = 'list' 
                   <i className="ti ti-info-circle" />{' '}
                   {onlineOnly
                     ? 'กิจกรรมนี้จัดออนไลน์ จึงไม่มีใบลงชื่อให้ปริ้น · ผู้เข้าร่วมเช็คชื่อด้วยลิงก์ในเมนู "เช็คอินผู้เข้าร่วม"'
-                    : `ใช้ตรวจสอบผู้สมัคร การชำระเงิน และข้อมูลที่ต้องเตรียมหน้างาน · ไฟล์เป็นใบลงชื่อสำหรับปริ้น มีช่องเช้า/บ่ายใต้วันที่จัด${multiDay ? ` และแยกแผ่นงานวันละแผ่น (${days.length} วัน)` : ''}${hybrid ? ' · มีเฉพาะผู้เข้าร่วมที่สถานที่จัด ส่วนผู้เข้าร่วมออนไลน์เช็คชื่อด้วยลิงก์' : ''} · การเช็คอินอยู่ที่เมนู "เช็คอินผู้เข้าร่วม"`}
+                    : `ใช้ตรวจสอบผู้สมัคร การชำระเงิน และข้อมูลที่ต้องเตรียมหน้างาน · ไฟล์เป็นใบลงชื่อสำหรับปริ้น ${noCert ? 'มีช่องลงชื่อช่องเดียวใต้วันที่จัด (กิจกรรมนี้ไม่ออกเกียรติบัตร)' : 'มีช่องเช้า/บ่ายใต้วันที่จัด'}${multiDay ? ` และแยกแผ่นงานวันละแผ่น (${days.length} วัน)` : ''}${hybrid ? ' · มีเฉพาะผู้เข้าร่วมที่สถานที่จัด' : ''} · ผู้เข้าร่วมเช็คชื่อด้วยลิงก์ได้ทั้ง Onsite และ Online ที่เมนู "เช็คอินผู้เข้าร่วม"`}
                 </p>
               </div>
             )}
@@ -512,26 +514,30 @@ export default function ApplicantsModal({ eventId, open, onClose, mode = 'list' 
         <button className="btn btn-outline" onClick={onClose}>ปิด</button>
         {checkin && (
           <button className="btn btn-primary" onClick={() => setConfirmCert(true)} disabled={!certIssued && !ev?.ended}>
-            <i className={`ti ${certIssued ? 'ti-circle-check' : 'ti-certificate'}`} /> {certIssued ? 'ออกเกียรติบัตรแล้ว · แจ้งเตือนผู้ที่เช็คอินเพิ่ม' : ev?.ended ? 'เปิดสิทธิ์เกียรติบัตรให้ผู้เข้าร่วม' : 'ออกเกียรติบัตรได้เมื่อถึงวันสุดท้ายของกิจกรรม'}
+            <i className={`ti ${certIssued ? 'ti-circle-check' : noCert ? 'ti-flag' : 'ti-certificate'}`} /> {noCert
+              ? (certIssued ? 'ปิดกิจกรรมแล้ว · แจ้งเตือนผู้ที่เช็คอินเพิ่ม' : ev?.ended ? 'ยืนยันผลการเข้าร่วมและปิดกิจกรรม' : 'ปิดกิจกรรมได้เมื่อถึงวันสุดท้ายของกิจกรรม')
+              : (certIssued ? 'ออกเกียรติบัตรแล้ว · แจ้งเตือนผู้ที่เช็คอินเพิ่ม' : ev?.ended ? 'เปิดสิทธิ์เกียรติบัตรให้ผู้เข้าร่วม' : 'ออกเกียรติบัตรได้เมื่อถึงวันสุดท้ายของกิจกรรม')}
           </button>
         )}
       </div>
       <ConfirmDialog
         open={confirmCert}
-        eyebrow={certIssued ? 'ออกเกียรติบัตรแล้ว' : 'ยืนยันการออกเกียรติบัตร'}
-        icon="ti-certificate"
-        title={certIssued ? 'แจ้งเตือนผู้ที่เช็คอินเพิ่ม?' : 'เปิดสิทธิ์เกียรติบัตรให้ผู้เข้าร่วม?'}
-        confirmLabel={certIssued ? 'แจ้งเตือนผู้ที่เช็คอินเพิ่ม' : 'ยืนยันออกเกียรติบัตร'}
-        confirmIcon={certIssued ? 'ti-bell' : 'ti-certificate'}
+        eyebrow={noCert ? (certIssued ? 'ปิดกิจกรรมแล้ว' : 'ยืนยันการปิดกิจกรรม') : (certIssued ? 'ออกเกียรติบัตรแล้ว' : 'ยืนยันการออกเกียรติบัตร')}
+        icon={noCert ? 'ti-flag' : 'ti-certificate'}
+        title={certIssued ? 'แจ้งเตือนผู้ที่เช็คอินเพิ่ม?' : noCert ? 'ยืนยันผลการเข้าร่วมและปิดกิจกรรม?' : 'เปิดสิทธิ์เกียรติบัตรให้ผู้เข้าร่วม?'}
+        confirmLabel={certIssued ? 'แจ้งเตือนผู้ที่เช็คอินเพิ่ม' : noCert ? 'ยืนยันปิดกิจกรรม' : 'ยืนยันออกเกียรติบัตร'}
+        confirmIcon={certIssued ? 'ti-bell' : noCert ? 'ti-flag' : 'ti-certificate'}
         size=""
         onConfirm={() => { setConfirmCert(false); issueCertificate(eventId); onClose(); }}
         onCancel={() => setConfirmCert(false)}
       >
         <p style={{ fontSize: 13.5, color: 'var(--c4-70)', lineHeight: 1.7 }}>
           <strong style={{ color: 'var(--c4)' }}>{ev?.title}</strong><br />
-          {multiDay ? `เข้าร่วมครบ ${days.length} วัน` : 'เช็คอินแล้ว'} {roster.filter((p) => p.in).length} จาก {roster.length} คน{hybrid ? ' (รวม Onsite และ Online)' : ''} · {certIssued ? 'กิจกรรมนี้ออกเกียรติบัตรไปแล้ว ยืนยันอีกครั้งจะแจ้งเตือนเฉพาะผู้ที่เช็คอินเพิ่มหลังจากนั้น ผู้ที่เคยได้รับแจ้งเตือนแล้วจะไม่ได้รับซ้ำ' : 'ผู้ที่เช็คอินแล้วจะได้รับสิทธิ์รับเกียรติบัตรและได้รับการแจ้งเตือน · ตรวจตัวอย่างด้านล่างก่อนยืนยัน'}
+          {multiDay ? `เข้าร่วมครบ ${days.length} วัน` : 'เช็คอินแล้ว'} {roster.filter((p) => p.in).length} จาก {roster.length} คน{hybrid ? ' (รวม Onsite และ Online)' : ''} · {noCert
+            ? (certIssued ? 'ปิดกิจกรรมไปแล้ว ยืนยันอีกครั้งจะแจ้งเตือนให้ทำแบบประเมินเฉพาะผู้ที่เช็คอินเพิ่มหลังจากนั้น' : 'กิจกรรมนี้ไม่ออกเกียรติบัตร · ผู้ที่เช็คอินแล้วจะได้รับการแจ้งเตือนให้ทำแบบประเมิน และผู้ที่ไม่ได้เช็คอินจะถูกบันทึกว่าขาด')
+            : (certIssued ? 'กิจกรรมนี้ออกเกียรติบัตรไปแล้ว ยืนยันอีกครั้งจะแจ้งเตือนเฉพาะผู้ที่เช็คอินเพิ่มหลังจากนั้น ผู้ที่เคยได้รับแจ้งเตือนแล้วจะไม่ได้รับซ้ำ' : 'ผู้ที่เช็คอินแล้วจะได้รับสิทธิ์รับเกียรติบัตรและได้รับการแจ้งเตือน · ตรวจตัวอย่างด้านล่างก่อนยืนยัน')}
         </p>
-        {ev && <CertIssueReview ev={ev} onEdit={() => { setConfirmCert(false); onClose(); navigate('/create-event', { state: { editId: ev.id, section: 'cert' } }); }} />}
+        {ev && !noCert && <CertIssueReview ev={ev} onEdit={() => { setConfirmCert(false); onClose(); navigate('/create-event', { state: { editId: ev.id, section: 'cert' } }); }} />}
       </ConfirmDialog>
       <ConfirmDialog
         open={!!refundAsk}

@@ -264,6 +264,9 @@ export default function CreateEventPage() {
   const [pretestLink, setPretestLink] = useState(editing?.pretest?.link || '');
 
   const [certTemplate, setCertTemplate] = useState(editing?.certTemplate || null);
+  // Whether the event gives certificates at all. Off: nothing to set up here,
+  // and the sign-in sheet has one signature box per day instead of morning/afternoon.
+  const [issueCert, setIssueCert] = useState(editing ? editing.issueCert !== false : true);
   const [signerName, setSignerName] = useState(editing?.signer?.name || 'ผศ.ดร.สิรักข์ แก้วจำนงค์');
   const [signerTitle, setSignerTitle] = useState(editing?.signer?.title || 'หัวหน้าภาควิชาคอมพิวเตอร์');
   const [signature, setSignature] = useState(editing?.signer?.signature || null); // scanned signature (data: URL), optional
@@ -342,7 +345,7 @@ export default function CreateEventPage() {
     { label: 'ชื่อกิจกรรมและรายละเอียด', done: !!(title && desc) },
     { label: 'กำหนดวันที่และรูปแบบเข้าร่วม', done: !!previewDate && previewDate !== 'ยังไม่ระบุวันที่' && previewCap > 0 },
     { label: 'อัปโหลดโปสเตอร์กิจกรรม', done: !!poster },
-    { label: 'ตั้งค่าเกียรติบัตร (ผู้ลงนาม)', done: !!(signerName && signerTitle) },
+    { label: issueCert ? 'ตั้งค่าเกียรติบัตร (ผู้ลงนาม)' : 'เกียรติบัตร (ไม่ออก)', done: !issueCert || !!(signerName && signerTitle) },
   ];
 
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -440,6 +443,7 @@ export default function CreateEventPage() {
       attendeeNote: prepOn ? attendeeNote : '',
       loanQty: prepOn && loanAvailable ? loanQty : 0,
       askDietary,
+      issueCert,
       fee: feeOn && feeValue > 0 ? feeValue : 0,
       paymentInfo: feeOn ? paymentInfo : '',
       refundMethod: feeOn ? refundMethod : 'none',
@@ -525,6 +529,7 @@ export default function CreateEventPage() {
     loanQty: prepOn && loanAvailable && !loanQtyInvalid ? loanQty : 0,
     loanLeft: prepOn && loanAvailable && !loanQtyInvalid ? Math.max(0, loanQty - loanTaken) : 0,
     askDietary,
+    issueCert,
     fee: feeOn && feeValue > 0 ? feeValue : 0,
     paymentInfo: feeOn ? paymentInfo.trim() : '',
     refundMethod: feeOn ? refundMethod : 'none',
@@ -920,9 +925,13 @@ export default function CreateEventPage() {
             <div className="setup-head">
               <div className="setup-head-text">
                 <h2><span className="fc-num">8</span> เกียรติบัตร</h2>
-                <p className="fc-sub">อัปโหลด template (ไม่บังคับ) และตั้งค่าผู้ลงนาม · ระบบออกให้อัตโนมัติเมื่อผู้เข้าร่วมทำแบบประเมินสำเร็จ</p>
+                <p className="fc-sub">{issueCert
+                  ? 'อัปโหลด template (ไม่บังคับ) และตั้งค่าผู้ลงนาม · ระบบออกให้อัตโนมัติเมื่อผู้เข้าร่วมทำแบบประเมินสำเร็จ · ใบลงชื่อมีช่องเช้า/บ่าย'
+                  : 'กิจกรรมนี้ไม่ออกเกียรติบัตร · ใบลงชื่อมีช่องลงชื่อช่องเดียวต่อวัน'}</p>
               </div>
+              <button type="button" className={`switch${issueCert ? ' on' : ''}`} onClick={() => setIssueCert((o) => !o)} role="switch" aria-checked={issueCert} aria-label="ออกเกียรติบัตร" title="เปิด/ปิดการออกเกียรติบัตร" />
             </div>
+            {issueCert && (<>
             <CertTemplateUpload
               value={certTemplate}
               onChange={setCertTemplate}
@@ -944,6 +953,7 @@ export default function CreateEventPage() {
               <SignatureUpload value={signature} onChange={setSignature} />
               <span className="helper">ไม่บังคับ · แสดงเหนือชื่อผู้ลงนามบนเกียรติบัตร{certTemplate ? ' (ดูผลได้ในตัวอย่างด้านบน)' : ''}</span>
             </div>
+            </>)}
           </div>
 
           <div className="form-card setup-card">

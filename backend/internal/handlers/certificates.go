@@ -57,11 +57,12 @@ func (h *CertificatesHandler) Issue(c *gin.Context) {
 		status      string
 		title       string
 		studentID   int64
+		issueCert   bool
 	)
 	err := h.DB.QueryRow(
-		`SELECT e.organizer_id, r.status, e.title, r.user_id FROM registrations r JOIN events e ON e.id = r.event_id WHERE r.id = ?`,
+		`SELECT e.organizer_id, r.status, e.title, r.user_id, e.issue_certificate FROM registrations r JOIN events e ON e.id = r.event_id WHERE r.id = ?`,
 		regID,
-	).Scan(&organizerID, &status, &title, &studentID)
+	).Scan(&organizerID, &status, &title, &studentID, &issueCert)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบรายการลงทะเบียน"})
 		return
@@ -74,6 +75,10 @@ func (h *CertificatesHandler) Issue(c *gin.Context) {
 	claims, _ := middleware.CurrentUser(c)
 	if claims.Role != "admin" && !(organizerID.Valid && organizerID.Int64 == claims.UserID) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "ไม่มีสิทธิ์ออกเกียรติบัตร"})
+		return
+	}
+	if !issueCert {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "กิจกรรมนี้ไม่มีเกียรติบัตร"})
 		return
 	}
 	if status != "attended" && status != "certified" {

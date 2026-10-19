@@ -45,7 +45,7 @@ const eventFields = `
   day_mode, date_start, date_end, event_dates, event_times, time_range, reg_start, reg_end,
   attend_mode, place, online_link, capacity, capacity_onsite, capacity_online,
   budget_planned, budget_other, budget_actual,
-  attendee_note, loan_laptop_qty, ask_dietary, fee, payment_info, refund_method, refund_note,
+  attendee_note, loan_laptop_qty, ask_dietary, issue_certificate, fee, payment_info, refund_method, refund_note,
   ` + effectiveStatusSQL + ` AS status, cycle_stage,
   pretest_enabled, pretest_link, pretest_pass_pct, pretest_time_limit_min,
   cert_template_url, cert_signer_name, cert_signer_title, cert_signature_url, cert_layout,
@@ -88,7 +88,7 @@ func scanEvent(row interface{ Scan(dest ...any) error }) (models.Event, error) {
 		&e.DayMode, &e.DateStart, &e.DateEnd, &eventDates, &eventTimes, &e.TimeRange, &e.RegStart, &e.RegEnd,
 		&e.AttendMode, &e.Place, &e.OnlineLink, &e.Capacity, &e.CapacityOnsite, &e.CapacityOnline,
 		&e.BudgetPlanned, &e.BudgetOther, &e.BudgetActual,
-		&e.AttendeeNote, &e.LoanLaptopQty, &e.AskDietary, &e.Fee, &e.PaymentInfo, &e.RefundMethod, &e.RefundNote,
+		&e.AttendeeNote, &e.LoanLaptopQty, &e.AskDietary, &e.IssueCertificate, &e.Fee, &e.PaymentInfo, &e.RefundMethod, &e.RefundNote,
 		&e.Status, &e.CycleStage,
 		&pretestEnabled, &e.PretestLink, &e.PretestPassPct, &e.PretestTimeLimitMin,
 		&e.CertTemplateURL, &e.CertSignerName, &e.CertSignerTitle, &e.CertSignatureURL, &e.CertLayout,
@@ -224,6 +224,7 @@ type eventBody struct {
 	AttendeeNote        *string  `json:"attendee_note"`
 	LoanLaptopQty       *int     `json:"loan_laptop_qty"`
 	AskDietary          *bool    `json:"ask_dietary"`
+	IssueCertificate    *bool    `json:"issue_certificate"`
 	Fee                 *float64 `json:"fee"`
 	PaymentInfo         *string  `json:"payment_info"`
 	RefundMethod        *string  `json:"refund_method"`
@@ -714,18 +715,18 @@ func (h *EventsHandler) Create(c *gin.Context) {
 		day_mode, date_start, date_end, event_dates, event_times, time_range, reg_start, reg_end,
 		attend_mode, place, online_link, capacity, capacity_onsite, capacity_online,
 		budget_planned, budget_other,
-		attendee_note, loan_laptop_qty, ask_dietary, fee, payment_info, refund_method, refund_note,
+		attendee_note, loan_laptop_qty, ask_dietary, issue_certificate, fee, payment_info, refund_method, refund_note,
 		status, cycle_stage,
 		pretest_enabled, pretest_link, pretest_pass_pct, pretest_time_limit_min,
 		cert_template_url, cert_signer_name, cert_signer_title, cert_signature_url, cert_layout,
 		email_on_register, email_before_event, email_after_event
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		strings.TrimSpace(b.Title), b.Description, strings.TrimSpace(b.Category), b.Subcategory, b.PosterURL,
 		organizerID, b.OrganizerName,
 		b.DayMode, b.DateStart, b.DateEnd, eventDates, eventTimes, b.TimeRange, nullIfEmpty(regStart), nullIfEmpty(regEnd),
 		b.AttendMode, b.Place, b.OnlineLink, capacity, b.CapacityOnsite, b.CapacityOnline,
 		b.BudgetPlanned, b.BudgetOther,
-		nullIfEmpty(note), loanQty, b.AskDietary != nil && *b.AskDietary, fee, nullIfEmpty(payInfo), refundMethod, nullIfEmpty(refundNote),
+		nullIfEmpty(note), loanQty, b.AskDietary != nil && *b.AskDietary, b.IssueCertificate == nil || *b.IssueCertificate, fee, nullIfEmpty(payInfo), refundMethod, nullIfEmpty(refundNote),
 		status, cycleStage,
 		pretestEnabled, b.PretestLink, b.PretestPassPct, b.PretestTimeLimitMin,
 		b.CertTemplateURL, b.CertSignerName, b.CertSignerTitle, b.CertSignatureURL, b.CertLayout,
@@ -798,7 +799,7 @@ func (h *EventsHandler) Update(c *gin.Context) {
 		"reg_start": true, "reg_end": true, "event_dates": true, "event_times": true,
 		"attend_mode": true, "place": true, "online_link": true, "capacity": true, "capacity_onsite": true, "capacity_online": true,
 		"status": true, "cycle_stage": true, "budget_planned": true, "budget_other": true, "budget_actual": true,
-		"attendee_note": true, "loan_laptop_qty": true, "ask_dietary": true, "fee": true, "payment_info": true,
+		"attendee_note": true, "loan_laptop_qty": true, "ask_dietary": true, "issue_certificate": true, "fee": true, "payment_info": true,
 		"refund_method": true, "refund_note": true,
 		"pretest_enabled": true, "pretest_link": true, "pretest_pass_pct": true, "pretest_time_limit_min": true,
 		"cert_template_url": true, "cert_signer_name": true, "cert_signer_title": true, "cert_signature_url": true, "cert_layout": true,
@@ -866,7 +867,11 @@ func (h *EventsHandler) Update(c *gin.Context) {
 		}
 		raw["refund_note"] = nullIfEmpty(str)
 	}
-	if v, present := raw["ask_dietary"]; present {
+	for _, f := range []string{"ask_dietary", "issue_certificate"} {
+		v, present := raw[f]
+		if !present {
+			continue
+		}
 		if _, ok := v.(bool); !ok {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลไม่ถูกต้อง"})
 			return
@@ -1079,7 +1084,8 @@ func (h *EventsHandler) Update(c *gin.Context) {
 }
 
 // notifyCertOpen tells an event's attendees that the certificate is open and
-// the evaluation is waiting — each registration only once, so issuing the
+// the evaluation is waiting (only the evaluation, for an event that gives no
+// certificates) — each registration only once, so issuing the
 // certificates a second time reaches only the people checked in since.
 // Returns how many were notified this time.
 func (h *EventsHandler) notifyCertOpen(ev models.Event) int {
@@ -1104,9 +1110,12 @@ func (h *EventsHandler) notifyCertOpen(ev models.Event) int {
 		targets = append(targets, t)
 	}
 	rows.Close()
+	title, msg := "ทำแบบประเมินเพื่อรับเกียรติบัตร", ev.Title+" · กรุณาทำแบบประเมินกิจกรรมเพื่อรับเกียรติบัตร"
+	if !ev.IssueCertificate {
+		title, msg = "ทำแบบประเมินกิจกรรม", ev.Title+" · กรุณาทำแบบประเมินกิจกรรม"
+	}
 	for _, t := range targets {
-		notify.Send(tx, t.userID, "ti-clipboard-check", notify.ToneAccent,
-			"ทำแบบประเมินเพื่อรับเกียรติบัตร", ev.Title+" · กรุณาทำแบบประเมินกิจกรรมเพื่อรับเกียรติบัตร",
+		notify.Send(tx, t.userID, "ti-clipboard-check", notify.ToneAccent, title, msg,
 			fmt.Sprintf("/evaluate/%d", ev.ID))
 		if _, err := tx.Exec(`UPDATE registrations SET cert_notified_at = NOW() WHERE id = ?`, t.regID); err != nil {
 			return 0

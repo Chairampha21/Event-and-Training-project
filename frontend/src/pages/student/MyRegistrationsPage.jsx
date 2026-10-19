@@ -9,13 +9,20 @@ import CancelRegistrationButton from '../../features/events/components/CancelReg
 import { buddhistYearOf } from '../../utils/dateFormat';
 
 // The order the status filter is offered in: what still needs doing first.
-const STATUS_ORDER = ['registered', 'attended', 'certified', 'absent', 'cancelled'];
+const STATUS_ORDER = ['registered', 'attended', 'certified', 'evaluated', 'absent', 'cancelled'];
 
 // A registration whose event the organizer deleted before it took place reads
 // as cancelled — not "registered", with nothing left to pay, join or withdraw from.
 const CANCELLED_META = { label: 'กิจกรรมถูกยกเลิก', cls: 'ps-fail', ico: 'ti-calendar-off' };
-const statusOf = (r) => (r.cancelled && r.status === 'registered' ? 'cancelled' : r.status);
-const metaOf = (st) => (st === 'cancelled' ? CANCELLED_META : REG_STATUS_META[st]);
+// An event that gives no certificates never reaches "certified": once its
+// evaluation is in, the registration is simply done.
+const EVALUATED_META = { label: 'เข้าร่วมแล้ว · ทำแบบประเมินแล้ว', cls: REG_STATUS_META.certified.cls, ico: 'ti-circle-check' };
+const statusOf = (r) => {
+  if (r.cancelled && r.status === 'registered') return 'cancelled';
+  if (r.status === 'attended' && r.evaluated) return 'evaluated';
+  return r.status;
+};
+const metaOf = (st) => (st === 'cancelled' ? CANCELLED_META : st === 'evaluated' ? EVALUATED_META : REG_STATUS_META[st]);
 
 export default function MyRegistrationsPage() {
   const { regs, session } = useEvents();
@@ -71,7 +78,7 @@ export default function MyRegistrationsPage() {
             <div className="ph-stat"><div className="pi"><i className="ti ti-calendar-check" /></div><div><div className="pv">{regs.filter((r) => statusOf(r) !== 'cancelled').length} <small>รายการ</small></div><div className="pl">ลงทะเบียนปีการศึกษานี้</div></div></div>
             <div className="ph-stat"><div className="pi"><i className="ti ti-certificate" /></div><div><div className="pv">{certified} <small>ใบ</small></div><div className="pl">เกียรติบัตรที่ได้รับ</div></div></div>
             <div className="ph-stat"><div className="pi"><i className="ti ti-clock-hour-4" /></div><div><div className="pv">{attendedMin} <small>ครั้ง</small></div><div className="pl">เข้าร่วมกิจกรรมสะสม</div></div></div>
-            <div className="ph-stat"><div className="pi"><i className="ti ti-clipboard-check" /></div><div><div className="pv">{regs.filter((r) => r.status === 'attended').length} <small>รายการ</small></div><div className="pl">รอทำแบบประเมิน</div></div></div>
+            <div className="ph-stat"><div className="pi"><i className="ti ti-clipboard-check" /></div><div><div className="pv">{regs.filter((r) => statusOf(r) === 'attended').length} <small>รายการ</small></div><div className="pl">รอทำแบบประเมิน</div></div></div>
           </div>
         </div>
       </div>
@@ -100,7 +107,7 @@ export default function MyRegistrationsPage() {
             <button type="button" className={`filter-chip${statusFilter === 'all' ? ' active' : ''}`} aria-pressed={statusFilter === 'all'} onClick={() => setStatusFilter('all')}>
               <i className="ti ti-list" /> ทั้งหมด <b>{narrowed.length}</b>
             </button>
-            {STATUS_ORDER.filter((st) => metaOf(st) && (st !== 'cancelled' || regs.some((r) => statusOf(r) === 'cancelled'))).map((st) => (
+            {STATUS_ORDER.filter((st) => metaOf(st) && ((st !== 'cancelled' && st !== 'evaluated') || regs.some((r) => statusOf(r) === st))).map((st) => (
               <button type="button" key={st} className={`filter-chip${statusFilter === st ? ' active' : ''}`} aria-pressed={statusFilter === st} onClick={() => setStatusFilter(st)}>
                 <i className={`ti ${metaOf(st).ico}`} /> {metaOf(st).label} <b>{narrowed.filter((r) => statusOf(r) === st).length}</b>
               </button>
@@ -182,10 +189,10 @@ export default function MyRegistrationsPage() {
                     <div className="hi-note info"><i className="ti ti-tools-kitchen-2" /> {[r.foodAllergy && `แพ้: ${r.foodAllergy}`, r.dietaryPref].filter(Boolean).join(' · ')}</div>
                   )}
                   {r.daysTotal > 1 && r.daysAttended > 0 && r.daysAttended < r.daysTotal && (
-                    <div className="hi-note info"><i className="ti ti-calendar-check" /> เช็คอินแล้ว {r.daysAttended} จาก {r.daysTotal} วัน · ต้องเข้าร่วมครบทุกวันจึงจะได้รับเกียรติบัตร</div>
+                    <div className="hi-note info"><i className="ti ti-calendar-check" /> เช็คอินแล้ว {r.daysAttended} จาก {r.daysTotal} วัน · {r.issueCert ? 'ต้องเข้าร่วมครบทุกวันจึงจะได้รับเกียรติบัตร' : 'ต้องเข้าร่วมครบทุกวันจึงจะนับว่าเข้าร่วมกิจกรรม'}</div>
                   )}
-                  {r.status === 'attended' && (
-                    <div className="hi-note"><i className="ti ti-alert-circle" /> ต้องทำแบบประเมินกิจกรรมให้เสร็จก่อนจึงจะรับเกียรติบัตรได้</div>
+                  {r.status === 'attended' && !r.evaluated && (
+                    <div className="hi-note"><i className="ti ti-alert-circle" /> {r.issueCert ? 'ต้องทำแบบประเมินกิจกรรมให้เสร็จก่อนจึงจะรับเกียรติบัตรได้' : 'กรุณาทำแบบประเมินกิจกรรม · กิจกรรมนี้ไม่มีเกียรติบัตร'}</div>
                   )}
                 </div>
                 <div className="hi-actions">
@@ -194,7 +201,7 @@ export default function MyRegistrationsPage() {
                     <button className="btn-download" onClick={() => setCertId(r.eid)}><i className="ti ti-download" /> เกียรติบัตร</button>
                   )}
                   <CancelRegistrationButton reg={r} className="btn-download cancel" />
-                  {r.status === 'attended' && (
+                  {r.status === 'attended' && !r.evaluated && (
                     <button className="btn-download eval" onClick={() => navigate(`/evaluate/${r.eid}`)}><i className="ti ti-clipboard-check" /> ทำแบบประเมิน</button>
                   )}
                 </div>

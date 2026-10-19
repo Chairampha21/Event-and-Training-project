@@ -12,6 +12,8 @@ function shortThaiDate(iso) {
  * Sign-in sheets for an event as workbook sheets (see utils/xlsxExport): one
  * sheet per day of the event, each with the day's date over an empty morning
  * and afternoon box per person, to print and have people sign at the door.
+ * An event that gives no certificates needs no half-day record, so its
+ * sheets have a single signature box per day instead.
  * `people` are roster rows; `noteOf(person)` gives the remark for a row.
  */
 export function buildSignInSheets({ ev, days, people, noteOf }) {
@@ -20,25 +22,30 @@ export function buildSignInSheets({ ev, days, people, noteOf }) {
     const where = ev.placeRaw || '';
     const info = [`วันที่ ${formatThaiDate(day)}`, time && `เวลา ${time}`, where && `สถานที่ ${where}`].filter(Boolean).join('   ');
     const head = (v) => ({ v, s: STYLE.head });
+    const halves = ev.issueCert !== false; // morning + afternoon boxes, or one box
+    const signHead = halves ? [head(`วันที่ ${shortThaiDate(day)}`), head('')] : [head(`วันที่ ${shortThaiDate(day)}`)];
+    const signSub = halves ? [head('เช้า'), head('บ่าย')] : [head('ลงชื่อ')];
+    const signCells = halves ? [{ s: STYLE.center }, { s: STYLE.center }] : [{ s: STYLE.center }];
     return {
       name: days.length > 1 ? `วันที่ ${n + 1} (${shortThaiDate(day).replace(/\//g, '-')})` : 'ใบลงชื่อ',
-      cols: [7, 15, 32, 20, 20, 26],
-      merges: ['A1:F1', 'A2:F2', 'A3:F3', 'A5:A6', 'B5:B6', 'C5:C6', 'D5:E5', 'F5:F6'],
+      cols: halves ? [7, 15, 32, 20, 20, 26] : [7, 15, 32, 34, 26],
+      merges: halves
+        ? ['A1:F1', 'A2:F2', 'A3:F3', 'A5:A6', 'B5:B6', 'C5:C6', 'D5:E5', 'F5:F6']
+        : ['A1:E1', 'A2:E2', 'A3:E3', 'A5:A6', 'B5:B6', 'C5:C6', 'E5:E6'],
       rows: [
         { height: 26, cells: [{ v: 'ใบลงชื่อผู้เข้าร่วมกิจกรรม', s: STYLE.title }] },
         { height: 40, cells: [{ v: ev.title, s: STYLE.subtitle }] },
         { height: 22, cells: [{ v: info, s: STYLE.subtitle }] },
         { cells: [] },
-        { height: 22, cells: [head('ลำดับ'), head('รหัสนักศึกษา'), head('ชื่อ-สกุล'), head(`วันที่ ${shortThaiDate(day)}`), head(''), head('หมายเหตุ')] },
-        { height: 22, cells: [head(''), head(''), head(''), head('เช้า'), head('บ่าย'), head('')] },
+        { height: 22, cells: [head('ลำดับ'), head('รหัสนักศึกษา'), head('ชื่อ-สกุล'), ...signHead, head('หมายเหตุ')] },
+        { height: 22, cells: [head(''), head(''), head(''), ...signSub, head('')] },
         ...people.map((p, i) => ({
           height: 30,
           cells: [
             { v: i + 1, s: STYLE.center },
             { v: p.sid, s: STYLE.center },
             { v: p.name, s: STYLE.left },
-            { s: STYLE.center },
-            { s: STYLE.center },
+            ...signCells,
             { v: noteOf(p), s: STYLE.left },
           ],
         })),

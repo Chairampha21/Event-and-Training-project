@@ -8,6 +8,7 @@ export default function EvaluationFormPage() {
   const navigate = useNavigate();
   const { evById, submitEvaluation, getEventEvalQuestions } = useEvents();
   const ev = evById(eventId);
+  const noCert = ev?.issueCert === false; // the evaluation unlocks no certificate
   const [customValues, setCustomValues] = useState({});
   const [customQuestions, setCustomQuestions] = useState([]);
   const [loadingCustom, setLoadingCustom] = useState(true);
@@ -56,11 +57,11 @@ export default function EvaluationFormPage() {
       <div className="form-card">
         <div className="eval-banner">
           <i className="ti ti-info-circle" />
-          กรุณาทำแบบประเมินให้ครบทุกข้อ ระบบจะปลดล็อกเกียรติบัตรให้โดยอัตโนมัติเมื่อส่งแบบประเมินสำเร็จ
+          {noCert ? 'กรุณาทำแบบประเมินให้ครบทุกข้อ · กิจกรรมนี้ไม่มีเกียรติบัตร' : 'กรุณาทำแบบประเมินให้ครบทุกข้อ ระบบจะปลดล็อกเกียรติบัตรให้โดยอัตโนมัติเมื่อส่งแบบประเมินสำเร็จ'}
         </div>
 
         {customQuestions.length === 0 && !loadingCustom && (
-          <p style={{ fontSize: 13, color: 'var(--c4-60)' }}>กิจกรรมนี้ยังไม่มีคำถามแบบประเมิน กดส่งเพื่อรับเกียรติบัตรได้เลย</p>
+          <p style={{ fontSize: 13, color: 'var(--c4-60)' }}>{noCert ? 'กิจกรรมนี้ยังไม่มีคำถามแบบประเมิน กดส่งได้เลย' : 'กิจกรรมนี้ยังไม่มีคำถามแบบประเมิน กดส่งเพื่อรับเกียรติบัตรได้เลย'}</p>
         )}
 
         {customQuestions.map((q) => (
@@ -112,7 +113,7 @@ export default function EvaluationFormPage() {
         <div className="fa-right">
           <button className="btn btn-outline" onClick={() => navigate(-1)}>ยกเลิก</button>
           <button className={`btn btn-primary${allRated ? '' : ' disabled'}`} disabled={!allRated || submitting} onClick={() => setConfirmOpen(true)}>
-            <i className="ti ti-send" /> {submitting ? 'กำลังส่ง...' : 'ส่งแบบประเมิน & รับเกียรติบัตร'}
+            <i className="ti ti-send" /> {submitting ? 'กำลังส่ง...' : noCert ? 'ส่งแบบประเมิน' : 'ส่งแบบประเมิน & รับเกียรติบัตร'}
           </button>
         </div>
       </div>

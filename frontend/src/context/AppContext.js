@@ -5,7 +5,7 @@ import { api, setAuthToken } from '../services/api';
 import { formatThaiDate, formatThaiDateRange, formatThaiDateList, formatDayTime, formatRegPeriod, todayIso } from '../utils/dateFormat';
 import { formatBaht } from '../utils/money';
 import { normalizeLayout, serializeLayout } from '../features/certificates/utils/certLayout';
-import { ROLE_LABEL, EVENT_CATEGORY_ICONS } from '../utils/constants';
+import { ROLE_LABEL, EVENT_CATEGORY_ICONS, isParticipant } from '../utils/constants';
 
 const AppContext = createContext(null);
 
@@ -109,7 +109,11 @@ function adaptEvent(be) {
     loanLeft: Math.max(0, (be.loan_laptop_qty || 0) - (be.loan_laptop_taken || 0)),
     fee: be.fee > 0 ? be.fee : 0, // registration fee in baht; 0 = free
     paymentInfo: be.payment_info || '', // how to pay (account / PromptPay, deadline)
+    refundMethod: be.refund_method || 'none', // none | department | transfer — how paid money is given back
+    refundNote: be.refund_note || '', // when / where, in the organizer's words
+    payerCount: be.payer_count || 0, // money held (slip sent or confirmed) and not refunded yet
     askDietary: !!be.ask_dietary, // food is served: registrants are asked about allergies / dietary needs
+    issueCert: be.issue_certificate !== false, // gives certificates; off = one signature box per day on the sign-in sheet
     budgetPlanned: be.budget_planned ?? null, // baht from department income (เงินรายได้); null = not set
     budgetOther: be.budget_other ?? null, // baht from other sources (แหล่งอื่น); null = not set
     budgetTotal: be.budget_total ?? null, // both sources added up; null when neither is set
@@ -152,9 +156,14 @@ function toEventBody(payload) {
   if (payload.attendeeNote !== undefined) body.attendee_note = payload.attendeeNote.trim() || null;
   if (payload.loanQty !== undefined) body.loan_laptop_qty = payload.loanQty || null;
   if (payload.askDietary !== undefined) body.ask_dietary = !!payload.askDietary;
+  if (payload.issueCert !== undefined) body.issue_certificate = !!payload.issueCert;
   if (payload.fee !== undefined) {
     body.fee = payload.fee > 0 ? payload.fee : null;
     body.payment_info = payload.fee > 0 ? (payload.paymentInfo || '').trim() || null : null;
+    if (payload.refundMethod !== undefined) {
+      body.refund_method = payload.fee > 0 ? payload.refundMethod : 'none';
+      body.refund_note = payload.fee > 0 ? (payload.refundNote || '').trim() || null : null;
+    }
   }
   if (payload.budgetOther !== undefined) body.budget_other = payload.budgetOther;
   if (payload.regStartIso !== undefined) body.reg_start = payload.regStartIso || null;
@@ -167,8 +176,9 @@ function toEventBody(payload) {
 // `via` = attends 'onsite' or 'online'; `checkinKeys` = per day, the key of the
 // self check-in link for online attendees (same on every row).
 function adaptRosterRow(r, eventDays = [], checkinKeys = {}) {
-  return { sid: r.student_id || '', name: r.name, in: !!r.checked_in, days: r.checkin_dates || [], eventDays, via: r.attend_via || 'onsite', checkinKeys, regId: r.id, status: r.status, wantsLaptop: !!r.wants_laptop, foodAllergy: r.food_allergy || '', dietaryPref: r.dietary_pref || '', paymentStatus: r.payment_status || 'none',
+  return { sid: r.student_id || '', isTeacher: r.role === 'teacher', name: r.name, in: !!r.checked_in, days: r.checkin_dates || [], eventDays, via: r.attend_via || 'onsite', checkinKeys, regId: r.id, status: r.status, wantsLaptop: !!r.wants_laptop, foodAllergy: r.food_allergy || '', dietaryPref: r.dietary_pref || '', paymentStatus: r.payment_status || 'none',
     hasSlip: !!r.has_slip, slipTransferredAt: r.slip_transferred_at || '', slipAmount: r.slip_amount ?? null, rejectReason: r.payment_reject_reason || '',
+    refundedAt: r.refunded_at || '', refundPromptPay: r.refund_promptpay || '',
   };
 }
 
@@ -189,7 +199,11 @@ function adaptMyRegistration(r) {
     hybrid: r.attend_mode === 'hybrid',
     foodAllergy: r.food_allergy || '',
     dietaryPref: r.dietary_pref || '',
-    paymentStatus: r.payment_status || 'none', // none (free) | pending | submitted | rejected | paid
+    paymentStatus: r.payment_status || 'none', // none (free) | pending | submitted | rejected | paid | refunded
+    refundedAt: r.refunded_at || '',
+    refundPromptPay: r.refund_promptpay || '', // where a transfer refund goes
+    refundMethod: r.refund_method || 'none',
+    refundNote: r.refund_note || '',
     slipTransferredAt: r.slip_transferred_at || '',
     slipAmount: r.slip_amount ?? null,
     rejectReason: r.payment_reject_reason || '',
@@ -208,6 +222,22 @@ function adaptMyRegistration(r) {
     canCancel: r.can_cancel === undefined ? null : !!r.can_cancel,
     // The organizer deleted the event after this registration (it is kept as history).
     cancelled: !!r.event_cancelled,
+    issueCert: r.issue_certificate !== false, // the event gives certificates
+    evaluated: !!r.evaluated, // the evaluation was submitted
+  };
+}
+
+// The usual signer when the admin has not set one (what the form used to start with).
+const FALLBACK_SIGNER = { name: 'ผศ.ดร.สิรักข์ แก้วจำนงค์', title: 'หัวหน้าภาควิชาคอมพิวเตอร์' };
+
+function adaptCertDefaults(d) {
+  return {
+    templateId: d?.template_id ?? null, // version of the main template; null = built-in
+    template: d?.template_url ? { name: 'template', type: guessMime(d.template_url), dataUrl: d.template_url } : null, // null = built-in
+    layout: normalizeLayout(d?.layout),
+    signer: { name: d?.signer_name || FALLBACK_SIGNER.name, title: d?.signer_title || FALLBACK_SIGNER.title, signature: d?.signature_url || null },
+    updatedAt: d?.updated_at || '',
+    updatedBy: d?.updated_by || '',
   };
 }
 
@@ -358,9 +388,26 @@ export function AppProvider({ children }) {
   }, []);
 
   const [myCertificates, setMyCertificates] = useState([]);
+  // Department-wide certificate defaults set by an admin (main template and its
+  // text layout, the usual signer); null until loaded. See GET /settings/certificate.
+  const [certDefaults, setCertDefaults] = useState(null);
+  // Earlier versions of the main template that issued certificates were drawn
+  // on, by version id: {url, layout}. Filled as the student's certificates load.
+  const [certTemplateCache, setCertTemplateCache] = useState({});
   const loadMyCertificates = useCallback(async () => {
     const list = await refreshMyCertificates();
     setMyCertificates(list);
+    // Each certificate keeps the main template it was issued on: fetch those versions once.
+    const ids = [...new Set(list.map((c) => c.default_template_id).filter((id) => id != null))];
+    const fetched = await Promise.all(ids.map(async (id) => {
+      try {
+        const t = await api.get(`/settings/certificate/templates/${id}`);
+        return [id, { url: t.template_url, layout: normalizeLayout(t.layout) }];
+      } catch {
+        return null;
+      }
+    }));
+    setCertTemplateCache((c) => ({ ...c, ...Object.fromEntries(fetched.filter(Boolean)) }));
   }, [refreshMyCertificates]);
 
   const refreshUsers = useCallback(async () => {
@@ -395,12 +442,13 @@ export function AppProvider({ children }) {
   useEffect(() => {
     seenNotifs.current = null; // a different person signed in (or out): start over
     if (!session) {
-      setEvents([]); setRegs([]); setRosters({}); setUsers([]); setNotifs([]); setBlacklist([]); setActivityLog([]); setMyCertificates([]);
+      setEvents([]); setRegs([]); setRosters({}); setUsers([]); setNotifs([]); setBlacklist([]); setActivityLog([]); setMyCertificates([]); setCertDefaults(null);
       return;
     }
     refreshEvents({ role: session.role });
+    loadCertDefaults();
     refreshNotifications();
-    if (session.role === 'student') {
+    if (isParticipant(session.role)) {
       refreshMyRegistrations();
       loadMyCertificates();
     }
@@ -555,14 +603,18 @@ export function AppProvider({ children }) {
     }
   }, [refreshEvents, pushToast]);
 
-  const deleteEvent = useCallback(async (id) => {
+  // `refund` ({ method, note }) is how people who already paid get their money
+  // back; required by the server when anyone has paid. Resolves true on success.
+  const deleteEvent = useCallback(async (id, refund) => {
     const ev = evById(id);
     try {
-      await api.del(`/events/${id}`);
+      await api.del(`/events/${id}`, refund ? { body: { refund_method: refund.method, refund_note: refund.note || '' } } : undefined);
       await refreshEvents();
       pushToast('ลบกิจกรรมแล้ว', ev ? ev.title.slice(0, 30) : '', 'warn');
+      return true;
     } catch (err) {
       pushToast('ลบกิจกรรมไม่สำเร็จ', err.message, 'warn');
+      return false;
     }
   }, [evById, refreshEvents, pushToast]);
 
@@ -590,13 +642,14 @@ export function AppProvider({ children }) {
   }, [rosters, pushToast]);
 
   // Organizer's verdict on a registrant's payment: 'confirm', 'reject' (with a
-  // reason the payer will see) or 'reset'. Resolves true on success.
+  // reason the payer will see), 'reset', or 'refund' / 'unrefund' once the
+  // money is given back. Resolves true on success.
   const setPaymentStatus = useCallback(async (eventId, regId, action, reason) => {
     try {
       const { payment_status: status } = await api.patch(`/registrations/${regId}/payment`, { action, reason: reason || '' });
       setRosters((rs) => ({
         ...rs,
-        [eventId]: (rs[eventId] || []).map((p) => (p.regId === regId ? { ...p, paymentStatus: status, rejectReason: status === 'rejected' ? reason : '' } : p)),
+        [eventId]: (rs[eventId] || []).map((p) => (p.regId === regId ? { ...p, paymentStatus: status, rejectReason: status === 'rejected' ? reason : '', refundedAt: status === 'refunded' ? new Date().toISOString() : '' } : p)),
       }));
       return true;
     } catch (err) {
@@ -628,14 +681,27 @@ export function AppProvider({ children }) {
     }
   }, [refreshMyRegistrations, refreshEvents, refreshNotifications, pushToast]);
 
-  const submitSlip = useCallback(async (regId, { slip, transferredAt, amount }) => {
+  const submitSlip = useCallback(async (regId, { slip, transferredAt, amount, refundPromptPay }) => {
     try {
-      await api.post(`/registrations/${regId}/slip`, { slip, transferred_at: transferredAt, amount });
+      await api.post(`/registrations/${regId}/slip`, { slip, transferred_at: transferredAt, amount, refund_promptpay: refundPromptPay || '' });
       await refreshMyRegistrations();
       pushToast('ส่งหลักฐานการชำระเงินแล้ว', 'รอผู้จัดกิจกรรมตรวจสอบ');
       return true;
     } catch (err) {
       pushToast('ส่งหลักฐานไม่สำเร็จ', err.message, 'warn');
+      return false;
+    }
+  }, [refreshMyRegistrations, pushToast]);
+
+  // The payer gives (or corrects) the PromptPay a transfer refund goes to. Resolves true on success.
+  const setRefundAccount = useCallback(async (regId, promptPay) => {
+    try {
+      await api.patch(`/registrations/${regId}/refund-account`, { refund_promptpay: promptPay });
+      await refreshMyRegistrations();
+      pushToast('บันทึกพร้อมเพย์สำหรับรับเงินคืนแล้ว', '');
+      return true;
+    } catch (err) {
+      pushToast('บันทึกไม่สำเร็จ', err.message, 'warn');
       return false;
     }
   }, [refreshMyRegistrations, pushToast]);
@@ -648,10 +714,11 @@ export function AppProvider({ children }) {
       // Safe to repeat: the server notifies each attendee only once, so doing
       // it again reaches only the people checked in since the last time.
       const already = evById(id)?.stage === 4;
+      const noCert = evById(id)?.issueCert === false;
       const res = await api.put(`/events/${id}`, { cycle_stage: 4, status: 'done' });
       const notified = res.cert_notified || 0;
       await refreshEvents();
-      if (!already) pushToast('เปิดให้รับเกียรติบัตรแล้ว', `แจ้งเตือนผู้เข้าร่วม ${notified} คน · ต้องทำแบบประเมินก่อนดาวน์โหลด`);
+      if (!already) pushToast(noCert ? 'ปิดกิจกรรมแล้ว' : 'เปิดให้รับเกียรติบัตรแล้ว', noCert ? `แจ้งเตือนผู้เข้าร่วม ${notified} คน ให้ทำแบบประเมิน` : `แจ้งเตือนผู้เข้าร่วม ${notified} คน · ต้องทำแบบประเมินก่อนดาวน์โหลด`);
       else if (notified > 0) pushToast('แจ้งเตือนผู้ที่เช็คอินเพิ่มแล้ว', `${notified} คน · ผู้ที่เคยได้รับแจ้งเตือนแล้วไม่ได้รับซ้ำ`);
       else pushToast('ออกเกียรติบัตรไปแล้ว', 'ไม่มีผู้เช็คอินเพิ่ม จึงไม่ได้ส่งแจ้งเตือนซ้ำ');
     } catch (err) {
@@ -704,12 +771,12 @@ export function AppProvider({ children }) {
         ));
       await api.post(`/registrations/${reg.regId}/evaluation`, { answers, custom_answers: customAnswers });
       await Promise.all([refreshMyRegistrations(), refreshNotifications()]);
-      pushToast('ส่งแบบประเมินสำเร็จ', 'เกียรติบัตรของคุณพร้อมดาวน์โหลดแล้ว');
+      pushToast('ส่งแบบประเมินสำเร็จ', evById(id)?.issueCert === false ? 'ขอบคุณที่ร่วมทำแบบประเมิน' : 'เกียรติบัตรของคุณพร้อมดาวน์โหลดแล้ว');
     } catch (err) {
       pushToast('ส่งแบบประเมินไม่สำเร็จ', err.message, 'warn');
       throw err;
     }
-  }, [regs, refreshMyRegistrations, refreshNotifications, pushToast]);
+  }, [regs, evById, refreshMyRegistrations, refreshNotifications, pushToast]);
 
   const downloadCert = useCallback((id) => {
     const ev = evById(id);
@@ -795,6 +862,34 @@ export function AppProvider({ children }) {
     }
   }, [refreshEvents, pushToast]);
 
+  const loadCertDefaults = useCallback(async () => {
+    try {
+      const { defaults: d } = await api.get('/settings/certificate');
+      setCertDefaults(adaptCertDefaults(d));
+    } catch {
+      setCertDefaults(adaptCertDefaults(null)); // fall back to the built-in template
+    }
+  }, []);
+
+  // Admin only. `payload` = { template: {dataUrl}|null, layout, signerName, signerTitle, signature }.
+  const saveCertDefaults = useCallback(async (payload) => {
+    try {
+      const { defaults: d } = await api.put('/settings/certificate', {
+        template_url: payload.template?.dataUrl || '',
+        layout: serializeLayout(payload.layout) || '',
+        signer_name: payload.signerName,
+        signer_title: payload.signerTitle,
+        signature_url: payload.signature || '',
+      });
+      setCertDefaults(adaptCertDefaults(d));
+      pushToast('บันทึกค่าเริ่มต้นเกียรติบัตรแล้ว', 'ใช้กับกิจกรรมที่ไม่ได้อัปโหลด template ของตัวเอง');
+      return true;
+    } catch (err) {
+      pushToast('บันทึกไม่สำเร็จ', err.message, 'warn');
+      return false;
+    }
+  }, [pushToast]);
+
   const getDashboardSummary = useCallback(async () => {
     try {
       const { summary } = await api.get('/dashboard/summary');
@@ -848,9 +943,9 @@ export function AppProvider({ children }) {
     evById, myStatus,
     login, logout, loginWithGoogle, updateProfile,
     registerForEvent, toggleEventStatus, createEvent, updateEvent, deleteEvent,
-    toggleCheckin, setPaymentStatus, getSlip, submitSlip, cancelRegistration, selfCheckin, issueCertificate, submitEvaluation, downloadCert,
+    toggleCheckin, setPaymentStatus, getSlip, submitSlip, setRefundAccount, cancelRegistration, selfCheckin, issueCertificate, submitEvaluation, downloadCert,
     addToBlacklist, restoreFromBlacklist,
-    getSar, saveSar, getEvaluationResults, getEventEvalQuestions, saveEventEvalQuestions, getDashboardYearly, getDashboardSummary,
+    getSar, saveSar, getEvaluationResults, getEventEvalQuestions, saveEventEvalQuestions, getDashboardYearly, getDashboardSummary, certDefaults, saveCertDefaults, certTemplateCache,
     getDashboardBudget, saveBudgetActual,
     upsertUser, toggleUserActive, deleteUser,
     refreshNotifications, markAllRead, markNotifRead, clearAllNotif,
@@ -859,9 +954,9 @@ export function AppProvider({ children }) {
     session, events, regs, rosters, users, notifs, toasts, activityLog, blacklist, myCertificates,
     evById, myStatus, login, logout, loginWithGoogle, updateProfile,
     registerForEvent, toggleEventStatus, createEvent, updateEvent, deleteEvent,
-    toggleCheckin, setPaymentStatus, getSlip, submitSlip, cancelRegistration, selfCheckin, issueCertificate, submitEvaluation, downloadCert,
+    toggleCheckin, setPaymentStatus, getSlip, submitSlip, setRefundAccount, cancelRegistration, selfCheckin, issueCertificate, submitEvaluation, downloadCert,
     addToBlacklist, restoreFromBlacklist,
-    getSar, saveSar, getEvaluationResults, getEventEvalQuestions, saveEventEvalQuestions, getDashboardYearly, getDashboardSummary,
+    getSar, saveSar, getEvaluationResults, getEventEvalQuestions, saveEventEvalQuestions, getDashboardYearly, getDashboardSummary, certDefaults, saveCertDefaults, certTemplateCache,
     getDashboardBudget, saveBudgetActual,
     upsertUser, toggleUserActive, deleteUser,
     refreshNotifications, markAllRead, markNotifRead, clearAllNotif, pushToast, dismissToast,

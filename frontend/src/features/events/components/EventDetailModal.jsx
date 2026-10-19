@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useEvents } from '../../../hooks/useEvents';
-import { STATUS_META } from '../../../utils/constants';
+import { STATUS_META, isParticipant } from '../../../utils/constants';
 import Modal, { ModalHead } from '../../../components/ui/Modal';
 import ImageViewer from '../../../components/ui/ImageViewer';
 import CycleProgress from './CycleProgress';
@@ -38,9 +38,14 @@ export default function EventDetailModal({ eventId, open, onClose, preview }) {
   const sm = STATUS_META[ev.status];
   const st = preview ? null : myStatus(ev.id);
   // Only students register; an organizer or admin opening the details just reads them.
-  const canReg = preview ? true : ev.status === 'open' && !st && session?.role === 'student';
+  const canReg = preview ? true : ev.status === 'open' && !st && isParticipant(session?.role);
   const myReg = preview ? null : regs.find((r) => r.eid === ev.id);
-  const studentView = preview || session?.role === 'student';
+  const studentView = preview || isParticipant(session?.role);
+  // Teachers don't pay the fee: they register only so the organizer knows the seats they take.
+  const isTeacher = !preview && session?.role === 'teacher';
+  const teacherFree = isTeacher && ev.fee > 0 && (
+    <div className="prep-box teacher-free"><i className="ti ti-school" /> อาจารย์ไม่ต้องชำระค่าลงทะเบียน · การลงทะเบียนใช้เพื่อให้ผู้จัดทราบจำนวนที่นั่ง</div>
+  );
   const prepNote = (ev.attendeeNote || ev.loanQty > 0) && (
     <div className="prep-box">
       <div className="prep-title"><i className="ti ti-backpack" /> สิ่งที่ต้องเตรียม</div>
@@ -111,7 +116,7 @@ export default function EventDetailModal({ eventId, open, onClose, preview }) {
             </label>
           )}
           {askFood && <DietaryQuestions value={dietary} onChange={setDietary} />}
-          {ev.fee > 0 && <PaymentBox fee={ev.fee} info={ev.paymentInfo} />}
+          {ev.fee > 0 && (isTeacher ? teacherFree : <PaymentBox fee={ev.fee} info={ev.paymentInfo} refundMethod={ev.refundMethod} refundNote={ev.refundNote} />)}
         </div>
         <div className="modal-foot">
           {!preview && viaMissing && (
@@ -138,24 +143,26 @@ export default function EventDetailModal({ eventId, open, onClose, preview }) {
   return (
     <Modal open={open} onClose={onClose} size="lg">
       <ModalHead eyebrow={preview ? 'ตัวอย่าง · สิ่งที่นักศึกษาจะเห็น' : 'รายละเอียดกิจกรรม'} icon={preview ? 'ti-eye' : 'ti-calendar-event'} onClose={onClose} />
-      <div className="modal-body">
-        {ev.poster && (
-          <button type="button" className="md-poster" onClick={() => setPosterOpen(true)} aria-label="ดูโปสเตอร์เต็มและซูม">
-            <img src={ev.poster} alt={`โปสเตอร์ ${ev.title}`} />
-            <span className="md-poster-zoom"><i className="ti ti-zoom-in" /> ดูภาพเต็ม</span>
-          </button>
-        )}
-        <ImageViewer open={posterOpen} src={ev.poster} title={ev.title} onClose={() => setPosterOpen(false)} />
-        <div className="md-hero">
-          <div className="mdh-cat">{ev.cat}</div>
-          <div className="mdh-title">{ev.title}</div>
-          <div className="mdh-meta">
-            <span><i className="ti ti-calendar-event" /> {ev.date}</span>
-            <span><i className="ti ti-clock" /> {ev.time}</span>
-            <span><i className="ti ti-map-pin" /> {ev.place}</span>
-            {ev.regPeriod && <span><i className="ti ti-user-plus" /> รับสมัคร {ev.regPeriod}</span>}
+      <div className="modal-body md-body">
+        <div className={`md-top${ev.poster ? ' has-poster' : ''}`}>
+          {ev.poster && (
+            <button type="button" className="md-poster" onClick={() => setPosterOpen(true)} aria-label="ดูโปสเตอร์เต็มและซูม">
+              <img src={ev.poster} alt={`โปสเตอร์ ${ev.title}`} />
+              <span className="md-poster-zoom"><i className="ti ti-zoom-in" /> ดูภาพเต็ม</span>
+            </button>
+          )}
+          <div className="md-hero">
+            <div className="mdh-cat">{ev.cat}</div>
+            <div className="mdh-title">{ev.title}</div>
+            <ul className="mdh-meta">
+              <li><i className="ti ti-calendar-event" /> {ev.date}</li>
+              <li><i className="ti ti-clock" /> {ev.time}</li>
+              <li><i className="ti ti-map-pin" /> {ev.place}</li>
+              {ev.regPeriod && <li><i className="ti ti-user-plus" /> รับสมัคร {ev.regPeriod}</li>}
+            </ul>
           </div>
         </div>
+        <ImageViewer open={posterOpen} src={ev.poster} title={ev.title} onClose={() => setPosterOpen(false)} />
         {st && (
           <div className="md-section">
             <div className="pill-status ps-open" style={{ fontSize: 13 }}><i className="ti ti-circle-check-filled" /> คุณลงทะเบียนกิจกรรมนี้แล้ว{myReg?.hybrid ? (myReg.via === 'online' ? ' · เข้าร่วมออนไลน์' : ' · เข้าร่วมที่สถานที่จัด') : ''}{myReg?.wantsLaptop ? ' · จองโน้ตบุ๊กให้ยืมไว้ 1 เครื่อง' : ''}</div>
@@ -170,7 +177,7 @@ export default function EventDetailModal({ eventId, open, onClose, preview }) {
             )}
           </div>
         )}
-        {ev.fee > 0 && <div className="md-section"><PaymentBox fee={ev.fee} info={ev.paymentInfo} reg={myReg} /></div>}
+        {ev.fee > 0 && <div className="md-section">{isTeacher ? teacherFree : <PaymentBox fee={ev.fee} info={ev.paymentInfo} reg={myReg} refundMethod={ev.refundMethod} refundNote={ev.refundNote} />}</div>}
         {ev.attendMode !== 'onsite' && ev.hasOnlineLink && (
           <div className="md-section"><OnlineJoinLink url={ev.onlineLink} locked={!ev.onlineLink} /></div>
         )}
@@ -194,7 +201,7 @@ export default function EventDetailModal({ eventId, open, onClose, preview }) {
           <div className="ig"><div className="igl">ที่นั่ง</div><div className="igv">{hybrid ? `Onsite ${ev.regOnsite || 0} / ${ev.capOnsite || 0} · Online ${ev.regOnline || 0} / ${ev.capOnline || 0}` : `${ev.reg} / ${ev.cap}`}</div></div>
           <div className="ig"><div className="igl">ผู้รับผิดชอบ</div><div className="igv">{ev.org}</div></div>
           <div className="ig"><div className="igl">รหัสกิจกรรม</div><div className="igv">{preview ? 'ออกให้เมื่อเผยแพร่' : `SU-CS-25-${String(ev.id).padStart(3, '0')}`}</div></div>
-          <div className="ig"><div className="igl">ค่าลงทะเบียน</div><div className="igv">{ev.fee > 0 ? formatBaht(ev.fee) : 'ไม่มีค่าใช้จ่าย'}</div></div>
+          <div className="ig"><div className="igl">ค่าลงทะเบียน</div><div className="igv">{ev.fee > 0 ? (isTeacher ? `${formatBaht(ev.fee)} · อาจารย์ไม่ต้องชำระ` : formatBaht(ev.fee)) : 'ไม่มีค่าใช้จ่าย'}</div></div>
         </div>
       </div>
       <div className="modal-foot">

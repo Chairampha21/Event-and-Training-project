@@ -59,9 +59,17 @@ func fiscalYearSQL(dateExpr string) string {
 
 type summaryRow struct {
 	EventsThisYear     int `json:"events_this_year"`
-	ParticipantsTotal  int `json:"participants_total"`
+	ParticipantsTotal  int `json:"participants_total"` // registrations, attended or not
+	AttendedTotal      int `json:"attended_total"`     // of those, checked in on at least one day
 	CertificatesIssued int `json:"certificates_issued"`
 	OpenNow            int `json:"open_now"`
+}
+
+// notTeacherSQL keeps a registration alias out of the dashboard and report
+// figures when a teacher made it: teachers join events like students but are
+// not counted as participants.
+func notTeacherSQL(regAlias string) string {
+	return regAlias + ".user_id NOT IN (SELECT id FROM users WHERE role = 'teacher')"
 }
 
 func (h *DashboardHandler) Summary(c *gin.Context) {
@@ -69,10 +77,12 @@ func (h *DashboardHandler) Summary(c *gin.Context) {
 	err := h.DB.QueryRow(`
 		SELECT
 			(SELECT COUNT(*) FROM events WHERE is_listed = 1 AND `+fiscalYearSQL("date_start")+` = `+fiscalYearSQL(todayTH)+`),
-			(SELECT COUNT(*) FROM registrations reg JOIN events e ON e.id = reg.event_id WHERE e.is_listed = 1),
-			(SELECT COUNT(*) FROM registrations reg JOIN events e ON e.id = reg.event_id WHERE e.is_listed = 1 AND reg.status = 'certified'),
+			(SELECT COUNT(*) FROM registrations reg JOIN events e ON e.id = reg.event_id WHERE e.is_listed = 1 AND `+notTeacherSQL("reg")+`),
+			(SELECT COUNT(*) FROM registrations reg JOIN events e ON e.id = reg.event_id WHERE e.is_listed = 1 AND `+notTeacherSQL("reg")+`
+			   AND (reg.status IN ('attended', 'certified') OR EXISTS (SELECT 1 FROM registration_checkins rc WHERE rc.registration_id = reg.id))),
+			(SELECT COUNT(*) FROM registrations reg JOIN events e ON e.id = reg.event_id WHERE e.is_listed = 1 AND reg.status = 'certified' AND `+notTeacherSQL("reg")+`),
 			(SELECT COUNT(*) FROM events WHERE is_listed = 1 AND (`+effectiveStatusSQL+`) = 'open')
-	`).Scan(&r.EventsThisYear, &r.ParticipantsTotal, &r.CertificatesIssued, &r.OpenNow)
+	`).Scan(&r.EventsThisYear, &r.ParticipantsTotal, &r.AttendedTotal, &r.CertificatesIssued, &r.OpenNow)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 		return
@@ -110,7 +120,7 @@ func (h *DashboardHandler) Budget(c *gin.Context) {
 		       e.budget_planned, e.budget_other, e.budget_actual,
 		       COUNT(r.id), COALESCE(SUM(r.checked_in), 0), e.organizer_id
 		FROM events e
-		LEFT JOIN registrations r ON r.event_id = e.id
+		LEFT JOIN registrations r ON r.event_id = e.id AND ` + notTeacherSQL("r") + `
 		WHERE e.is_listed = 1
 		GROUP BY e.id
 		ORDER BY e.date_start DESC, e.id DESC`)

@@ -62,3 +62,14 @@
 .bud-edit{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;font-size:12px;line-height:1.35;text-align:left;white-space:nowrap}
 .bud-muted{font-size:12px;color:var(--c4-60)}
 @media (prefers-reduced-motion:reduce){.bud-bar{transition:none}}
+
+/* one event's budget on the report page */
+.bud-report{--bud-good:#15803d;--bud-bad:#b4452f}
+.bud-usage{margin-bottom:14px}
+.bud-usage-head{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;color:var(--c4-70);margin-bottom:6px}
+.bud-usage-head strong{font-size:15px;color:var(--c4);font-variant-numeric:tabular-nums}
+.bud-usage-bar{height:10px;border-radius:99px;background:var(--c2-08);overflow:hidden}
+.bud-usage-bar span{display:block;height:100%;border-radius:99px;background:var(--c1)}
+.bud-usage-bar span.over{background:var(--bud-bad)}
+.bud-fee{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--c4-70);margin:0}
+.bud-fee i{color:var(--c2);font-size:16px}

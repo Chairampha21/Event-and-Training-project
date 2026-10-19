@@ -4,6 +4,7 @@ import { CertOrgOverlay, CertBodyOverlay, CertSignerOverlay } from './CertOverla
 import { formatCertDate, formatCertDateList } from '../../../utils/dateFormat';
 import { layoutVars, normalizeLayout } from '../utils/certLayout';
 import { certTemplateFor } from '../utils/defaultTemplate';
+import { useEvents } from '../../../hooks/useEvents';
 import './CertTemplateUpload.css';
 
 const SAMPLE_NAME = 'ชื่อ-นามสกุล ผู้เข้าร่วม';
@@ -18,7 +19,8 @@ const A4_RATIO = 297 / 210; // landscape
 export default function CertIssuePreview({ ev }) {
   const [open, setOpen] = useState(false);
   const [aspect, setAspect] = useState(A4_RATIO);
-  const template = certTemplateFor(ev);
+  const { certDefaults } = useEvents();
+  const template = certTemplateFor(ev, certDefaults);
   const lay = normalizeLayout(template.layout);
   const certDate = ev.dates?.length > 1 ? formatCertDateList(ev.dates) : formatCertDate(ev.dateStart, ev.dateEnd || ev.dateStart);
 
@@ -51,11 +53,12 @@ export default function CertIssuePreview({ ev }) {
  * the organizer to the certificate section of the event form.
  */
 export function CertIssueReview({ ev, onEdit }) {
+  const { certDefaults } = useEvents();
   return (
     <>
       <div className="me-cert-meta">
         <div>
-          <div><i className="ti ti-photo" /> {certTemplateFor(ev).own ? 'ใช้ template ของกิจกรรมนี้' : 'ใช้ template หลักของภาควิชา'}</div>
+          <div><i className="ti ti-photo" /> {certTemplateFor(ev, certDefaults).own ? 'ใช้ template ของกิจกรรมนี้' : 'ใช้ template หลักของภาควิชา'}</div>
           <div><i className="ti ti-signature" /> {ev.signer?.name ? `ผู้ลงนาม ${ev.signer.name}${ev.signer.signature ? '' : ' · ยังไม่มีลายเซ็น'}` : 'ยังไม่ได้ระบุผู้ลงนาม'}</div>
         </div>
         <button type="button" className="btn btn-outline" onClick={onEdit}>

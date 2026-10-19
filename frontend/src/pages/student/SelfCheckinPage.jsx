@@ -3,14 +3,16 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useEvents } from '../../hooks/useEvents';
 import { formatThaiDate } from '../../utils/dateFormat';
 
-// Where an online attendee lands after opening the check-in link the organizer
-// shows in the online room (/checkin/<event>?d=<day>&k=<key>). Opening it is
+// Where an attendee — on site or online — lands after opening the check-in link
+// the organizer shows in the room or the online meeting
+// (/checkin/<event>?d=<day>&k=<key>). Opening it is
 // the whole action: the page checks them in for that day and says how it went.
 export default function SelfCheckinPage() {
   const { eventId } = useParams();
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const { selfCheckin } = useEvents();
+  const { selfCheckin, evById } = useEvents();
+  const noCert = evById(eventId)?.issueCert === false;
   const [result, setResult] = useState(null); // null while checking, then { ok, ... }
   const sent = useRef(false);
   const date = params.get('d') || '';
@@ -38,7 +40,7 @@ export default function SelfCheckinPage() {
             <p className="selfci-title">{result.title}</p>
             <p>
               บันทึกการเข้าร่วม{result.daysTotal > 1 ? `วันที่ ${result.dayNo} ` : ''}({formatThaiDate(result.date)}) แล้ว
-              {result.daysTotal > 1 && <><br />เข้าร่วมแล้ว {result.attended} จาก {result.daysTotal} วัน · ต้องเข้าร่วมครบทุกวันจึงจะได้รับเกียรติบัตร</>}
+              {result.daysTotal > 1 && <><br />เข้าร่วมแล้ว {result.attended} จาก {result.daysTotal} วัน · {noCert ? 'ต้องเข้าร่วมครบทุกวันจึงจะนับว่าเข้าร่วมกิจกรรม' : 'ต้องเข้าร่วมครบทุกวันจึงจะได้รับเกียรติบัตร'}</>}
             </p>
           </>
         )}

@@ -14,12 +14,19 @@ export const ROLE_LABEL = {
   admin: 'ผู้ดูแลระบบ',
   organizer: 'ผู้จัดกิจกรรม',
   student: 'นักศึกษา / ผู้เข้าร่วม',
+  teacher: 'อาจารย์',
 };
+
+// Roles that join events (register, check in, evaluate, get certificates).
+// Teachers use the same pages as students; they just have no student ID.
+export const PARTICIPANT_ROLES = ['student', 'teacher'];
+export const isParticipant = (role) => PARTICIPANT_ROLES.includes(role);
 
 export const ROLE_LANDING = {
   admin: '/admin/dashboard',
   organizer: '/home',
   student: '/home',
+  teacher: '/home',
 };
 
 export const STATUS_META = {

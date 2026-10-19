@@ -9,7 +9,7 @@ import { formatThaiDate, formatThaiDateTime, todayIso } from '../../../utils/dat
 import { formatBaht } from '../../../utils/money';
 import SlipReviewModal from './SlipReviewModal';
 import { CertIssueReview } from '../../certificates/components/CertIssuePreview';
-import { PAYMENT_STATUS } from './PaymentBox';
+import { PAYMENT_STATUS, REFUND_METHODS, formatPromptPay } from './PaymentBox';
 import { initials } from '../../../utils/initials';
 
 // How a registrant attends. Only an event held both ways ("hybrid") has people
@@ -29,6 +29,8 @@ const FILTERS = {
   allergy: { label: 'แพ้อาหาร', what: 'แพ้อาหาร', icon: 'ti-alert-triangle', match: (p) => !!p.foodAllergy },
   // No longer asked at registration; offered only where older registrations still carry one.
   diet: { label: 'มีข้อจำกัดด้านอาหาร', what: 'มีข้อจำกัดด้านอาหาร', icon: 'ti-tools-kitchen-2', legacy: true, match: (p) => !!p.dietaryPref },
+  // Teachers take seats in the room but don't pay and aren't counted in reports; offered when any registered.
+  teacher: { label: 'อาจารย์', what: 'เป็นอาจารย์', icon: 'ti-school', legacy: true, match: (p) => p.isTeacher },
 };
 
 // The slip-checking tab sorts a paid event's registrants into three piles, in
@@ -37,7 +39,10 @@ const SLIP_GROUPS = [
   { key: 'waiting', label: 'รอตรวจสลิป', icon: 'ti-receipt', match: (p) => p.paymentStatus === 'submitted' },
   { key: 'checked', label: 'ตรวจแล้ว', icon: 'ti-circle-check', match: (p) => p.paymentStatus === 'paid' || p.paymentStatus === 'rejected' },
   { key: 'unsent', label: 'ยังไม่ส่งสลิป', icon: 'ti-clock', match: (p) => p.paymentStatus === 'pending' },
+  // Only for events that give money back (or were cancelled): who to refund, who has been.
+  { key: 'refund', label: 'คืนเงิน', icon: 'ti-receipt-refund', refunds: true, match: (p) => ['paid', 'submitted', 'refunded'].includes(p.paymentStatus) },
 ];
+const held = (p) => p.paymentStatus === 'paid' || p.paymentStatus === 'submitted';
 
 // One window, separate jobs kept apart: mode "slips" opens the list window on
 // its slip-checking tab (paid events), mode "list" is for looking through who
@@ -50,9 +55,13 @@ export default function ApplicantsModal({ eventId, open, onClose, mode = 'list' 
   const { evById, rosters, toggleCheckin, setPaymentStatus, issueCertificate, pushToast } = useEvents();
   const navigate = useNavigate();
   const certIssued = evById(eventId)?.stage === 4; // certificates already opened to attendees
+  // An event without certificates is closed the same way, just without them.
+  const noCert = evById(eventId)?.issueCert === false;
   const [query, setQuery] = useState('');
   const [reviewRegId, setReviewRegId] = useState(null); // whose payment is being checked
   const [confirmCert, setConfirmCert] = useState(false);
+  const [refundAsk, setRefundAsk] = useState(null); // { p, on } — marking a refund (or taking it back), waiting for confirmation
+  const [refundBusy, setRefundBusy] = useState(false);
 
   const ev = eventId ? evById(eventId) : null;
   const roster = useMemo(() => (eventId ? (rosters[eventId] || []) : []), [eventId, rosters]);
@@ -72,7 +81,12 @@ export default function ApplicantsModal({ eventId, open, onClose, mode = 'list' 
   const [queue, setQueue] = useState(false);
   const verdictGiven = useRef(false);
   useEffect(() => {
-    if (open) { setDay(''); setNeed('all'); setGroup('onsite'); setQueue(false); setTab(mode === 'slips' ? 'slips' : 'list'); setSlipGroup('waiting'); }
+    if (!open) return;
+    // A cancelled event is opened to pay people back: start on the refunds.
+    const cancelled = evById(eventId)?.listed === false;
+    setDay(''); setNeed('all'); setGroup('onsite'); setQueue(false); setRefundAsk(null);
+    setTab(mode === 'slips' || cancelled ? 'slips' : 'list'); setSlipGroup(cancelled ? 'refund' : 'waiting');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, eventId, mode]);
   const needMatch = !checkin && FILTERS[need] && (hybrid || !FILTERS[need].hybridOnly) ? FILTERS[need].match : null;
   const activeDay = days.includes(day) ? day : (days.includes(todayIso()) ? todayIso() : days[0]);
@@ -94,6 +108,18 @@ export default function ApplicantsModal({ eventId, open, onClose, mode = 'list' 
   const payable = roster.filter((p) => p.paymentStatus !== 'none').length;
   const toReview = roster.filter((p) => p.paymentStatus === 'submitted').length;
   const slipsTab = !checkin && paidEvent && tab === 'slips';
+  // Money goes back on this event: it says so, or it was cancelled with people paid.
+  const cancelled = ev?.listed === false;
+  const refundsOn = !!ev && (ev.refundMethod !== 'none' || cancelled);
+  const refundLeft = roster.filter(held).length;
+  const refundDone = roster.filter((p) => p.paymentStatus === 'refunded').length;
+  const slipGroups = SLIP_GROUPS.filter((g) => !g.refunds || refundsOn);
+  async function confirmRefund() {
+    setRefundBusy(true);
+    await setPaymentStatus(eventId, refundAsk.p.regId, refundAsk.on ? 'refund' : 'unrefund');
+    setRefundBusy(false);
+    setRefundAsk(null);
+  }
   const slipRows = useMemo(() => {
     const q = query.trim().toLowerCase();
     const match = SLIP_GROUPS.find((g) => g.key === slipGroup).match;
@@ -103,10 +129,10 @@ export default function ApplicantsModal({ eventId, open, onClose, mode = 'list' 
   const reviewing = reviewRegId ? roster.find((p) => p.regId === reviewRegId) : null;
   const showDiet = !!ev?.askDietary || roster.some((p) => p.foodAllergy || p.dietaryPref);
 
-  // Online attendees check themselves in: this is the link for the day being
-  // checked, to show in the online room. It only works on that day, for a
-  // signed-in registrant who attends online.
-  const selfLinkDay = (onlineOnly || (hybrid && group === 'online')) ? activeDay : '';
+  // Attendees check themselves in, on site and online alike: this is the link
+  // for the day being checked, to show in the room or the online meeting. It
+  // only works on that day, for a signed-in registrant of the event.
+  const selfLinkDay = activeDay || '';
   const selfKey = selfLinkDay ? roster[0]?.checkinKeys?.[selfLinkDay] : '';
   const selfLink = selfKey ? `${window.location.origin}/checkin/${eventId}?d=${selfLinkDay}&k=${selfKey}` : '';
 
@@ -163,9 +189,10 @@ export default function ApplicantsModal({ eventId, open, onClose, mode = 'list' 
 
   // Sign-in sheet to print: one Excel sheet per day of the event, the day's
   // date over an empty morning and afternoon box per person. Paper is for the
-  // people in the room, so those attending online are left off it.
+  // people in the room, so those attending online are left off it, and so are
+  // teachers, who are not counted as participants.
   function exportRoster() {
-    const people = roster.filter((p) => p.via === 'onsite').filter((p) => !needMatch || needMatch(p));
+    const people = roster.filter((p) => p.via === 'onsite' && !p.isTeacher).filter((p) => !needMatch || needMatch(p));
     const noteOf = (p) => [
       p.wantsLaptop && 'ยืมโน้ตบุ๊ก',
       p.foodAllergy && `แพ้: ${p.foodAllergy}`,
@@ -186,8 +213,9 @@ export default function ApplicantsModal({ eventId, open, onClose, mode = 'list' 
   // Check-in result: who came on which day, as recorded in the system — laid
   // out like the sign-in sheet, everyone in one table.
   function exportAttendance() {
-    downloadXlsx(`ผลการเช็คอิน-${(ev?.title || '').slice(0, 30)}`, buildAttendanceSheet({ ev, days, people: roster, showVia: hybrid }));
-    pushToast('ดาวน์โหลดผลการเช็คอินแล้ว', `${roster.length} คน${hybrid ? ' · รวม Onsite และ Online' : ''}`);
+    const people = roster.filter((p) => !p.isTeacher);
+    downloadXlsx(`ผลการเช็คอิน-${(ev?.title || '').slice(0, 30)}`, buildAttendanceSheet({ ev, days, people, showVia: hybrid }));
+    pushToast('ดาวน์โหลดผลการเช็คอินแล้ว', `${people.length} คน${hybrid ? ' · รวม Onsite และ Online' : ''}`);
   }
 
   const chips = Object.entries(FILTERS).filter(([, f]) => (hybrid || !f.hybridOnly) && (!f.legacy || roster.some(f.match)));
@@ -210,12 +238,18 @@ export default function ApplicantsModal({ eventId, open, onClose, mode = 'list' 
         {slipsTab ? (
           <>
             {/* Three piles to pick from; the numbers are the filter. */}
+            {cancelled && (
+              <p className="ci-refund-banner" role="status">
+                <i className="ti ti-calendar-off" /> กิจกรรมนี้ถูกยกเลิกแล้ว · {refundLeft > 0 ? `ต้องคืนเงินอีก ${refundLeft} คน` : 'คืนเงินครบทุกคนแล้ว'} · วิธีคืน: {REFUND_METHODS[ev.refundMethod]?.label}{ev.refundNote ? ` · ${ev.refundNote}` : ''}
+              </p>
+            )}
             <div className="slip-groups" role="tablist" aria-label="กรองตามสถานะการตรวจสลิป">
-              {SLIP_GROUPS.map((g) => {
+              {slipGroups.map((g) => {
                 const n = roster.filter(g.match).length;
                 const hint = g.key === 'waiting' ? 'ส่งสลิปแล้ว ยังไม่ได้ตรวจ'
                   : g.key === 'checked' ? `ผ่าน ${paidCount} · ไม่ผ่าน ${roster.filter((p) => p.paymentStatus === 'rejected').length}`
-                    : 'สมัครแล้ว ยังไม่แนบสลิป';
+                    : g.key === 'refund' ? `คืนแล้ว ${refundDone} · ยังไม่คืน ${refundLeft}`
+                      : 'สมัครแล้ว ยังไม่แนบสลิป';
                 return (
                   <button type="button" key={g.key} role="tab" aria-selected={slipGroup === g.key} className={`slip-group ${g.key}${slipGroup === g.key ? ' active' : ''}`} onClick={() => setSlipGroup(g.key)}>
                     <span className="sg-top"><i className={`ti ${g.icon}`} /> {g.label}</span>
@@ -237,7 +271,8 @@ export default function ApplicantsModal({ eventId, open, onClose, mode = 'list' 
                 <div className="empty-state">
                   {query.trim() ? 'ไม่พบรายชื่อที่ตรงกับคำค้นหา'
                     : slipGroup === 'waiting' ? 'ไม่มีสลิปรอตรวจ · ตรวจครบทุกใบที่ส่งมาแล้ว'
-                      : slipGroup === 'checked' ? 'ยังไม่มีสลิปที่ตรวจแล้ว' : 'ผู้สมัครทุกคนส่งสลิปแล้ว'}
+                      : slipGroup === 'checked' ? 'ยังไม่มีสลิปที่ตรวจแล้ว'
+                        : slipGroup === 'refund' ? 'ยังไม่มีผู้ชำระเงิน' : 'ผู้สมัครทุกคนส่งสลิปแล้ว'}
                 </div>
               )}
               {slipRows.map((p) => (
@@ -245,23 +280,35 @@ export default function ApplicantsModal({ eventId, open, onClose, mode = 'list' 
                   <div className="ci-av">{initials(p.name)}</div>
                   <div className="ci-info">
                     <div className="ci-name">{p.name}</div>
-                    <div className="ci-id">{p.sid}</div>
+                    <div className="ci-id">{p.isTeacher ? 'อาจารย์ · ไม่ต้องชำระเงิน · ไม่นับในใบลงชื่อและรายงาน' : p.sid}</div>
                     {p.paymentStatus !== 'pending' && (p.slipAmount != null || p.slipTransferredAt) && (
                       <div className="slip-meta"><i className="ti ti-receipt" /> แจ้งโอน {p.slipAmount != null ? formatBaht(p.slipAmount) : ''}{p.slipTransferredAt ? ` · ${formatThaiDateTime(p.slipTransferredAt)}` : ''}</div>
                     )}
                     {p.paymentStatus === 'rejected' && p.rejectReason && <div className="slip-meta bad"><i className="ti ti-alert-triangle" /> เหตุผล: {p.rejectReason}</div>}
+                    {slipGroup === 'refund' && ev?.refundMethod === 'transfer' && (
+                      <div className={`slip-meta${p.refundPromptPay ? '' : ' bad'}`}><i className="ti ti-device-mobile" /> {p.refundPromptPay ? `พร้อมเพย์รับเงินคืน ${formatPromptPay(p.refundPromptPay)}` : 'ยังไม่ได้ให้พร้อมเพย์สำหรับรับเงินคืน'}</div>
+                    )}
                   </div>
                   <div className="ci-right">
-                    {p.paymentStatus === 'submitted' && (
+                    {slipGroup === 'refund' ? (
+                      p.paymentStatus === 'refunded' ? (
+                        <>
+                          <span className="slip-verdict refunded"><i className="ti ti-receipt-refund" /> คืนเงินแล้ว{p.refundedAt ? ` · ${formatThaiDateTime(p.refundedAt)}` : ''}</span>
+                          <button type="button" className="btn btn-outline slip-btn" onClick={() => setRefundAsk({ p, on: false })}>ยกเลิก</button>
+                        </>
+                      ) : (
+                        <button type="button" className="btn btn-primary slip-btn" onClick={() => setRefundAsk({ p, on: true })}><i className="ti ti-receipt-refund" /> คืนเงินแล้ว</button>
+                      )
+                    ) : p.paymentStatus === 'submitted' && (
                       <button type="button" className="btn btn-primary slip-btn" onClick={() => openReview(p)}><i className="ti ti-receipt" /> ตรวจสลิป</button>
                     )}
-                    {(p.paymentStatus === 'paid' || p.paymentStatus === 'rejected') && (
+                    {slipGroup !== 'refund' && (p.paymentStatus === 'paid' || p.paymentStatus === 'rejected') && (
                       <>
                         <span className={`slip-verdict ${p.paymentStatus}`}><i className={`ti ${p.paymentStatus === 'paid' ? 'ti-circle-check' : 'ti-alert-triangle'}`} /> {p.paymentStatus === 'paid' ? 'ผ่าน · ชำระแล้ว' : 'ไม่ผ่าน · รอส่งใหม่'}</span>
                         <button type="button" className="btn btn-outline slip-btn" onClick={() => openReview(p)}><i className="ti ti-eye" /> ดูสลิป</button>
                       </>
                     )}
-                    {p.paymentStatus === 'pending' && <span className="slip-verdict pending"><i className="ti ti-clock" /> ยังไม่ส่งสลิป</span>}
+                    {slipGroup !== 'refund' && p.paymentStatus === 'pending' && <span className="slip-verdict pending"><i className="ti ti-clock" /> ยังไม่ส่งสลิป</span>}
                   </div>
                 </div>
               ))}
@@ -342,17 +389,17 @@ export default function ApplicantsModal({ eventId, open, onClose, mode = 'list' 
               <div className="ci-toolrow">
                 {selfLinkDay && (
                   <div className="ci-selflink">
-                    <div className="ci-selflink-title"><i className="ti ti-link" /> ลิงก์เช็คชื่อออนไลน์ · {multiDay ? `วันที่ ${days.indexOf(selfLinkDay) + 1} · ` : ''}{formatThaiDate(selfLinkDay)}</div>
+                    <div className="ci-selflink-title"><i className="ti ti-link" /> ลิงก์เช็คชื่อ · {multiDay ? `วันที่ ${days.indexOf(selfLinkDay) + 1} · ` : ''}{formatThaiDate(selfLinkDay)}</div>
                     {selfLink ? (
                       <div className="ci-selflink-row">
-                        <input type="text" readOnly value={selfLink} onFocus={(e) => e.target.select()} aria-label="ลิงก์เช็คชื่อออนไลน์" />
+                        <input type="text" readOnly value={selfLink} onFocus={(e) => e.target.select()} aria-label="ลิงก์เช็คชื่อ" />
                         <button type="button" className="btn btn-primary" onClick={copySelfLink}><i className="ti ti-copy" /> คัดลอก</button>
                       </div>
                     ) : (
                       <p className="ci-hint" style={{ marginTop: 6 }}>ลิงก์จะแสดงเมื่อมีผู้สมัครอย่างน้อย 1 คน</p>
                     )}
                     <p className="ci-hint" style={{ marginTop: 8 }}>
-                      <i className="ti ti-info-circle" /> ส่งลิงก์นี้ในห้องออนไลน์ระหว่างกิจกรรม ผู้เข้าร่วมเปิดลิงก์แล้วระบบเช็คชื่อให้เอง · ใช้ได้เฉพาะวันที่ {formatThaiDate(selfLinkDay)} ต้องเข้าสู่ระบบ และต้องเป็นผู้ที่ลงทะเบียนแบบออนไลน์ · แต่ละวันใช้ลิงก์ต่างกัน · ยังติ๊กเช็คอินแทนได้จากรายชื่อด้านล่าง
+                      <i className="ti ti-info-circle" /> ส่งลิงก์นี้ในห้องออนไลน์หรือแสดงที่หน้างานระหว่างกิจกรรม ผู้เข้าร่วมทั้ง Onsite และ Online เปิดลิงก์แล้วระบบเช็คชื่อให้เอง · ใช้ได้เฉพาะวันที่ {formatThaiDate(selfLinkDay)} ต้องเข้าสู่ระบบ และต้องเป็นผู้ที่ลงทะเบียนกิจกรรมนี้ · แต่ละวันใช้ลิงก์ต่างกัน · ยังติ๊กเช็คอินแทนได้จากรายชื่อด้านล่าง
                     </p>
                   </div>
                 )}
@@ -362,7 +409,7 @@ export default function ApplicantsModal({ eventId, open, onClose, mode = 'list' 
                   </button>
                 </div>
                 <p className="ci-hint">
-                  <i className="ti ti-info-circle" /> ติ๊กเช็คอินให้ตรงกับผู้ที่มาเข้าร่วมจริงก่อนออกเกียรติบัตร{hybrid ? ' · เช็คอินแยกระหว่าง Onsite กับ Online' : ''}{multiDay ? ` · กิจกรรมนี้จัด ${days.length} วัน เช็คอินแยกทีละวัน ผู้ที่เข้าร่วมครบทุกวันจึงจะได้รับเกียรติบัตร` : ''}
+                  <i className="ti ti-info-circle" /> ติ๊กเช็คอินให้ตรงกับผู้ที่มาเข้าร่วมจริงก่อน{noCert ? 'ปิดกิจกรรม' : 'ออกเกียรติบัตร'}{hybrid ? ' · เช็คอินแยกระหว่าง Onsite กับ Online' : ''}{multiDay ? ` · กิจกรรมนี้จัด ${days.length} วัน เช็คอินแยกทีละวัน${noCert ? ' นับว่าเข้าร่วมเมื่อเช็คอินครบทุกวัน' : ' ผู้ที่เข้าร่วมครบทุกวันจึงจะได้รับเกียรติบัตร'}` : ''}
                 </p>
               </div>
             ) : (
@@ -376,7 +423,7 @@ export default function ApplicantsModal({ eventId, open, onClose, mode = 'list' 
                   <i className="ti ti-info-circle" />{' '}
                   {onlineOnly
                     ? 'กิจกรรมนี้จัดออนไลน์ จึงไม่มีใบลงชื่อให้ปริ้น · ผู้เข้าร่วมเช็คชื่อด้วยลิงก์ในเมนู "เช็คอินผู้เข้าร่วม"'
-                    : `ใช้ตรวจสอบผู้สมัคร การชำระเงิน และข้อมูลที่ต้องเตรียมหน้างาน · ไฟล์เป็นใบลงชื่อสำหรับปริ้น มีช่องเช้า/บ่ายใต้วันที่จัด${multiDay ? ` และแยกแผ่นงานวันละแผ่น (${days.length} วัน)` : ''}${hybrid ? ' · มีเฉพาะผู้เข้าร่วมที่สถานที่จัด ส่วนผู้เข้าร่วมออนไลน์เช็คชื่อด้วยลิงก์' : ''} · การเช็คอินอยู่ที่เมนู "เช็คอินผู้เข้าร่วม"`}
+                    : `ใช้ตรวจสอบผู้สมัคร การชำระเงิน และข้อมูลที่ต้องเตรียมหน้างาน · ไฟล์เป็นใบลงชื่อสำหรับปริ้น ${noCert ? 'มีช่องลงชื่อช่องเดียวใต้วันที่จัด (กิจกรรมนี้ไม่ออกเกียรติบัตร)' : 'มีช่องเช้า/บ่ายใต้วันที่จัด'}${multiDay ? ` และแยกแผ่นงานวันละแผ่น (${days.length} วัน)` : ''}${hybrid ? ' · มีเฉพาะผู้เข้าร่วมที่สถานที่จัด' : ''} · ผู้เข้าร่วมเช็คชื่อด้วยลิงก์ได้ทั้ง Onsite และ Online ที่เมนู "เช็คอินผู้เข้าร่วม"`}
                 </p>
               </div>
             )}
@@ -422,7 +469,7 @@ export default function ApplicantsModal({ eventId, open, onClose, mode = 'list' 
                       {!checkin && hybrid && <span className={`ci-via ${p.via}`}><i className={`ti ${VIA[p.via]?.icon}`} /> {VIA[p.via]?.label}</span>}
                       {p.wantsLaptop && <span className="ci-laptop"><i className="ti ti-device-laptop" /> ขอยืมโน้ตบุ๊ก</span>}
                     </div>
-                    <div className="ci-id">{p.sid}</div>
+                    <div className="ci-id">{p.isTeacher ? 'อาจารย์ · ไม่ต้องชำระเงิน · ไม่นับในใบลงชื่อและรายงาน' : p.sid}</div>
                     {p.foodAllergy && <div className="ci-diet"><i className="ti ti-alert-triangle" /> แพ้: {p.foodAllergy}</div>}
                     {p.dietaryPref && <div className="ci-diet pref"><i className="ti ti-tools-kitchen-2" /> {p.dietaryPref}</div>}
                   </div>
@@ -434,7 +481,7 @@ export default function ApplicantsModal({ eventId, open, onClose, mode = 'list' 
                         onClick={() => openReview(p)}
                         title="เปิดดูสลิปและตรวจสอบการชำระเงิน"
                       >
-                        <i className={`ti ${PAYMENT_STATUS[p.paymentStatus].icon}`} /> {p.paymentStatus === 'submitted' ? 'ตรวจสลิป' : p.paymentStatus === 'pending' ? 'ยังไม่ส่งสลิป' : p.paymentStatus === 'rejected' ? 'ไม่ผ่าน' : 'ชำระแล้ว'}
+                        <i className={`ti ${PAYMENT_STATUS[p.paymentStatus].icon}`} /> {p.paymentStatus === 'submitted' ? 'ตรวจสลิป' : p.paymentStatus === 'pending' ? 'ยังไม่ส่งสลิป' : p.paymentStatus === 'rejected' ? 'ไม่ผ่าน' : p.paymentStatus === 'refunded' ? 'คืนเงินแล้ว' : 'ชำระแล้ว'}
                       </button>
                     )}
                     {checkin && multiDay && (
@@ -442,6 +489,11 @@ export default function ApplicantsModal({ eventId, open, onClose, mode = 'list' 
                         {days.map((d) => <i key={d} className={`ci-dot${p.days.includes(d) ? ' on' : ''}`} />)}
                         {p.days.length}/{days.length} วัน
                       </span>
+                    )}
+                    {checkin && ev?.refundMethod === 'department' && (held(p) || p.paymentStatus === 'refunded') && (
+                      p.paymentStatus === 'refunded'
+                        ? <button type="button" className="ci-pay refunded" onClick={() => setRefundAsk({ p, on: false })} title="กดเพื่อยกเลิกการบันทึกคืนเงิน"><i className="ti ti-receipt-refund" /> คืนเงินแล้ว</button>
+                        : <button type="button" className="ci-pay" onClick={() => setRefundAsk({ p, on: true })} title="บันทึกว่าคืนเงินให้คนนี้แล้ว"><i className="ti ti-cash" /> คืนเงิน</button>
                     )}
                     {checkin && (
                       <>
@@ -462,26 +514,51 @@ export default function ApplicantsModal({ eventId, open, onClose, mode = 'list' 
         <button className="btn btn-outline" onClick={onClose}>ปิด</button>
         {checkin && (
           <button className="btn btn-primary" onClick={() => setConfirmCert(true)} disabled={!certIssued && !ev?.ended}>
-            <i className={`ti ${certIssued ? 'ti-circle-check' : 'ti-certificate'}`} /> {certIssued ? 'ออกเกียรติบัตรแล้ว · แจ้งเตือนผู้ที่เช็คอินเพิ่ม' : ev?.ended ? 'เปิดสิทธิ์เกียรติบัตรให้ผู้เข้าร่วม' : 'ออกเกียรติบัตรได้เมื่อถึงวันสุดท้ายของกิจกรรม'}
+            <i className={`ti ${certIssued ? 'ti-circle-check' : noCert ? 'ti-flag' : 'ti-certificate'}`} /> {noCert
+              ? (certIssued ? 'ปิดกิจกรรมแล้ว · แจ้งเตือนผู้ที่เช็คอินเพิ่ม' : ev?.ended ? 'ยืนยันผลการเข้าร่วมและปิดกิจกรรม' : 'ปิดกิจกรรมได้เมื่อถึงวันสุดท้ายของกิจกรรม')
+              : (certIssued ? 'ออกเกียรติบัตรแล้ว · แจ้งเตือนผู้ที่เช็คอินเพิ่ม' : ev?.ended ? 'เปิดสิทธิ์เกียรติบัตรให้ผู้เข้าร่วม' : 'ออกเกียรติบัตรได้เมื่อถึงวันสุดท้ายของกิจกรรม')}
           </button>
         )}
       </div>
       <ConfirmDialog
         open={confirmCert}
-        eyebrow={certIssued ? 'ออกเกียรติบัตรแล้ว' : 'ยืนยันการออกเกียรติบัตร'}
-        icon="ti-certificate"
-        title={certIssued ? 'แจ้งเตือนผู้ที่เช็คอินเพิ่ม?' : 'เปิดสิทธิ์เกียรติบัตรให้ผู้เข้าร่วม?'}
-        confirmLabel={certIssued ? 'แจ้งเตือนผู้ที่เช็คอินเพิ่ม' : 'ยืนยันออกเกียรติบัตร'}
-        confirmIcon={certIssued ? 'ti-bell' : 'ti-certificate'}
+        eyebrow={noCert ? (certIssued ? 'ปิดกิจกรรมแล้ว' : 'ยืนยันการปิดกิจกรรม') : (certIssued ? 'ออกเกียรติบัตรแล้ว' : 'ยืนยันการออกเกียรติบัตร')}
+        icon={noCert ? 'ti-flag' : 'ti-certificate'}
+        title={certIssued ? 'แจ้งเตือนผู้ที่เช็คอินเพิ่ม?' : noCert ? 'ยืนยันผลการเข้าร่วมและปิดกิจกรรม?' : 'เปิดสิทธิ์เกียรติบัตรให้ผู้เข้าร่วม?'}
+        confirmLabel={certIssued ? 'แจ้งเตือนผู้ที่เช็คอินเพิ่ม' : noCert ? 'ยืนยันปิดกิจกรรม' : 'ยืนยันออกเกียรติบัตร'}
+        confirmIcon={certIssued ? 'ti-bell' : noCert ? 'ti-flag' : 'ti-certificate'}
         size=""
         onConfirm={() => { setConfirmCert(false); issueCertificate(eventId); onClose(); }}
         onCancel={() => setConfirmCert(false)}
       >
         <p style={{ fontSize: 13.5, color: 'var(--c4-70)', lineHeight: 1.7 }}>
           <strong style={{ color: 'var(--c4)' }}>{ev?.title}</strong><br />
-          {multiDay ? `เข้าร่วมครบ ${days.length} วัน` : 'เช็คอินแล้ว'} {roster.filter((p) => p.in).length} จาก {roster.length} คน{hybrid ? ' (รวม Onsite และ Online)' : ''} · {certIssued ? 'กิจกรรมนี้ออกเกียรติบัตรไปแล้ว ยืนยันอีกครั้งจะแจ้งเตือนเฉพาะผู้ที่เช็คอินเพิ่มหลังจากนั้น ผู้ที่เคยได้รับแจ้งเตือนแล้วจะไม่ได้รับซ้ำ' : 'ผู้ที่เช็คอินแล้วจะได้รับสิทธิ์รับเกียรติบัตรและได้รับการแจ้งเตือน · ตรวจตัวอย่างด้านล่างก่อนยืนยัน'}
+          {multiDay ? `เข้าร่วมครบ ${days.length} วัน` : 'เช็คอินแล้ว'} {roster.filter((p) => p.in).length} จาก {roster.length} คน{hybrid ? ' (รวม Onsite และ Online)' : ''} · {noCert
+            ? (certIssued ? 'ปิดกิจกรรมไปแล้ว ยืนยันอีกครั้งจะแจ้งเตือนให้ทำแบบประเมินเฉพาะผู้ที่เช็คอินเพิ่มหลังจากนั้น' : 'กิจกรรมนี้ไม่ออกเกียรติบัตร · ผู้ที่เช็คอินแล้วจะได้รับการแจ้งเตือนให้ทำแบบประเมิน และผู้ที่ไม่ได้เช็คอินจะถูกบันทึกว่าขาด')
+            : (certIssued ? 'กิจกรรมนี้ออกเกียรติบัตรไปแล้ว ยืนยันอีกครั้งจะแจ้งเตือนเฉพาะผู้ที่เช็คอินเพิ่มหลังจากนั้น ผู้ที่เคยได้รับแจ้งเตือนแล้วจะไม่ได้รับซ้ำ' : 'ผู้ที่เช็คอินแล้วจะได้รับสิทธิ์รับเกียรติบัตรและได้รับการแจ้งเตือน · ตรวจตัวอย่างด้านล่างก่อนยืนยัน')}
         </p>
-        {ev && <CertIssueReview ev={ev} onEdit={() => { setConfirmCert(false); onClose(); navigate('/create-event', { state: { editId: ev.id, section: 'cert' } }); }} />}
+        {ev && !noCert && <CertIssueReview ev={ev} onEdit={() => { setConfirmCert(false); onClose(); navigate('/create-event', { state: { editId: ev.id, section: 'cert' } }); }} />}
+      </ConfirmDialog>
+      <ConfirmDialog
+        open={!!refundAsk}
+        eyebrow={refundAsk?.on ? 'บันทึกการคืนเงิน' : 'ยกเลิกการบันทึกคืนเงิน'}
+        icon="ti-receipt-refund"
+        title={refundAsk?.on ? 'คืนเงินให้คนนี้แล้ว?' : 'ยกเลิกว่าคืนเงินแล้ว?'}
+        confirmLabel={refundAsk?.on ? 'ยืนยันคืนเงินแล้ว' : 'ยืนยันยกเลิก'}
+        confirmIcon="ti-receipt-refund"
+        busy={refundBusy}
+        onConfirm={confirmRefund}
+        onCancel={() => setRefundAsk(null)}
+      >
+        {refundAsk && (
+          <p style={{ fontSize: 13.5, color: 'var(--c4-70)', lineHeight: 1.7 }}>
+            <strong style={{ color: 'var(--c4)' }}>{refundAsk.p.name}</strong>
+            {refundAsk.p.slipAmount != null ? ` · แจ้งโอน ${formatBaht(refundAsk.p.slipAmount)}` : ev?.fee > 0 ? ` · ค่าลงทะเบียน ${formatBaht(ev.fee)}` : ''}<br />
+            {refundAsk.on
+              ? (ev?.refundMethod === 'transfer' && refundAsk.p.refundPromptPay ? `โอนคืนเข้าพร้อมเพย์ ${formatPromptPay(refundAsk.p.refundPromptPay)} แล้ว · ` : '') + 'ผู้ชำระเงินจะได้รับแจ้งเตือนว่าได้รับเงินคืนแล้ว'
+              : 'สถานะจะกลับเป็น "ชำระแล้ว" และผู้ชำระเงินจะได้รับแจ้งเตือน'}
+          </p>
+        )}
       </ConfirmDialog>
     </Modal>
   );

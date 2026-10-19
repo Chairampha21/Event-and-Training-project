@@ -4,7 +4,8 @@ import ImageViewer from '../../../components/ui/ImageViewer';
 import { CertOrgOverlay, CertBodyOverlay, CertSignerOverlay } from './CertOverlays';
 import { COLOR_PRESETS, DEFAULT_LAYOUT, LAYOUT_LIMITS, analyzeTemplate, isDefaultLayout, layoutVars, normalizeLayout } from '../utils/certLayout';
 import './CertTemplateUpload.css';
-import { DEFAULT_CERT_TEMPLATE_URL } from '../utils/defaultTemplate';
+import { DEFAULT_CERT_TEMPLATE_URL, mainTemplate } from '../utils/defaultTemplate';
+import { useEvents } from '../../../hooks/useEvents';
 
 const MAX_BYTES = 5 * 1024 * 1024;
 const ACCEPT = ['image/jpeg', 'image/png'];
@@ -67,7 +68,12 @@ function checkTemplate(dims) {
  * template the built-in certificate design is used.
  * `value` is {name, type, dataUrl} or null.
  */
-export default function CertTemplateUpload({ value, onChange, layout, onLayoutChange, signerName, signerTitle, signature, eventTitle, certDate, category }) {
+// `asDefault`: used on the admin's settings page to set the department's main
+// template itself, so "without an upload" means the template built into the site.
+export default function CertTemplateUpload({ value, onChange, layout, onLayoutChange, signerName, signerTitle, signature, eventTitle, certDate, category, asDefault }) {
+  const { certDefaults } = useEvents();
+  const fallbackUrl = asDefault ? DEFAULT_CERT_TEMPLATE_URL : mainTemplate(certDefaults).url;
+  const adminSet = !asDefault && !!certDefaults?.template;
   const lay = normalizeLayout(layout);
   const setLayout = (patch) => onLayoutChange({ ...lay, ...patch });
   const inputRef = useRef(null);
@@ -164,7 +170,7 @@ export default function CertTemplateUpload({ value, onChange, layout, onLayoutCh
               <button type="button" className="btn btn-outline" onClick={pick}><i className="ti ti-replace" /> เปลี่ยน template</button>
               <button type="button" className="btn btn-outline ctu-remove" onClick={remove}><i className="ti ti-trash" /> ลบ</button>
             </div>
-            <div className="ctu-tip">ตัวอย่างใช้ชื่อสมมติ · ลบ template เพื่อกลับไปใช้แม่แบบหลักของภาควิชา</div>
+            <div className="ctu-tip">ตัวอย่างใช้ชื่อสมมติ · {asDefault ? 'ลบ template เพื่อกลับไปใช้แม่แบบที่ติดมากับระบบ' : 'ลบ template เพื่อกลับไปใช้แม่แบบหลักของภาควิชา'}</div>
           </div>
           {dragOver && <div className="ctu-drop-cover"><i className="ti ti-replace" /> วางไฟล์เพื่อเปลี่ยน template</div>}
         </div>
@@ -189,13 +195,15 @@ export default function CertTemplateUpload({ value, onChange, layout, onLayoutCh
             <div className="ctu-empty-title">{dragOver ? 'วางไฟล์ที่นี่เพื่ออัปโหลด' : 'ลากไฟล์ template เกียรติบัตรมาวางที่นี่'}</div>
             {!dragOver && <div className="ctu-empty-or">หรือ <span className="ctu-browse">เลือกไฟล์จากเครื่อง</span></div>}
             <div className="ctu-empty-hint">JPG หรือ PNG · สูงสุด 5 MB · A4 แนวนอน แนะนำ {PRINT_SHARP_W} × 2480 px</div>
-            <div className="ctu-empty-opt"><i className="ti ti-info-circle" /> ไม่บังคับ · หากไม่อัปโหลด ระบบใช้แม่แบบหลักของภาควิชา (ด้านล่าง)</div>
+            <div className="ctu-empty-opt"><i className="ti ti-info-circle" /> {asDefault ? 'หากไม่อัปโหลด ระบบใช้แม่แบบที่ติดมากับระบบ (ด้านล่าง)' : 'ไม่บังคับ · หากไม่อัปโหลด ระบบใช้แม่แบบหลักของภาควิชา (ด้านล่าง)'}</div>
           </div>
           <div className="ctu-default">
-            <img src={DEFAULT_CERT_TEMPLATE_URL} alt="แม่แบบเกียรติบัตรหลักของภาควิชา" />
+            <img src={fallbackUrl} alt="แม่แบบเกียรติบัตรหลักของภาควิชา" />
             <div>
-              <strong>แม่แบบหลักของภาควิชา</strong>
-              <span>ใช้กับกิจกรรมนี้โดยอัตโนมัติถ้าไม่อัปโหลด template ของตัวเอง ระบบวางชื่อผู้รับ ชื่อกิจกรรม วันที่ และผู้ลงนามให้</span>
+              <strong>{asDefault ? 'แม่แบบที่ติดมากับระบบ' : 'แม่แบบหลักของภาควิชา'}</strong>
+              <span>{asDefault
+                ? 'ใช้เป็นแม่แบบหลักถ้าไม่อัปโหลดแม่แบบของภาควิชาเอง'
+                : `ใช้กับกิจกรรมนี้โดยอัตโนมัติถ้าไม่อัปโหลด template ของตัวเอง ระบบวางชื่อผู้รับ ชื่อกิจกรรม วันที่ และผู้ลงนามให้${adminSet ? ' · ตั้งค่าโดยผู้ดูแลระบบ' : ''}`}</span>
             </div>
           </div>
         </>

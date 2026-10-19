@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useEvents } from '../../hooks/useEvents';
 import { fiscalYearOf, todayIso } from '../../utils/dateFormat';
-import { EVENT_CATEGORIES as BASE_CATEGORIES, EVENT_CATEGORY_ICONS as CATEGORY_ICONS } from '../../utils/constants';
+import { EVENT_CATEGORIES as BASE_CATEGORIES, EVENT_CATEGORY_ICONS as CATEGORY_ICONS, isParticipant } from '../../utils/constants';
 import EventCard from '../../features/events/components/EventCard';
 import SearchBar, { HeroSearch } from '../../features/events/components/SearchBar';
 import ApplicantsModal from '../../features/events/components/ApplicantsModal';
@@ -27,7 +27,7 @@ const CATEGORY_PILLS = [
 
 export default function HomePage() {
   const { events, regs, session, myStatus, getDashboardSummary } = useEvents();
-  const isStudent = session?.role === 'student';
+  const isStudent = isParticipant(session?.role);
 
   const [summary, setSummary] = useState(null);
   useEffect(() => { getDashboardSummary().then(setSummary); }, [getDashboardSummary]);
@@ -95,10 +95,16 @@ export default function HomePage() {
           <h1>ค้นหา · สมัคร · รับเกียรติบัตร<br /><span className="hero-line">ระบบกิจกรรมครบวงจรของภาควิชาคอมพิวเตอร์</span></h1>
           <HeroSearch query={query} onQueryChange={setQuery} onSearch={() => setAppliedQuery(query.trim().toLowerCase())} />
           <div className="hero-stats">
+            {/* Registered and actually attended are shown apart (registered → checked in, as event dashboards do),
+                with the share that turned up under the attended count. */}
             <div className="hero-stat"><span className="v">{summary ? summary.events_this_year : '—'}</span><span className="l">กิจกรรมในปีงบประมาณนี้</span></div>
-            <div className="hero-stat"><span className="v">{summary ? summary.participants_total.toLocaleString('en-US') : '—'}</span><span className="l">ผู้เข้าร่วมสะสม</span></div>
+            <div className="hero-stat"><span className="v">{summary ? summary.participants_total.toLocaleString('en-US') : '—'}</span><span className="l">ลงทะเบียนสะสม</span></div>
+            <div className="hero-stat">
+              <span className="v">{summary ? (summary.attended_total ?? 0).toLocaleString('en-US') : '—'}</span>
+              <span className="l">เข้าร่วมจริงสะสม{summary?.participants_total > 0 ? <em>{Math.round(((summary.attended_total || 0) / summary.participants_total) * 100)}% ของผู้ลงทะเบียน</em> : null}</span>
+            </div>
             <div className="hero-stat"><span className="v">{summary ? summary.certificates_issued.toLocaleString('en-US') : '—'}</span><span className="l">เกียรติบัตรที่ออก</span></div>
-            <div className="hero-stat"><span className="v">{summary ? summary.open_now : events.filter((e) => e.listed && e.status === 'open').length}</span><span className="l">กำลังเปิดรับ</span></div>
+            <div className="hero-stat"><span className="v">{summary ? summary.open_now : events.filter((e) => e.listed && e.status === 'open').length}</span><span className="l">กำลังเปิดรับสมัคร</span></div>
           </div>
         </div>
       </div>

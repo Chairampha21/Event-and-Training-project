@@ -4,6 +4,7 @@ import { useEvents } from '../../hooks/useEvents';
 import { ROLE_LABEL } from '../../utils/constants';
 import './Navbar.css';
 import { initials } from '../../utils/initials';
+import ConfirmDialog from '../ui/ConfirmDialog';
 
 const NAV_TABS = {
   admin: [
@@ -12,6 +13,7 @@ const NAV_TABS = {
     { to: '/create-event', icon: 'ti-square-rounded-plus', label: 'สร้างกิจกรรม' },
     { to: '/admin/users', icon: 'ti-users-group', label: 'ผู้ใช้งาน' },
     { to: '/admin/blacklist', icon: 'ti-user-off', label: 'Blacklist' },
+    { to: '/admin/certificate', icon: 'ti-certificate', label: 'ตั้งค่าเกียรติบัตร' },
     { to: '/admin/activity-log', icon: 'ti-history', label: 'Log ระบบ' },
     { to: '/report', icon: 'ti-report-analytics', label: 'รายงาน' },
   ],
@@ -30,10 +32,12 @@ const NAV_TABS = {
     { to: '/certificates', icon: 'ti-certificate', label: 'เกียรติบัตร' },
   ],
 };
+NAV_TABS.teacher = NAV_TABS.student;
 
 export default function Navbar() {
   const { session, notifs, refreshNotifications, markAllRead, markNotifRead, clearAllNotif, logout } = useEvents();
   const [notifOpen, setNotifOpen] = useState(false);
+  const [logoutAsk, setLogoutAsk] = useState(false);
   const wrapRef = useRef(null);
   const navigate = useNavigate();
 
@@ -59,6 +63,7 @@ export default function Navbar() {
   }
 
   function handleLogout() {
+    setLogoutAsk(false);
     logout();
     navigate('/login');
   }
@@ -134,9 +139,24 @@ export default function Navbar() {
               <span className="up-role"><span className={`role-tag ${session.role}`}>{ROLE_LABEL[session.role]}</span></span>
             </div>
           </button>
-          <button className="btn-logout" title="ออกจากระบบ" onClick={handleLogout}><i className="ti ti-logout" /> <span>ออกจากระบบ</span></button>
+          <button className="btn-logout" title="ออกจากระบบ" onClick={() => setLogoutAsk(true)}><i className="ti ti-logout" /> <span>ออกจากระบบ</span></button>
         </div>
       </nav>
+      <ConfirmDialog
+        open={logoutAsk}
+        eyebrow="ออกจากระบบ"
+        icon="ti-logout"
+        title="ออกจากระบบหรือไม่?"
+        confirmLabel="ออกจากระบบ"
+        confirmIcon="ti-logout"
+        onConfirm={handleLogout}
+        onCancel={() => setLogoutAsk(false)}
+      >
+        <p style={{ fontSize: 13.5, color: 'var(--c4-70)', lineHeight: 1.7 }}>
+          คุณกำลังออกจากบัญชี <strong style={{ color: 'var(--c4)' }}>{session.name}</strong> ({session.email})<br />
+          ข้อมูลที่ยังไม่ได้บันทึกในหน้านี้จะหายไป
+        </p>
+      </ConfirmDialog>
     </>
   );
 }

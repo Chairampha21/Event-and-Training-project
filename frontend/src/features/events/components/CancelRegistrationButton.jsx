@@ -59,7 +59,11 @@ export default function CancelRegistrationButton({ reg, className = 'btn btn-out
           <strong style={{ color: 'var(--c4)' }}>{reg.title}</strong><br />
           ที่นั่งของคุณจะถูกคืนให้ผู้อื่น{reg.wantsLaptop ? ' และโน้ตบุ๊กที่จองไว้จะถูกคืนด้วย' : ''}
           {regEnd ? ` · สมัครใหม่ได้ถ้ายังไม่เต็มและยังอยู่ในช่วงรับสมัคร (ถึง ${formatThaiDate(regEnd)})` : ''}
-          {reg.paymentStatus === 'paid' || reg.paymentStatus === 'submitted' ? ' · ค่าลงทะเบียนที่โอนแล้ว ติดต่อผู้จัดกิจกรรมเรื่องการคืนเงิน' : ''}
+          {reg.paymentStatus === 'paid' || reg.paymentStatus === 'submitted'
+            ? (reg.refundMethod === 'none' || !reg.refundMethod
+              ? ' · ค่าลงทะเบียนที่โอนแล้วไม่คืนตามเงื่อนไขของกิจกรรม'
+              : ' · ค่าลงทะเบียนที่โอนแล้ว ติดต่อผู้จัดกิจกรรมเรื่องการคืนเงิน')
+            : ''}
         </p>
       </ConfirmDialog>
     </>

@@ -1,23 +1,37 @@
-.mix .ch-sub{margin-bottom:16px}
-.mix-donuts{display:grid;grid-template-columns:1fr 1fr;gap:12px;justify-items:center;margin:4px 0 6px}
-.mix-donut{margin:0;display:flex;flex-direction:column;align-items:center;gap:8px}
-.mix-donut-ring{position:relative;width:132px;height:132px}
-.mix-donut-ring svg{display:block}
-.mix-donut-ring circle[stroke^="#"]{cursor:default;transition:opacity .15s}
-.mix-donut-ring svg:hover circle[stroke^="#"]{opacity:.55}
-.mix-donut-ring svg circle[stroke^="#"]:hover{opacity:1}
+.mix .ch-sub{margin-bottom:14px}
+.mix-chip{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px;flex-shrink:0}
+
+/* ring + legend, side by side */
+.mix-top{display:flex;align-items:center;gap:28px}
+.mix-donut{position:relative;width:152px;height:152px;flex-shrink:0}
+.mix-donut svg{display:block}
+.mix-donut svg circle[stroke^="#"]{transition:opacity .15s}
+.mix-donut svg:hover circle[stroke^="#"]{opacity:.55}
+.mix-donut svg circle[stroke^="#"]:hover{opacity:1}
 .mix-donut-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
-.mix-donut-center strong{font-size:24px;font-weight:800;color:var(--c4);line-height:1.1;font-variant-numeric:tabular-nums}
-.mix-donut-center small{font-size:11.5px;color:var(--c4-60)}
-.mix-donut figcaption{font-size:12.5px;font-weight:600;color:var(--c4-70)}
-.mix-table{width:100%;border-collapse:collapse;margin-top:16px;font-size:13px}
-.mix-table th{font-size:11.5px;font-weight:600;color:var(--c4-60);text-align:right;padding:0 0 6px;border-bottom:1px solid var(--c2-08);white-space:nowrap}
-.mix-table th:first-child,.mix-table td:first-child{text-align:left}
-.mix-table td{padding:9px 0;border-bottom:1px solid var(--c2-08);text-align:right;color:var(--c4);font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
-.mix-table td:first-child{font-weight:500;white-space:normal;padding-right:8px}
-.mix-table th+th,.mix-table td+td{padding-left:12px}
-.mix-table small{font-size:11px;font-weight:500;color:var(--c4-60);margin-left:2px}
-.mix-chip{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
-.mix-insight{display:flex;align-items:flex-start;gap:7px;margin-top:14px;padding:10px 12px;border-radius:10px;background:var(--c2-04);font-size:12.5px;color:var(--c4-70);line-height:1.5}
+.mix-donut-center strong{font-size:26px;font-weight:800;color:var(--c4);line-height:1.1;font-variant-numeric:tabular-nums}
+.mix-donut-center small{font-size:12px;color:var(--c4-60)}
+.mix-legend{flex:1;min-width:0;display:flex;flex-direction:column;gap:12px}
+.mix-legend-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:13.5px;color:var(--c4-70)}
+.mix-legend-name{display:flex;align-items:center;min-width:0}
+.mix-legend-val{font-weight:700;color:var(--c4);font-variant-numeric:tabular-nums;white-space:nowrap}
+.mix-legend-val small{font-size:11.5px;font-weight:500;color:var(--c4-60);margin-left:3px}
+
+/* people per category */
+.mix-people{margin-top:20px;padding-top:16px;border-top:1px solid var(--c2-08);display:flex;flex-direction:column;gap:11px}
+.mix-people-head{display:flex;justify-content:space-between;align-items:baseline;font-size:12.5px;font-weight:700;color:var(--c4)}
+.mix-people-head strong{font-size:15px;font-variant-numeric:tabular-nums}
+.mix-people-head small{font-size:11.5px;font-weight:500;color:var(--c4-60)}
+.mix-people-label{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;font-size:12.5px;color:var(--c4-70);margin-bottom:4px}
+.mix-people-label>span:first-child{display:flex;align-items:center}
+.mix-people-num{font-size:12px;color:var(--c4-60);font-variant-numeric:tabular-nums}
+.mix-people-num strong{font-size:13px;color:var(--c4)}
+.mix-people-track{height:8px;border-radius:4px;background:var(--c2-04)}
+.mix-people-track div{height:100%;border-radius:4px;min-width:4px;transition:width .3s ease}
+
+.mix-insight{display:flex;align-items:flex-start;gap:7px;margin-top:16px;padding:10px 12px;border-radius:10px;background:var(--c2-04);font-size:12.5px;color:var(--c4-70);line-height:1.5}
 .mix-insight i{font-size:16px;color:var(--c2);margin-top:1px}
 .mix-insight strong{color:var(--c4)}
+
+@media (max-width:520px){.mix-top{flex-direction:column;align-items:stretch}.mix-donut{align-self:center}}
+@media (prefers-reduced-motion:reduce){.mix-people-track div{transition:none}}

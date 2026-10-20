@@ -9,6 +9,7 @@ import (
 	"cpsu-etms-backend/internal/config"
 	"cpsu-etms-backend/internal/db"
 	"cpsu-etms-backend/internal/handlers"
+	"cpsu-etms-backend/internal/mailer"
 	"cpsu-etms-backend/internal/middleware"
 	"cpsu-etms-backend/internal/reminders"
 )
@@ -32,6 +33,7 @@ func main() {
 	events := handlers.NewEventsHandler(conn)
 	regs := handlers.NewRegistrationsHandler(conn)
 	handlers.SetCheckinSecret(cfg.JWTSecret)
+	mailer.Configure(mailer.Config{Host: cfg.SMTPHost, Port: cfg.SMTPPort, User: cfg.SMTPUser, Pass: cfg.SMTPPass, From: cfg.SMTPFrom})
 	certs := handlers.NewCertificatesHandler(conn)
 	evals := handlers.NewEvaluationsHandler(conn)
 	blacklist := handlers.NewBlacklistHandler(conn)
@@ -67,6 +69,10 @@ func main() {
 		authGroup.POST("/register", auth.Register)
 		authGroup.POST("/login", auth.Login)
 		authGroup.POST("/google", auth.GoogleLogin)
+		authGroup.POST("/verify-email", auth.VerifyEmail)
+		authGroup.POST("/resend-code", auth.ResendCode)
+		authGroup.POST("/forgot-password", auth.ForgotPassword)
+		authGroup.POST("/reset-password", auth.ResetPassword)
 		authGroup.PUT("/me", requireAuth, auth.UpdateMe)
 	}
 

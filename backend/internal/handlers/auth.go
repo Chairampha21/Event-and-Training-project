@@ -93,35 +93,54 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	res, err := h.DB.Exec(
-		`INSERT INTO users (name, email, password_hash, role, student_id, dept) VALUES (?, ?, ?, 'student', ?, ?)`,
-		name, email, string(hash), nullIfEmpty(body.StudentID), nullIfEmpty(body.Dept),
-	)
-	if err != nil {
-		if isDuplicateErr(err) {
-			c.JSON(http.StatusConflict, gin.H{"error": "อีเมลนี้ถูกใช้งานแล้ว"})
+	// The account stays unconfirmed — no log-in — until the code mailed to the
+	// address is entered (VerifyEmail), so only someone with that university
+	// mailbox gets in. Signing up again for an address nobody has confirmed
+	// takes it over (new name and password, new code): a wrong or someone
+	// else's sign-up can't hold an address hostage.
+	existing, err := h.accountByEmail(email)
+	var userID int64
+	switch {
+	case err == sql.ErrNoRows:
+		res, err := h.DB.Exec(
+			`INSERT INTO users (name, email, password_hash, role, student_id, dept) VALUES (?, ?, ?, 'student', ?, ?)`,
+			name, email, string(hash), nullIfEmpty(body.StudentID), nullIfEmpty(body.Dept),
+		)
+		if err != nil {
+			if isDuplicateErr(err) {
+				c.JSON(http.StatusConflict, gin.H{"error": "อีเมลนี้ถูกใช้งานแล้ว"})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 			return
 		}
+		userID, _ = res.LastInsertId()
+		activitylog.Log(h.DB, &userID, "CREATE", "สมัครสมาชิกใหม่ (รอยืนยันอีเมล): "+name)
+	case err != nil:
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 		return
+	case existing.verified:
+		c.JSON(http.StatusConflict, gin.H{"error": "อีเมลนี้มีบัญชีอยู่แล้ว · เข้าสู่ระบบ หรือใช้ \"ลืมรหัสผ่าน\""})
+		return
+	default:
+		userID = existing.user.ID
+		if _, err := h.DB.Exec(`UPDATE users SET name = ?, password_hash = ?, student_id = ?, dept = ? WHERE id = ?`,
+			name, string(hash), nullIfEmpty(body.StudentID), nullIfEmpty(body.Dept), userID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
+			return
+		}
 	}
-	id, _ := res.LastInsertId()
 
-	row := h.DB.QueryRow(`SELECT `+userPublicFields+` FROM users WHERE id = ?`, id)
-	user, err := scanUser(row)
+	wait, err := h.issueCode(userID, email, name, "verify")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 		return
 	}
-
-	token, err := h.signToken(user)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
-		return
+	retry := int(codeCooldown.Seconds())
+	if wait > 0 {
+		retry = int(wait.Seconds()) + 1 // a code from a moment ago is still on its way
 	}
-
-	activitylog.Log(h.DB, &user.ID, "CREATE", "สมัครสมาชิกใหม่: "+user.Name)
-	c.JSON(http.StatusCreated, gin.H{"user": user, "token": token})
+	c.JSON(http.StatusCreated, gin.H{"verification_required": true, "email": email, "retry_after": retry})
 }
 
 type loginBody struct {
@@ -147,10 +166,11 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		active       int
 	)
 	row := h.DB.QueryRow(
-		`SELECT id, name, email, role, student_id, dept, active, created_at, password_hash FROM users WHERE email = ?`,
+		`SELECT id, name, email, role, student_id, dept, active, created_at, password_hash, email_verified_at IS NOT NULL FROM users WHERE email = ?`,
 		email,
 	)
-	err := row.Scan(&u.ID, &u.Name, &u.Email, &u.Role, &u.StudentID, &u.Dept, &active, &u.CreatedAt, &passwordHash)
+	var verified bool
+	err := row.Scan(&u.ID, &u.Name, &u.Email, &u.Role, &u.StudentID, &u.Dept, &active, &u.CreatedAt, &passwordHash, &verified)
 	if err == sql.ErrNoRows || active != 1 {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "อีเมลหรือรหัสผ่านไม่ถูกต้อง"})
 		return
@@ -163,6 +183,22 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	if bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(body.Password)) != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "อีเมลหรือรหัสผ่านไม่ถูกต้อง"})
+		return
+	}
+	// Right password, address not confirmed yet: send a code (unless one went
+	// out a moment ago) and ask for it instead of signing in.
+	if !verified {
+		wait, err := h.issueCode(u.ID, u.Email, u.Name, "verify")
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
+			return
+		}
+		retry := int(codeCooldown.Seconds())
+		if wait > 0 {
+			retry = int(wait.Seconds()) + 1
+		}
+		c.JSON(http.StatusForbidden, gin.H{"error": "ยังไม่ได้ยืนยันอีเมล · กรอกรหัส 6 หลักที่ส่งไปที่ " + u.Email,
+			"verification_required": true, "email": u.Email, "retry_after": retry})
 		return
 	}
 
@@ -256,7 +292,7 @@ func (h *AuthHandler) GoogleLogin(c *gin.Context) {
 			name = email
 		}
 		res, ierr := h.DB.Exec(
-			`INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, 'student')`,
+			`INSERT INTO users (name, email, password_hash, role, email_verified_at) VALUES (?, ?, ?, 'student', UTC_TIMESTAMP())`,
 			name, email, string(randomHash),
 		)
 		if ierr != nil {
@@ -275,6 +311,8 @@ func (h *AuthHandler) GoogleLogin(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "บัญชีนี้ถูกระงับการใช้งาน"})
 		return
 	}
+	// Google has checked the address belongs to this person.
+	_, _ = h.DB.Exec(`UPDATE users SET email_verified_at = UTC_TIMESTAMP() WHERE id = ? AND email_verified_at IS NULL`, user.ID)
 	// Google Sign-In is a participant convenience path only (students and
 	// teachers) — staff (organizer/admin) keep using email + password so
 	// account access stays deliberate.

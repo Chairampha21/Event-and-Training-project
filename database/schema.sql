@@ -32,6 +32,12 @@ CREATE TABLE users (
   student_id      VARCHAR(20)       NULL,                 -- รหัสนักศึกษา เช่น 64xxxxx21 (students only)
   dept            VARCHAR(190)      NULL,                 -- สังกัด/ตำแหน่ง (staff) หรือ ชั้นปี · สาขา (students)
   active          TINYINT(1)        NOT NULL DEFAULT 1,
+  -- When the owner proved the address is theirs (a code sent to it, Google
+  -- Sign-In, or an admin creating the account). A self sign-up can't log in
+  -- until then, so only people with a real @silpakorn.edu mailbox get in.
+  -- Existing databases: ALTER TABLE users ADD COLUMN email_verified_at DATETIME NULL AFTER active;
+  --                     UPDATE users SET email_verified_at = UTC_TIMESTAMP();
+  email_verified_at DATETIME        NULL,
   created_at      TIMESTAMP         NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at      TIMESTAMP         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT uq_users_email UNIQUE (email),
@@ -399,6 +405,26 @@ CREATE TABLE notifications (
 
 CREATE INDEX idx_notif_user_unread ON notifications (user_id, is_read);
 
+
+
+-- ---------------------------------------------------------------------
+-- email_codes — 6-digit one-time codes mailed to a user: to confirm the
+-- address after signing up ('verify') or to set a new password ('reset').
+-- Only a hash is kept. A code lasts 15 minutes and allows 5 tries.
+-- Existing databases: run this CREATE TABLE as it is.
+-- ---------------------------------------------------------------------
+CREATE TABLE email_codes (
+  id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id         INT UNSIGNED  NOT NULL,
+  purpose         ENUM('verify','reset') NOT NULL,
+  code_hash       CHAR(64)      NOT NULL,
+  attempts        TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  expires_at      DATETIME      NOT NULL,                  -- UTC
+  used_at         DATETIME      NULL,
+  created_at      DATETIME      NOT NULL,                  -- UTC
+  CONSTRAINT fk_emailcode_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+CREATE INDEX idx_emailcode_user ON email_codes (user_id, purpose, created_at);
 
 -- ---------------------------------------------------------------------
 -- cert_templates — every version of the department's main certificate

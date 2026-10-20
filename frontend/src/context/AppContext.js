@@ -255,6 +255,17 @@ function adaptCertDefaults(d) {
   };
 }
 
+// A failed sign-in call as the sign-in page uses it: the server's reason, and
+// `verify` when the address still needs its emailed code first.
+function authResult(err) {
+  return {
+    error: err.message || 'เกิดข้อผิดพลาด',
+    verify: !!err.data?.verification_required,
+    email: err.data?.email || '',
+    retryAfter: err.data?.retry_after || 0,
+  };
+}
+
 function timeAgo(iso) {
   const then = new Date((iso || '').replace(' ', 'T'));
   const diffMin = Math.round((Date.now() - then.getTime()) / 60000);
@@ -498,29 +509,69 @@ export function AppProvider({ children }) {
     pushToast('เข้าสู่ระบบสำเร็จ', `ยินดีต้อนรับ · ${ROLE_LABEL[user.role]}`);
   }, [pushToast, setSession]);
 
+  // The sign-in page's calls each resolve { ok } or authResult(error).
   const login = useCallback(async (email, password) => {
     try {
       const { user, token } = await api.post('/auth/login', { email, password }, { auth: false });
       applySession(user, token);
-      return true;
+      return { ok: true };
     } catch (err) {
-      pushToast('เข้าสู่ระบบไม่สำเร็จ', err.message || 'อีเมลหรือรหัสผ่านไม่ถูกต้อง', 'warn');
-      return false;
-    }
-  }, [pushToast, applySession]);
-
-  // Sign-up with email and password (always a student account) — the way in
-  // that works without Google Sign-In. Signs straight in. Resolves '' on
-  // success, else the server's reason.
-  const registerAccount = useCallback(async ({ name, email, password, studentId }) => {
-    try {
-      const { user, token } = await api.post('/auth/register', { name, email, password, student_id: studentId }, { auth: false });
-      applySession(user, token);
-      return '';
-    } catch (err) {
-      return err.message || 'สมัครสมาชิกไม่สำเร็จ';
+      return authResult(err);
     }
   }, [applySession]);
+
+  // Confirms the address with its 6-digit code and signs in.
+  const verifyEmail = useCallback(async (email, code) => {
+    try {
+      const { user, token } = await api.post('/auth/verify-email', { email, code }, { auth: false });
+      applySession(user, token);
+      return { ok: true };
+    } catch (err) {
+      return authResult(err);
+    }
+  }, [applySession]);
+
+  // purpose: 'verify' | 'reset'
+  const resendCode = useCallback(async (email, purpose) => {
+    try {
+      const r = await api.post('/auth/resend-code', { email, purpose }, { auth: false });
+      return { ok: true, retryAfter: r.retry_after || 60 };
+    } catch (err) {
+      return authResult(err);
+    }
+  }, []);
+
+  const forgotPassword = useCallback(async (email) => {
+    try {
+      const r = await api.post('/auth/forgot-password', { email }, { auth: false });
+      return { ok: true, retryAfter: r.retry_after || 60 };
+    } catch (err) {
+      return authResult(err);
+    }
+  }, []);
+
+  // Sets a new password with the emailed code and signs in.
+  const resetPassword = useCallback(async (email, code, password) => {
+    try {
+      const { user, token } = await api.post('/auth/reset-password', { email, code, password }, { auth: false });
+      applySession(user, token);
+      return { ok: true };
+    } catch (err) {
+      return authResult(err);
+    }
+  }, [applySession]);
+
+  // Sign-up with email and password (always a student account) — the way in
+  // that works without Google Sign-In. The account opens once the code mailed
+  // to the address is entered (verifyEmail).
+  const registerAccount = useCallback(async ({ name, email, password, studentId }) => {
+    try {
+      const r = await api.post('/auth/register', { name, email, password, student_id: studentId }, { auth: false });
+      return { ok: true, email: r.email, retryAfter: r.retry_after || 60 };
+    } catch (err) {
+      return authResult(err);
+    }
+  }, []);
 
   const loginWithGoogle = useCallback(async (credential) => {
     try {
@@ -979,7 +1030,7 @@ export function AppProvider({ children }) {
   const value = useMemo(() => ({
     session, events, regs, rosters, users, notifs, toasts, activityLog, blacklist, myCertificates,
     evById, myStatus,
-    login, logout, loginWithGoogle, registerAccount, updateProfile,
+    login, logout, loginWithGoogle, registerAccount, verifyEmail, resendCode, forgotPassword, resetPassword, updateProfile,
     registerForEvent, toggleEventStatus, createEvent, updateEvent, deleteEvent,
     toggleCheckin, setPaymentStatus, getSlip, submitSlip, setRefundAccount, cancelRegistration, selfCheckin, issueCertificate, submitEvaluation, downloadCert,
     addToBlacklist, restoreFromBlacklist,
@@ -990,7 +1041,7 @@ export function AppProvider({ children }) {
     pushToast, dismissToast,
   }), [
     session, events, regs, rosters, users, notifs, toasts, activityLog, blacklist, myCertificates,
-    evById, myStatus, login, logout, loginWithGoogle, registerAccount, updateProfile,
+    evById, myStatus, login, logout, loginWithGoogle, registerAccount, verifyEmail, resendCode, forgotPassword, resetPassword, updateProfile,
     registerForEvent, toggleEventStatus, createEvent, updateEvent, deleteEvent,
     toggleCheckin, setPaymentStatus, getSlip, submitSlip, setRefundAccount, cancelRegistration, selfCheckin, issueCertificate, submitEvaluation, downloadCert,
     addToBlacklist, restoreFromBlacklist,

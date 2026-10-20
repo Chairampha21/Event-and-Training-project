@@ -92,7 +92,8 @@ func (h *UsersHandler) Create(c *gin.Context) {
 	}
 
 	res, err := h.DB.Exec(
-		`INSERT INTO users (name, email, password_hash, role, dept) VALUES (?, ?, ?, ?, ?)`,
+		// An admin-made account is trusted: no email confirmation needed.
+		`INSERT INTO users (name, email, password_hash, role, dept, email_verified_at) VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP())`,
 		name, email, string(hash), b.Role, nullIfEmpty(b.Dept),
 	)
 	if err != nil {

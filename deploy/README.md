@@ -73,9 +73,22 @@ nano .env
 | `DOMAIN` | โดเมนจากข้อ 3 **ไม่ต้องมี** `https://` เช่น `cpsu-etms.duckdns.org` |
 | `DB_PASSWORD`, `DB_ROOT_PASSWORD`, `JWT_SECRET` | ค่าสุ่มจาก `openssl rand -hex 32` คนละค่ากัน |
 | `GOOGLE_CLIENT_ID` | ดูข้อ 6 (เว้นว่างได้ ถ้ายังไม่ใช้เข้าสู่ระบบด้วย Google) |
+| `SMTP_*` | บัญชีส่งอีเมลรหัสยืนยัน **(ต้องตั้ง)** ดูข้อ 5.1 |
 
 > ⚠️ **ห้าม** commit ไฟล์ `.env` (ถูก `.gitignore` ไว้แล้ว) และห้ามใช้ค่าเดียวกับเครื่อง dev
 > ⚠️ **ห้ามย้ายฐานข้อมูล dev มาใช้** เพราะบัญชีทดสอบใช้รหัส `Passw0rd!` ระบบใหม่เริ่มจาก `database/schema.sql` ที่ไม่มีบัญชีใดเลย
+
+### 5.1 ตั้งค่าส่งอีเมล (ต้องทำ)
+
+นักศึกษาที่สมัครด้วยอีเมลต้องกรอกรหัส 6 หลักที่ระบบส่งไปที่ @silpakorn.edu ก่อนใช้งาน และ "ลืมรหัสผ่าน" ก็ใช้รหัสทางอีเมล ถ้าไม่ตั้งค่า SMTP ระบบจะไม่ส่งอีเมลจริง (พิมพ์รหัสลง log แทน ซึ่งใช้ได้แค่ตอนทดสอบ)
+
+ตัวอย่างใช้ Gmail:
+1. ใช้บัญชี Gmail สำหรับระบบโดยเฉพาะ (เช่น บัญชีของภาควิชา) เปิด **2-Step Verification**
+2. สร้าง **App Password** ที่ <https://myaccount.google.com/apppasswords>
+3. ใส่ใน `.env`: `SMTP_USER` = อีเมล Gmail, `SMTP_PASS` = App Password 16 ตัว, `SMTP_FROM` = `CPSU ETMS <อีเมลเดียวกัน>`
+4. ทดสอบ: สมัครสมาชิกด้วยอีเมล @silpakorn.edu ของตัวเอง ต้องได้อีเมลรหัสภายใน 1–2 นาที (ถ้าไม่ได้ ดู `docker compose logs backend` และดูในโฟลเดอร์ Junk ของ Outlook)
+
+Gmail ส่งได้ประมาณ 500 ฉบับต่อวัน เพียงพอสำหรับภาควิชา ถ้ามหาวิทยาลัยมี SMTP ของตัวเองให้ใช้ค่าของมหาวิทยาลัยแทน
 
 ## 6. Google Sign-In (ถ้าใช้)
 
@@ -154,6 +167,7 @@ docker compose restart backend
 | เว็บขึ้นว่าไม่ปลอดภัย / ไม่มี HTTPS | ดู `docker compose logs web` ส่วนใหญ่เกิดจากข้อ 2 หรือ 3 Caddy ต้องเข้าถึงจากอินเทอร์เน็ตได้จึงขอใบรับรองได้ |
 | หน้าเว็บขึ้น แต่ข้อมูลไม่มา (error 502) | backend ยังไม่พร้อมหรือต่อฐานข้อมูลไม่ได้ ดู `docker compose logs backend` |
 | backend ล้มพร้อม `JWT_SECRET is required` | ยังไม่ได้ใส่ `JWT_SECRET` ใน `.env` |
+| สมัครแล้วไม่ได้รับอีเมลรหัส | ข้อ 5.1: ตรวจค่า `SMTP_*` แล้วดู `docker compose logs backend` หาคำว่า `mailer:` และดูโฟลเดอร์ Junk |
 | เข้าสู่ระบบด้วย Google ไม่ได้ | ข้อ 6: origin ต้องตรงกับ `https://<DOMAIN>` และต้อง build `web` ใหม่หลังแก้ Client ID |
 | เพิ่มคอลัมน์ใน `schema.sql` แล้วไม่มีผล | ปกติ ต้องรัน migration เอง (ข้อ 10) |
 

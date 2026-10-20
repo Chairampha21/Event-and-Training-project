@@ -18,6 +18,11 @@ type Config struct {
 	JWTExpiresHours int
 	CORSOrigin      string
 	GoogleClientID  string
+	SMTPHost        string
+	SMTPPort        string
+	SMTPUser        string
+	SMTPPass        string
+	SMTPFrom        string
 }
 
 func Load() Config {
@@ -34,6 +39,11 @@ func Load() Config {
 		JWTExpiresHours: getEnvInt("JWT_EXPIRES_HOURS", 168),
 		CORSOrigin:      getEnv("CORS_ORIGIN", "*"),
 		GoogleClientID:  getEnv("GOOGLE_CLIENT_ID", ""),
+		SMTPHost:        getEnv("SMTP_HOST", ""),
+		SMTPPort:        getEnv("SMTP_PORT", "587"),
+		SMTPUser:        getEnv("SMTP_USER", ""),
+		SMTPPass:        getEnv("SMTP_PASS", ""),
+		SMTPFrom:        getEnv("SMTP_FROM", ""),
 	}
 }
 

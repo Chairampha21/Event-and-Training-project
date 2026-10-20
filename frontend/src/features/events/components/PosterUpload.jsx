@@ -79,7 +79,7 @@ export default function PosterUpload({ value, onChange, onError }) {
             <div className="pup-name">{fileName || 'โปสเตอร์ปัจจุบัน'}</div>
             <div className="pup-meta">
               {dims && <span><i className="ti ti-dimensions" /> {dims.w} × {dims.h} px</span>}
-              <span><i className="ti ti-file" /> {formatBytes(dataUrlBytes(value))}</span>
+              {value.startsWith('data:') && <span><i className="ti ti-file" /> {formatBytes(dataUrlBytes(value))}</span>}
             </div>
             <div className="pup-actions">
               <button type="button" className="btn btn-primary" onClick={() => setViewerOpen(true)}><i className="ti ti-zoom-in" /> ดูภาพเต็ม</button>

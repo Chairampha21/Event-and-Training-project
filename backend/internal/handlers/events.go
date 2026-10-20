@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -107,6 +108,82 @@ func scanEvent(row interface{ Scan(dest ...any) error }) (models.Event, error) {
 	return e, err
 }
 
+// assetColumns are the event images kept as data: URLs in the database. The
+// event list leaves them out (they made /api/events many megabytes) and points
+// to /api/events/:id/assets/<name> instead, where each is served as a cacheable image.
+var assetColumns = map[string]string{
+	"poster":        "poster_url",
+	"cert-template": "cert_template_url",
+	"signature":     "cert_signature_url",
+}
+
+// assetMarker stands in for an image column in the list query: a short
+// fingerprint of the stored image (so its address changes when it does), or
+// the value itself when it isn't a data: URL.
+func assetMarker(col string) string {
+	return "IF(" + col + " LIKE 'data:%', CONCAT('asset:', CRC32(" + col + ")), NULLIF(" + col + ", '')) AS " + col
+}
+
+// eventListFields is eventFields with the images replaced by assetMarker.
+var eventListFields = strings.NewReplacer(
+	"poster_url,", assetMarker("poster_url")+",",
+	"cert_template_url,", assetMarker("cert_template_url")+",",
+	"cert_signature_url,", assetMarker("cert_signature_url")+",",
+).Replace(eventFields)
+
+// assetLink turns a marker from eventListFields into the image's address,
+// relative to the API base (e.g. "/events/12/assets/poster?v=123").
+func assetLink(v *models.NullString, eventID int64, name string) {
+	if v.Valid && strings.HasPrefix(v.String, "asset:") {
+		v.String = fmt.Sprintf("/events/%d/assets/%s?v=%s", eventID, name, strings.TrimPrefix(v.String, "asset:"))
+	}
+}
+
+// Asset serves one event image (poster, certificate template or signature)
+// decoded from its data: URL. The address carries a fingerprint, so browsers
+// may keep it for good. Public, like the event list it is linked from.
+func (h *EventsHandler) Asset(c *gin.Context) {
+	col, ok := assetColumns[c.Param("asset")]
+	if !ok {
+		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบไฟล์"})
+		return
+	}
+	var v sql.NullString
+	err := h.DB.QueryRow(`SELECT `+col+` FROM events WHERE id = ?`, c.Param("id")).Scan(&v)
+	if err == sql.ErrNoRows || (err == nil && !v.Valid) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบไฟล์"})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
+		return
+	}
+	mime, data, ok := decodeDataURL(v.String)
+	if !ok {
+		if strings.HasPrefix(v.String, "http") {
+			c.Redirect(http.StatusFound, v.String)
+			return
+		}
+		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบไฟล์"})
+		return
+	}
+	c.Header("Cache-Control", "public, max-age=31536000, immutable")
+	c.Data(http.StatusOK, mime, data)
+}
+
+// decodeDataURL splits "data:<mime>;base64,<data>" into the type and bytes.
+func decodeDataURL(s string) (string, []byte, bool) {
+	head, b64, found := strings.Cut(s, ",")
+	if !found || !strings.HasPrefix(head, "data:") || !strings.HasSuffix(head, ";base64") {
+		return "", nil, false
+	}
+	data, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		return "", nil, false
+	}
+	return strings.TrimSuffix(strings.TrimPrefix(head, "data:"), ";base64"), data, true
+}
+
 func (h *EventsHandler) List(c *gin.Context) {
 	clauses := []string{"is_listed = 1"}
 	var args []any
@@ -134,7 +211,7 @@ func (h *EventsHandler) List(c *gin.Context) {
 		args = append(args, "%"+q+"%")
 	}
 
-	query := fmt.Sprintf(`SELECT %s FROM events WHERE %s ORDER BY date_start ASC`, eventFields, strings.Join(clauses, " AND "))
+	query := fmt.Sprintf(`SELECT %s FROM events WHERE %s ORDER BY date_start ASC`, eventListFields, strings.Join(clauses, " AND "))
 	rows, err := h.DB.Query(query, args...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
@@ -149,6 +226,9 @@ func (h *EventsHandler) List(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 			return
 		}
+		assetLink(&e.PosterURL, e.ID, "poster")
+		assetLink(&e.CertTemplateURL, e.ID, "cert-template")
+		assetLink(&e.CertSignatureURL, e.ID, "signature")
 		events = append(events, e)
 	}
 	if err := h.hideOnlineLinks(c, events); err != nil {

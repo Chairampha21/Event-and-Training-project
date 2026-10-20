@@ -161,6 +161,9 @@ export function analyzePixels(data, width, height) {
 export function analyzeTemplate(dataUrl) {
   return new Promise((resolve) => {
     const img = new Image();
+    // A stored template is a link to the API (another origin in development):
+    // ask for it with CORS so its pixels can be read.
+    if (!dataUrl.startsWith('data:')) img.crossOrigin = 'anonymous';
     img.onload = () => {
       try {
         const w = 96; const h = Math.max(1, Math.round((96 * img.naturalHeight) / img.naturalWidth));

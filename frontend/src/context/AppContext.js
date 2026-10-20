@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import useLocalStorage from '../hooks/useLocalStorage';
 import { showResult } from '../utils/alert';
-import { api, setAuthToken } from '../services/api';
+import { api, apiUrl, setAuthToken } from '../services/api';
 import { formatThaiDate, formatThaiDateRange, formatThaiDateList, formatDayTime, formatRegPeriod, todayIso } from '../utils/dateFormat';
 import { formatBaht } from '../utils/money';
 import { normalizeLayout, serializeLayout } from '../features/certificates/utils/certLayout';
@@ -27,6 +27,20 @@ function deriveIcon(cat) {
 function guessMime(dataUrl) {
   const m = /^data:([^;]+);/.exec(dataUrl || '');
   return m ? m[1] : 'image/png';
+}
+
+// The event list links to its images ("/events/12/assets/poster?v=…") rather
+// than carrying them; make those links usable as an image address.
+function assetUrl(v) {
+  if (!v) return null;
+  return v.startsWith('/events/') ? apiUrl(v) : v;
+}
+
+// An image the form holds as it came from the server (a link, not a fresh
+// upload) has not changed: leave it out so the stored one stays.
+function putAsset(body, key, value) {
+  if (value && !value.startsWith('data:')) return;
+  body[key] = value || null;
 }
 
 // Derives the 5-stage cycle (ประกาศ/รับสมัคร/จัดกิจกรรม/เกียรติบัตร/ปิดกิจกรรม)
@@ -88,9 +102,9 @@ function adaptEvent(be) {
     org: be.organizer_name || '',
     organizerId: be.organizer_id,
     listed: be.is_listed,
-    poster: be.poster_url || null,
-    certTemplate: be.cert_template_url ? { name: 'template', type: guessMime(be.cert_template_url), dataUrl: be.cert_template_url } : null,
-    signer: { name: be.cert_signer_name || '', title: be.cert_signer_title || '', signature: be.cert_signature_url || null },
+    poster: assetUrl(be.poster_url),
+    certTemplate: be.cert_template_url ? { name: 'template', type: guessMime(be.cert_template_url), dataUrl: assetUrl(be.cert_template_url) } : null,
+    signer: { name: be.cert_signer_name || '', title: be.cert_signer_title || '', signature: assetUrl(be.cert_signature_url) },
     certLayout: normalizeLayout(be.cert_layout), // how the text is fitted to this event's template
     pretest: { enabled: !!be.pretest_enabled, link: be.pretest_link || '' },
     dayMode: be.day_mode,
@@ -136,15 +150,15 @@ function toEventBody(payload) {
     place: payload.place,
     online_link: payload.onlineLink || null,
     capacity: parseInt(payload.cap, 10) || 0,
-    poster_url: payload.poster || null,
-    cert_template_url: payload.certTemplate?.dataUrl || null,
     cert_signer_name: payload.signer?.name || null,
     cert_signer_title: payload.signer?.title || null,
-    cert_signature_url: payload.signer?.signature || null,
     cert_layout: serializeLayout(payload.certLayout),
     pretest_enabled: !!payload.pretest?.enabled,
     pretest_link: payload.pretest?.link || null,
   };
+  putAsset(body, 'poster_url', payload.poster);
+  putAsset(body, 'cert_template_url', payload.certTemplate?.dataUrl);
+  putAsset(body, 'cert_signature_url', payload.signer?.signature);
   if (payload.capOnsite !== undefined) body.capacity_onsite = parseInt(payload.capOnsite, 10) || 0;
   if (payload.capOnline !== undefined) body.capacity_online = parseInt(payload.capOnline, 10) || 0;
   if (payload.dateIso) body.date_start = payload.dateIso;

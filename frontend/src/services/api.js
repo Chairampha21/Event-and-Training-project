@@ -19,6 +19,13 @@ function detectApiBase() {
 
 const API_BASE = detectApiBase();
 
+// Full address of something the API serves directly, such as an event image
+// ("/events/12/assets/poster?v=…") — absolute, so it also works in the
+// certificate print window, which opens on a blank page.
+export function apiUrl(path) {
+  return new URL(`${API_BASE}${path}`, window.location.origin).href;
+}
+
 let authToken = null;
 export function setAuthToken(token) {
   authToken = token;

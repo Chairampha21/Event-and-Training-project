@@ -82,7 +82,8 @@ export default function CertTemplateUpload({ value, onChange, layout, onLayoutCh
   const [dims, setDims] = useState(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   // Only images can sit behind the overlaid text (an older event may still hold a PDF).
-  const isImage = !!value && (value.dataUrl || '').startsWith('data:image/');
+  // A stored template arrives as a link to the image; only an old PDF upload can't be drawn on.
+  const isImage = !!value?.dataUrl && !value.dataUrl.startsWith('data:application/pdf');
   // The adjust panel starts open only when this event already has a custom layout.
   const [layoutOpen, setLayoutOpen] = useState(() => !isDefaultLayout(layout));
   // The template's own accent colours, offered as swatches so text can match the design.
@@ -156,7 +157,7 @@ export default function CertTemplateUpload({ value, onChange, layout, onLayoutCh
             <div className="ctu-name">{value.name && value.name !== 'template' ? value.name : 'template ปัจจุบัน'}</div>
             <div className="ctu-meta">
               {dims && <span><i className="ti ti-dimensions" /> {dims.w} × {dims.h} px</span>}
-              <span><i className="ti ti-file" /> {formatBytes(dataUrlBytes(value.dataUrl))}</span>
+              {value.dataUrl.startsWith('data:') && <span><i className="ti ti-file" /> {formatBytes(dataUrlBytes(value.dataUrl))}</span>}
             </div>
             {checks.length > 0 && (
               <ul className="ctu-checks">

@@ -73,6 +73,7 @@ func main() {
 	eventsGroup := r.Group("/api/events")
 	{
 		eventsGroup.GET("", optionalAuth, events.List)
+		eventsGroup.GET("/:id/assets/:asset", events.Asset) // poster | cert-template | signature
 		eventsGroup.POST("", requireAuth, middleware.RequireRole("organizer", "admin"), events.Create)
 		eventsGroup.PUT("/:id", requireAuth, middleware.RequireRole("organizer", "admin"), events.Update)
 		eventsGroup.DELETE("/:id", requireAuth, middleware.RequireRole("organizer", "admin"), events.Remove)

@@ -230,3 +230,10 @@
 .lf-domain{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:14px;color:var(--c4-60);pointer-events:none;white-space:nowrap}
 .lf-warn{display:flex;align-items:flex-start;gap:5px;font-size:12px;font-weight:600;color:#9a6408;line-height:1.45}
 .lf-warn i{font-size:14px;margin-top:1px}
+
+/* Google's own sign-in button (rendered by Google), centred under the form. */
+.lf-google{display:flex;flex-direction:column;align-items:stretch;gap:8px}
+.lf-google-holder{display:flex;justify-content:center;min-height:44px}
+.lf-google-busy{display:flex;align-items:center;justify-content:center;gap:6px;font-size:12.5px;color:var(--c4-70)}
+.lf-google-busy i{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}

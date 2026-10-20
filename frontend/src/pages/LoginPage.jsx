@@ -122,6 +122,91 @@ function Banner({ tone = 'error', children }) {
   return <div className={`lf-banner ${tone}`} role={tone === 'error' ? 'alert' : 'status'}><i className={`ti ${tone === 'error' ? 'ti-alert-triangle' : 'ti-info-circle'}`} /> <span>{children}</span></div>;
 }
 
+// ---------------------------------------------------------------- Google
+
+// Google Identity Services, loaded once. One initialize() per page; the
+// sign-in handler is swapped in through `onGoogleCredential`.
+let gisLoading = null;
+let gisReady = false;
+let onGoogleCredential = () => {};
+function loadGoogle() {
+  if (!GOOGLE_CLIENT_ID) return Promise.reject(new Error('not configured'));
+  if (!gisLoading) {
+    gisLoading = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = 'https://accounts.google.com/gsi/client';
+      script.async = true;
+      script.onload = () => {
+        if (!gisReady) {
+          window.google.accounts.id.initialize({
+            client_id: GOOGLE_CLIENT_ID,
+            callback: ({ credential }) => onGoogleCredential(credential),
+            ux_mode: 'popup',
+          });
+          gisReady = true;
+        }
+        resolve();
+      };
+      script.onerror = () => { gisLoading = null; reject(new Error('blocked')); };
+      document.head.appendChild(script);
+    });
+  }
+  return gisLoading;
+}
+
+/**
+ * "เข้าสู่ระบบด้วย Google" drawn by Google itself: a click opens Google's
+ * account chooser in a pop-up. (Google's One Tap prompt, used before, is often
+ * not shown at all by today's browsers, so the click seemed to do nothing.)
+ * Until Google's button is ready — or when it can't load — our own button
+ * stands in and says why.
+ */
+function GoogleButton() {
+  const { loginWithGoogle, pushToast } = useEvents();
+  const holder = useRef(null);
+  const [state, setState] = useState(GOOGLE_CLIENT_ID ? 'loading' : 'off'); // loading | ready | failed | off
+  const [busy, setBusy] = useState(false);
+
+  onGoogleCredential = async (credential) => {
+    setBusy(true);
+    await loginWithGoogle(credential);
+    setBusy(false);
+  };
+
+  useEffect(() => {
+    let alive = true;
+    loadGoogle().then(() => {
+      if (!alive || !holder.current) return;
+      holder.current.innerHTML = '';
+      window.google.accounts.id.renderButton(holder.current, {
+        type: 'standard', theme: 'outline', size: 'large', shape: 'pill', text: 'signin_with', logo_alignment: 'center',
+        locale: 'th', width: Math.min(400, Math.max(200, holder.current.offsetWidth)),
+      });
+      setState('ready');
+    }).catch(() => { if (alive) setState(GOOGLE_CLIENT_ID ? 'failed' : 'off'); });
+    return () => { alive = false; };
+  }, []);
+
+  function explain() {
+    if (state === 'off') pushToast('ยังไม่ได้ตั้งค่า Google Sign-In', 'ต้องเพิ่ม Google Client ID ในระบบก่อน', 'warn');
+    else if (state === 'failed') pushToast('โหลด Google Sign-In ไม่ได้', 'ตรวจการเชื่อมต่ออินเทอร์เน็ต หรือปิดตัวบล็อกโฆษณาสำหรับเว็บนี้ แล้วรีเฟรช', 'warn');
+    else pushToast('กำลังโหลด Google Sign-In', 'กรุณารอสักครู่', 'warn');
+  }
+
+  return (
+    <div className="lf-google">
+      {/* Kept in the layout (just collapsed) while loading, so Google can size its button to the form. */}
+      <div ref={holder} className="lf-google-holder" style={state === 'ready' ? undefined : { height: 0, minHeight: 0, overflow: 'hidden' }} />
+      {state !== 'ready' && (
+        <button type="button" className="google-btn" onClick={explain}>
+          <GoogleIcon /> เข้าสู่ระบบด้วย Google
+        </button>
+      )}
+      {busy && <div className="lf-google-busy" role="status"><i className="ti ti-loader-2" /> กำลังเข้าสู่ระบบ...</div>}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------- steps
 
 function SignIn({ go, google }) {
@@ -356,52 +441,19 @@ function Forgot({ go, ctx }) {
 // ---------------------------------------------------------------- page
 
 export default function LoginPage() {
-  const { session, loginWithGoogle, pushToast } = useEvents();
+  const { session } = useEvents();
   const [step, setStep] = useState('signin'); // signin | register | verify | forgot
   const [ctx, setCtx] = useState({});
-  const [googleBusy, setGoogleBusy] = useState(false);
   const location = useLocation();
   const go = (next, data = {}) => { setCtx(data); setStep(next); };
 
-  useEffect(() => {
-    if (!GOOGLE_CLIENT_ID || document.getElementById('google-identity-script')) return;
-    const script = document.createElement('script');
-    script.id = 'google-identity-script';
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.async = true;
-    script.defer = true;
-    document.body.appendChild(script);
-  }, []);
-
   if (session) return <Navigate to={location.state?.from || ROLE_LANDING[session.role]} replace />;
-
-  function handleGoogleClick() {
-    if (!GOOGLE_CLIENT_ID) {
-      pushToast('ยังไม่ได้ตั้งค่า Google Sign-In', 'ต้องเพิ่ม Google Client ID ในระบบก่อน', 'warn');
-      return;
-    }
-    if (!window.google?.accounts?.id) {
-      pushToast('กำลังโหลด Google Sign-In', 'กรุณาลองใหม่อีกครั้งในอีกสักครู่', 'warn');
-      return;
-    }
-    window.google.accounts.id.initialize({
-      client_id: GOOGLE_CLIENT_ID,
-      callback: async ({ credential }) => {
-        setGoogleBusy(true);
-        await loginWithGoogle(credential);
-        setGoogleBusy(false);
-      },
-    });
-    window.google.accounts.id.prompt();
-  }
 
   // Google Sign-In under the form. Google confirms the address itself, so no code is needed.
   const google = (
     <>
       <div className="lf-divider"><span>หรือ</span></div>
-      <button type="button" className="google-btn" onClick={handleGoogleClick} disabled={googleBusy}>
-        <GoogleIcon /> {googleBusy ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบด้วย Google'}
-      </button>
+      <GoogleButton />
     </>
   );
 

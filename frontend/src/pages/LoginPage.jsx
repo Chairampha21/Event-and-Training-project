@@ -17,6 +17,66 @@ function GoogleIcon() {
   );
 }
 
+/**
+ * Students sign up with their university email and a password — the way in
+ * that does not depend on Google Sign-In. Staff accounts are made by an admin.
+ */
+function RegisterForm({ onBack }) {
+  const { registerAccount } = useEvents();
+  const [f, setF] = useState({ name: '', email: '', studentId: '', password: '', confirm: '' });
+  const [errors, setErrors] = useState({});
+  const [serverError, setServerError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const set = (k) => (e) => { setF((x) => ({ ...x, [k]: e.target.value })); setErrors((x) => ({ ...x, [k]: '' })); setServerError(''); };
+
+  function check() {
+    const e = {};
+    const email = f.email.trim().toLowerCase();
+    if (!f.name.trim()) e.name = 'กรอกชื่อ-นามสกุล';
+    if (!/^[^\s@]+@silpakorn\.edu$/.test(email)) e.email = 'ใช้อีเมลของมหาวิทยาลัย @silpakorn.edu';
+    if (!/^\d{8,11}$/.test(f.studentId.trim())) e.studentId = 'รหัสนักศึกษาเป็นตัวเลข 8–11 หลัก';
+    if (f.password.length < 8) e.password = 'รหัสผ่านอย่างน้อย 8 ตัวอักษร';
+    else if (f.password !== f.confirm) e.confirm = 'รหัสผ่านทั้งสองช่องไม่ตรงกัน';
+    return e;
+  }
+
+  async function submit(ev) {
+    ev.preventDefault();
+    const e = check();
+    setErrors(e);
+    if (Object.keys(e).length) return;
+    setBusy(true);
+    const err = await registerAccount({ name: f.name.trim(), email: f.email.trim().toLowerCase(), password: f.password, studentId: f.studentId.trim() });
+    setBusy(false);
+    if (err) setServerError(err);
+  }
+
+  const field = (k, label, icon, props) => (
+    <div className="lf-field">
+      <label htmlFor={`reg-${k}`}><i className={`ti ${icon}`} /> {label}</label>
+      <div className="with-icon">
+        <i className={`ti ${icon}`} />
+        <input id={`reg-${k}`} value={f[k]} onChange={set(k)} aria-invalid={!!errors[k]} style={errors[k] ? { borderColor: '#d93636' } : undefined} {...props} />
+      </div>
+      {errors[k] && <span className="lf-error"><i className="ti ti-alert-circle" /> {errors[k]}</span>}
+    </div>
+  );
+
+  return (
+    <form onSubmit={submit} noValidate>
+      {field('name', 'ชื่อ-นามสกุล', 'ti-user', { type: 'text', placeholder: 'เช่น สมชาย ใจดี', autoComplete: 'name' })}
+      {field('email', 'อีเมลมหาวิทยาลัย', 'ti-mail', { type: 'email', placeholder: 'username@silpakorn.edu', autoComplete: 'email' })}
+      {field('studentId', 'รหัสนักศึกษา', 'ti-id', { type: 'text', inputMode: 'numeric', placeholder: 'เช่น 670710001', autoComplete: 'off' })}
+      {field('password', 'รหัสผ่าน', 'ti-key', { type: 'password', placeholder: 'อย่างน้อย 8 ตัวอักษร', autoComplete: 'new-password' })}
+      {field('confirm', 'ยืนยันรหัสผ่าน', 'ti-key', { type: 'password', placeholder: 'พิมพ์รหัสผ่านอีกครั้ง', autoComplete: 'new-password' })}
+      {serverError && <div className="lf-server-error" role="alert"><i className="ti ti-alert-triangle" /> {serverError}</div>}
+      <button type="submit" className="lf-submit" disabled={busy}><i className="ti ti-user-plus" /> {busy ? 'กำลังสมัคร...' : 'สมัครสมาชิก'}</button>
+      <p className="lf-switch">มีบัญชีแล้ว? <button type="button" onClick={onBack}>เข้าสู่ระบบ</button></p>
+      <p className="lf-hint">สำหรับนักศึกษา · บัญชีอาจารย์และผู้จัดกิจกรรมสร้างโดยผู้ดูแลระบบ</p>
+    </form>
+  );
+}
+
 export default function LoginPage() {
   const { session, login, loginWithGoogle, pushToast } = useEvents();
   const [email, setEmail] = useState('');
@@ -24,6 +84,7 @@ export default function LoginPage() {
   const [error, setError] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
+  const [mode, setMode] = useState('login'); // 'login' | 'register'
   const location = useLocation();
 
   useEffect(() => {
@@ -86,7 +147,8 @@ export default function LoginPage() {
 
       <div className="login-form">
         <div className="lf-inner">
-          <h2>เข้าสู่ระบบ</h2>
+          <h2>{mode === 'register' ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ'}</h2>
+          {mode === 'register' ? <RegisterForm onBack={() => setMode('login')} /> : (<>
           <form onSubmit={handleSubmit}>
             <div className="lf-field">
               <label><i className="ti ti-at" /> อีเมล</label>
@@ -122,6 +184,8 @@ export default function LoginPage() {
           <button type="button" className="google-btn" onClick={handleGoogleClick} disabled={googleBusy}>
             <GoogleIcon /> {googleBusy ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบด้วย Google'}
           </button>
+          <p className="lf-switch">นักศึกษายังไม่มีบัญชี? <button type="button" onClick={() => setMode('register')}>สมัครสมาชิก</button></p>
+          </>)}
         </div>
       </div>
       <Toast />

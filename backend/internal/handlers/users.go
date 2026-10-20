@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"database/sql"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -223,12 +224,39 @@ func (h *UsersHandler) Delete(c *gin.Context) {
 		return
 	}
 
+	if c.Param("id") == fmt.Sprint(claims.UserID) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ลบบัญชีของตัวเองไม่ได้"})
+		return
+	}
+	// Deleting takes the person's registrations — check-ins, evaluations,
+	// certificates — with it, and past years' figures would change. Someone with
+	// any history (or who organized events) is suspended instead.
+	var regs, organized int
+	if err := h.DB.QueryRow(
+		`SELECT (SELECT COUNT(*) FROM registrations WHERE user_id = ?), (SELECT COUNT(*) FROM events WHERE organizer_id = ?)`,
+		c.Param("id"), c.Param("id"),
+	).Scan(&regs, &organized); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
+		return
+	}
+	if regs > 0 || organized > 0 {
+		what := fmt.Sprintf("มีประวัติลงทะเบียน %d รายการ", regs)
+		if organized > 0 {
+			what = fmt.Sprintf("เป็นผู้จัดกิจกรรม %d กิจกรรม", organized)
+			if regs > 0 {
+				what += fmt.Sprintf(" และมีประวัติลงทะเบียน %d รายการ", regs)
+			}
+		}
+		c.JSON(http.StatusConflict, gin.H{"error": name + " " + what + " · ลบแล้วข้อมูลย้อนหลังและรายงานจะเปลี่ยน กรุณาใช้ \"ระงับ\" แทน"})
+		return
+	}
+
 	if _, err := h.DB.Exec(`DELETE FROM users WHERE id = ?`, c.Param("id")); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 		return
 	}
 
 	activitylog.Log(h.DB, &claims.UserID, "DELETE", "ลบผู้ใช้งาน: "+name)
-	notify.SendToAdmins(h.DB, claims.UserID, "ti-user-x", notify.ToneWarn, "เหตุผิดปกติ: ผู้ใช้ถูกลบ", name+" · ลบโดย "+claims.Name+" · ข้อมูลการลงทะเบียนของผู้ใช้นี้ถูกลบไปด้วย", "/admin/users")
+	notify.SendToAdmins(h.DB, claims.UserID, "ti-user-x", notify.ToneWarn, "เหตุผิดปกติ: ผู้ใช้ถูกลบ", name+" · ลบโดย "+claims.Name+" · บัญชีนี้ไม่มีประวัติกิจกรรม", "/admin/users")
 	c.Status(http.StatusNoContent)
 }

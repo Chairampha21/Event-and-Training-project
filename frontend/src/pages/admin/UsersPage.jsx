@@ -191,7 +191,12 @@ export default function UsersPage() {
 
       <Modal open={!!deleteId} onClose={() => setDeleteId(null)} size="sm">
         <ModalHead eyebrow="ยืนยันการลบ" icon="ti-alert-triangle" title="ลบผู้ใช้งานนี้?" onClose={() => setDeleteId(null)} />
-        <div className="modal-body"><p style={{ fontSize: 14, color: 'var(--c4-70)' }}>ลบบัญชี <strong>{deleteUserObj?.name}</strong> ออกจากระบบ?</p></div>
+        <div className="modal-body">
+          <p style={{ fontSize: 14, color: 'var(--c4-70)', lineHeight: 1.6 }}>ลบบัญชี <strong>{deleteUserObj?.name}</strong> ออกจากระบบ?</p>
+          <p style={{ fontSize: 12.5, color: 'var(--c4-60)', lineHeight: 1.6, marginTop: 8 }}>
+            <i className="ti ti-info-circle" /> ลบได้เฉพาะบัญชีที่ยังไม่มีประวัติกิจกรรม (เช่น สร้างผิด) · บัญชีที่เคยลงทะเบียนหรือจัดกิจกรรมแล้วให้ใช้ "ระงับ" แทน เพื่อให้ข้อมูลย้อนหลังและรายงานรายปีไม่เปลี่ยน
+          </p>
+        </div>
         <div className="modal-foot">
           <button className="btn btn-outline" onClick={() => setDeleteId(null)}>ยกเลิก</button>
           <button className="btn btn-dark" onClick={() => { deleteUser(deleteId); setDeleteId(null); }}><i className="ti ti-trash" /> ลบ</button>

@@ -509,6 +509,19 @@ export function AppProvider({ children }) {
     }
   }, [pushToast, applySession]);
 
+  // Sign-up with email and password (always a student account) — the way in
+  // that works without Google Sign-In. Signs straight in. Resolves '' on
+  // success, else the server's reason.
+  const registerAccount = useCallback(async ({ name, email, password, studentId }) => {
+    try {
+      const { user, token } = await api.post('/auth/register', { name, email, password, student_id: studentId }, { auth: false });
+      applySession(user, token);
+      return '';
+    } catch (err) {
+      return err.message || 'สมัครสมาชิกไม่สำเร็จ';
+    }
+  }, [applySession]);
+
   const loginWithGoogle = useCallback(async (credential) => {
     try {
       const { user, token } = await api.post('/auth/google', { credential }, { auth: false });
@@ -966,7 +979,7 @@ export function AppProvider({ children }) {
   const value = useMemo(() => ({
     session, events, regs, rosters, users, notifs, toasts, activityLog, blacklist, myCertificates,
     evById, myStatus,
-    login, logout, loginWithGoogle, updateProfile,
+    login, logout, loginWithGoogle, registerAccount, updateProfile,
     registerForEvent, toggleEventStatus, createEvent, updateEvent, deleteEvent,
     toggleCheckin, setPaymentStatus, getSlip, submitSlip, setRefundAccount, cancelRegistration, selfCheckin, issueCertificate, submitEvaluation, downloadCert,
     addToBlacklist, restoreFromBlacklist,
@@ -977,7 +990,7 @@ export function AppProvider({ children }) {
     pushToast, dismissToast,
   }), [
     session, events, regs, rosters, users, notifs, toasts, activityLog, blacklist, myCertificates,
-    evById, myStatus, login, logout, loginWithGoogle, updateProfile,
+    evById, myStatus, login, logout, loginWithGoogle, registerAccount, updateProfile,
     registerForEvent, toggleEventStatus, createEvent, updateEvent, deleteEvent,
     toggleCheckin, setPaymentStatus, getSlip, submitSlip, setRefundAccount, cancelRegistration, selfCheckin, issueCertificate, submitEvaluation, downloadCert,
     addToBlacklist, restoreFromBlacklist,

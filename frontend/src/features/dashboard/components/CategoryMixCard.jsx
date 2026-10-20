@@ -24,23 +24,48 @@ function groupRows(rows) {
   return [...groups, other].filter((g) => g.events > 0);
 }
 
-/** A 100% bar split by category, with a 2px gap between parts. */
-function ShareBar({ groups, field, total, label }) {
+/**
+ * Ring of the categories' shares with the total in the middle, 2px surface
+ * gaps between parts. Part-to-whole at a glance only — the exact numbers are
+ * in the table under it.
+ */
+function Donut({ groups, field, total, unit, caption }) {
+  const size = 132;
+  const stroke = 18;
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const parts = groups.filter((g) => g[field] > 0);
+  const gap = parts.length > 1 ? 2 : 0;
+  let offset = 0;
   return (
-    <div className="mix-share">
-      <div className="mix-share-label"><span>{label}</span><strong>{fmt(total)}</strong></div>
-      <div className="mix-bar" role="img" aria-label={`${label}: ${groups.map((g) => `${g.key} ${pct(g[field], total)}%`).join(', ')}`}>
-        {groups.filter((g) => g[field] > 0).map((g) => (
-          <span key={g.key} style={{ flexGrow: g[field], background: g.color }} title={`${g.key}: ${fmt(g[field])} (${pct(g[field], total)}%)`} />
-        ))}
+    <figure className="mix-donut">
+      <div className="mix-donut-ring">
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img"
+          aria-label={`${caption}: ${parts.map((g) => `${g.key} ${pct(g[field], total)}%`).join(', ')}`}>
+          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--c2-08)" strokeWidth={stroke} />
+          {parts.map((g) => {
+            const len = (g[field] / total) * c;
+            const seg = (
+              <circle key={g.key} cx={size / 2} cy={size / 2} r={r} fill="none" stroke={g.color} strokeWidth={stroke}
+                strokeDasharray={`${Math.max(len - gap, 0.5)} ${c}`} strokeDashoffset={-offset}
+                transform={`rotate(-90 ${size / 2} ${size / 2})`}>
+                <title>{`${g.key}: ${fmt(g[field])} ${unit} (${pct(g[field], total)}%)`}</title>
+              </circle>
+            );
+            offset += len;
+            return seg;
+          })}
+        </svg>
+        <div className="mix-donut-center"><strong>{fmt(total)}</strong><small>{unit}</small></div>
       </div>
-    </div>
+      <figcaption>{caption}</figcaption>
+    </figure>
   );
 }
 
 /**
  * Which kinds of event the year was made of, by number of events and by
- * people who came — side by side, so a kind that draws more (or fewer)
+ * people who came — two rings side by side, so a kind that draws more (or fewer)
  * people than its share of events stands out — and how each kind did.
  * `rows` are the year's per-category rows from /dashboard/yearly.
  */
@@ -59,8 +84,10 @@ export default function CategoryMixCard({ rows, year }) {
         <div className="att-empty"><i className="ti ti-calendar-off" /> ยังไม่มีกิจกรรมที่จัดเสร็จสิ้นในปีงบประมาณนี้</div>
       ) : (
         <>
-          <ShareBar groups={groups} field="events" total={events} label="จำนวนกิจกรรม" />
-          <ShareBar groups={groups} field="people" total={people} label="ผู้เข้าร่วม" />
+          <div className="mix-donuts">
+            <Donut groups={groups} field="events" total={events} unit="กิจกรรม" caption="ตามจำนวนกิจกรรม" />
+            <Donut groups={groups} field="people" total={people} unit="คน" caption="ตามผู้เข้าร่วม" />
+          </div>
 
           <table className="mix-table">
             <thead>

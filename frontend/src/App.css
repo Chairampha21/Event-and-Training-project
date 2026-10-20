@@ -213,3 +213,28 @@
   .topbar{padding:0 18px}
   .topbar .tb-left{display:none}
 }
+
+/* ---- sign-in card (the form sits on a white card, as on most sign-in pages) ---- */
+.login-form{background:var(--c2-04)}
+.lf-inner{max-width:440px;background:var(--white);border:1px solid var(--c2-08);border-radius:18px;padding:34px 36px 0;box-shadow:0 24px 60px -30px rgba(42,34,98,.35)}
+.lf-inner > :last-child{margin-bottom:28px}
+.lf-brand{display:none;align-items:center;gap:9px;margin-bottom:22px;font-size:14px;font-weight:800;color:var(--c4);letter-spacing:.01em}
+.lf-brand .mark{width:34px;height:34px;border-radius:9px;background:var(--c2);color:var(--white);display:grid;place-items:center;font-size:13px;font-weight:800}
+.lf-inner h2{font-size:24px}
+.lf-sub{margin-bottom:22px}
+.lf-field input{height:46px;font-family:inherit}
+.lf-field input::placeholder{color:var(--c4-60);opacity:.8}
+.lf-submit{height:48px;border-radius:10px;font-size:15px}
+.lf-submit i{font-size:18px;transition:transform .15s}
+.lf-submit:hover i{transform:translateX(3px)}
+.lf-submit:disabled{opacity:.55;cursor:default}
+.google-btn{height:46px;border-color:var(--c2-15);box-shadow:0 1px 2px rgba(42,34,98,.06)}
+/* The footer link sits in the card's bottom strip. */
+.lf-foot{margin:22px -36px 0;padding:16px 36px;border-top:1px solid var(--c2-08);background:var(--c2-04);border-radius:0 0 18px 18px}
+.lf-inner > .lf-foot:last-child{margin-bottom:0}
+/* Browser autofill paints inputs blue in its own font: keep the theme's look. */
+.lf-field input:-webkit-autofill,.lf-field input:-webkit-autofill:hover,.lf-field input:-webkit-autofill:focus{
+  -webkit-text-fill-color:var(--c4);-webkit-box-shadow:0 0 0 1000px var(--white) inset;box-shadow:0 0 0 1000px var(--white) inset;
+  caret-color:var(--c4);font-family:inherit;transition:background-color 9999s ease-out}
+.lf-field input:-webkit-autofill:focus{-webkit-box-shadow:0 0 0 1000px var(--white) inset,0 0 0 3px var(--c2-08)}
+@media (max-width:860px){.lf-brand{display:flex}.login-form{padding:28px 16px}.lf-inner{padding:26px 22px 0}.lf-foot{margin:22px -22px 0;padding:14px 22px}}

@@ -6,27 +6,40 @@ import './Navbar.css';
 import { initials } from '../../utils/initials';
 import ConfirmDialog from '../ui/ConfirmDialog';
 
+// Staff menus come in groups under a heading ({ section }); the headings
+// hide on narrow screens, where only the icons show.
+const EVENT_TABS = [
+  { section: 'กิจกรรม' },
+  { to: '/home', icon: 'ti-home-2', label: 'กิจกรรม' },
+  { to: '/create-event', icon: 'ti-square-rounded-plus', label: 'สร้างกิจกรรม' },
+  { to: '/events', icon: 'ti-calendar', label: 'กิจกรรมทั้งหมด' },
+  { to: '/admin/sar', icon: 'ti-photo', label: 'คลังโปสเตอร์กิจกรรม' },
+];
+const RESULT_TABS = [
+  { section: 'ผลและรายงาน' },
+  { to: '/report', icon: 'ti-report-analytics', label: 'รายงาน' },
+  { to: '/admin/evaluations', icon: 'ti-clipboard-check', label: 'แบบประเมิน' },
+];
 const NAV_TABS = {
-  // The organizer's pages first (same names and order), then the admin's own.
   admin: [
+    { section: 'ภาพรวม' },
     { to: '/admin/dashboard', icon: 'ti-chart-pie', label: 'แดชบอร์ดกิจกรรม' },
-    { to: '/home', icon: 'ti-home-2', label: 'กิจกรรม' },
-    { to: '/create-event', icon: 'ti-square-rounded-plus', label: 'สร้างกิจกรรม' },
-    { to: '/events', icon: 'ti-calendar', label: 'กิจกรรมทั้งหมด' },
-    { to: '/report', icon: 'ti-report-analytics', label: 'รายงาน' },
+    ...EVENT_TABS,
+    ...RESULT_TABS,
+    { section: 'ผู้ใช้' },
     { to: '/admin/users', icon: 'ti-users-group', label: 'ผู้ใช้งาน' },
     { to: '/admin/blacklist', icon: 'ti-user-off', label: 'Blacklist' },
+    { section: 'ระบบ' },
     { to: '/admin/certificate', icon: 'ti-certificate', label: 'ตั้งค่าเกียรติบัตร' },
     { to: '/admin/activity-log', icon: 'ti-history', label: 'Log ระบบ' },
   ],
   organizer: [
-    { to: '/home', icon: 'ti-home-2', label: 'กิจกรรม' },
-    { to: '/create-event', icon: 'ti-square-rounded-plus', label: 'สร้างกิจกรรม' },
-    { to: '/events', icon: 'ti-calendar', label: 'กิจกรรมทั้งหมด' },
-    { to: '/admin/blacklist', icon: 'ti-user-off', label: 'Blacklist' },
-    { to: '/admin/sar', icon: 'ti-clipboard-text', label: 'คลังโปสเตอร์กิจกรรม' },
-    { to: '/report', icon: 'ti-report-analytics', label: 'รายงาน' },
+    { section: 'ภาพรวม' },
     { to: '/admin/dashboard', icon: 'ti-chart-pie', label: 'แดชบอร์ดกิจกรรม' },
+    ...EVENT_TABS,
+    ...RESULT_TABS,
+    { section: 'ผู้ใช้' },
+    { to: '/admin/blacklist', icon: 'ti-user-off', label: 'Blacklist' },
   ],
   student: [
     { to: '/home', icon: 'ti-grid-dots', label: 'กิจกรรมทั้งหมด' },
@@ -125,11 +138,14 @@ export default function Navbar() {
           </div>
         </NavLink>
         <div className="nav-tabs">
-          {tabs.map((t) => (
+          {tabs.map((t) => (t.section ? (
+            <div key={`s-${t.section}`} className="nav-section">{t.section}</div>
+          ) : (
             <NavLink key={t.to} to={t.to} className={({ isActive }) => `nav-tab${isActive ? ' active' : ''}`} title={t.label}>
               <i className={`ti ${t.icon}`} /> <span>{t.label}</span>
             </NavLink>
-          ))}
+          )))}
+          {tabs.some((t) => t.section) && <div className="nav-section">บัญชี</div>}
           <NavLink to="/profile" className={({ isActive }) => `nav-tab${isActive ? ' active' : ''}`} title="โปรไฟล์ของฉัน">
             <i className="ti ti-user-circle" /> <span>โปรไฟล์ของฉัน</span>
           </NavLink>

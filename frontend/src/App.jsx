@@ -55,7 +55,7 @@ function Routed() {
           <Route path="/admin/dashboard" element={<DashboardPage />} />
           <Route path="/admin/blacklist" element={<BlacklistPage />} />
         </Route>
-        <Route element={<ProtectedRoute roles={['organizer']} />}>
+        <Route element={<ProtectedRoute roles={['organizer', 'admin']} />}>
           <Route path="/admin/evaluations" element={<EvaluationsPage />} />
           <Route path="/admin/sar" element={<SarReportPage />} />
         </Route>

@@ -24,6 +24,8 @@
 .nav-tab i{font-size:16px;flex-shrink:0}
 .nav-tab:hover{background:var(--c2-04);color:var(--c2)}
 .nav-tab.active{background:var(--c2);color:var(--white)}
+.nav-section{font-size:10.5px;font-weight:700;letter-spacing:.06em;color:var(--c4-60);padding:12px 9px 4px}
+.nav-section:first-child{padding-top:2px}
 .sidebar-foot{display:flex;flex-direction:column;gap:4px;padding-top:10px;border-top:1px solid var(--c2-08)}
 .sidebar-foot .user-pill{width:100%;padding:5px 6px}
 .sidebar-foot .btn-logout{width:100%;height:auto;border:none;display:flex;align-items:center;justify-content:flex-start;gap:8px;padding:8px 7px;border-radius:7px;color:var(--c4-60);font-size:12.5px;font-weight:500}
@@ -171,6 +173,8 @@
   .logo{justify-content:center;padding:0 0 16px}
   .nav-tab{justify-content:center;padding:10px}
   .nav-tab span{display:none}
+  .nav-section{font-size:0;padding:6px 0 0;margin:6px 8px 0;border-top:1px solid var(--c2-08)}
+  .nav-section:first-child{border-top:0;margin-top:0}
   .sidebar-foot .user-pill{justify-content:center}
   .sidebar-foot .btn-logout{justify-content:center}
 }

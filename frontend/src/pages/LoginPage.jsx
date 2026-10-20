@@ -3,6 +3,7 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { useEvents } from '../hooks/useEvents';
 import { ROLE_LANDING } from '../utils/constants';
 import Toast from '../components/ui/Toast';
+import { STUDENT_TITLES, englishTitleFor, hasThai, joinThai } from '../utils/personName';
 
 const GOOGLE_CLIENT_ID = process.env.REACT_APP_GOOGLE_CLIENT_ID || '';
 
@@ -251,7 +252,7 @@ function SignIn({ go, google }) {
 
 function Register({ go }) {
   const { registerAccount } = useEvents();
-  const [f, setF] = useState({ name: '', email: '', studentId: '', password: '', confirm: '' });
+  const [f, setF] = useState({ title: '', name: '', nameEn: '', email: '', studentId: '', password: '', confirm: '' });
   const [errors, setErrors] = useState({});
   const [emailLeft, setEmailLeft] = useState(false);
   const [serverError, setServerError] = useState('');
@@ -260,7 +261,10 @@ function Register({ go }) {
 
   function check() {
     const e = {};
-    if (!f.name.trim()) e.name = 'กรอกชื่อ-นามสกุล';
+    if (!f.title) e.title = 'เลือกคำนำหน้า';
+    if (!f.name.trim()) e.name = 'กรอกชื่อ-นามสกุลภาษาไทย';
+    else if (!hasThai(f.name)) e.name = 'พิมพ์ชื่อเป็นภาษาไทย · ชื่อภาษาอังกฤษใส่ช่องถัดไป';
+    if (f.nameEn.trim() && hasThai(f.nameEn)) e.nameEn = 'พิมพ์ชื่อเป็นภาษาอังกฤษ';
     if (!f.email.trim()) e.email = 'กรอกอีเมลมหาวิทยาลัย';
     else if (!EMAIL_RE.test(normEmail(f.email))) e.email = emailProblem(f.email, true).error || emailProblem(f.email, true).warn || 'ใช้อีเมลของมหาวิทยาลัย @silpakorn.edu';
     if (!/^\d{8,11}$/.test(f.studentId.trim())) e.studentId = 'รหัสนักศึกษาเป็นตัวเลข 8–11 หลัก';
@@ -275,7 +279,10 @@ function Register({ go }) {
     setErrors(e);
     if (Object.keys(e).length) return;
     setBusy(true);
-    const r = await registerAccount({ name: f.name.trim(), email: normEmail(f.email), password: f.password, studentId: f.studentId.trim() });
+    const r = await registerAccount({
+      name: f.name.trim(), titleTh: f.title, nameEn: f.nameEn.trim(), titleEn: f.nameEn.trim() ? englishTitleFor(f.title) : '',
+      email: normEmail(f.email), password: f.password, studentId: f.studentId.trim(),
+    });
     setBusy(false);
     if (r.ok) go('verify', { email: r.email, retryAfter: r.retryAfter });
     else setServerError(r.error);
@@ -287,9 +294,21 @@ function Register({ go }) {
       <h2>สมัครสมาชิก</h2>
       <form onSubmit={submit} noValidate>
         <Banner>{serverError}</Banner>
-        <Field id="rg-name" label="ชื่อ-นามสกุล" labelIcon="ti-user" icon="ti-user" error={errors.name}>
-          <input id="rg-name" value={f.name} onChange={set('name')} placeholder="เช่น สมชาย ใจดี" autoComplete="name" aria-invalid={!!errors.name} />
+        <div className="lf-name-row">
+          <Field id="rg-title" label="คำนำหน้า" labelIcon="ti-user" icon="ti-id-badge" error={errors.title}>
+            <select id="rg-title" value={f.title} onChange={set('title')} aria-invalid={!!errors.title}>
+              <option value="" disabled>เลือก</option>
+              {STUDENT_TITLES.map((t) => <option key={t.th} value={t.th}>{t.th}</option>)}
+            </select>
+          </Field>
+          <Field id="rg-name" label="ชื่อ-นามสกุล (ไทย)" icon="ti-user" error={errors.name}>
+            <input id="rg-name" value={f.name} onChange={set('name')} placeholder="เช่น สมชาย ใจดี" autoComplete="name" aria-invalid={!!errors.name} />
+          </Field>
+        </div>
+        <Field id="rg-name-en" label="ชื่อ-นามสกุล (อังกฤษ) · ไม่บังคับ" labelIcon="ti-language" icon="ti-user" error={errors.nameEn}>
+          <input id="rg-name-en" value={f.nameEn} onChange={set('nameEn')} placeholder="e.g. Somchai Jaidee" autoComplete="off" aria-invalid={!!errors.nameEn} />
         </Field>
+        {f.title && hasThai(f.name) && <p className="lf-name-preview"><i className="ti ti-certificate" /> ชื่อบนเกียรติบัตร: <strong>{joinThai(f.title, f.name)}</strong></p>}
         <Field id="rg-email" label="อีเมลมหาวิทยาลัย" labelIcon="ti-at" icon="ti-mail"
           error={errors.email || emailProblem(f.email, emailLeft).error} warn={emailProblem(f.email, emailLeft).warn}>
           <EmailInput id="rg-email" value={f.email} onChange={(v) => set('email')({ target: { value: v } })} onBlur={() => setEmailLeft(true)} autoComplete="email" invalid={!!errors.email} />

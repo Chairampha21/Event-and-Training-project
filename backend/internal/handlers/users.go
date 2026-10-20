@@ -42,7 +42,7 @@ func (h *UsersHandler) List(c *gin.Context) {
 			return
 		}
 		list = append(list, gin.H{
-			"id": u.ID, "name": u.Name, "email": u.Email, "role": u.Role,
+			"id": u.ID, "name": u.Name, "title_th": u.TitleTH, "name_en": u.NameEN, "title_en": u.TitleEN, "email": u.Email, "role": u.Role,
 			"student_id": u.StudentID, "dept": u.Dept, "active": u.Active, "created_at": u.CreatedAt,
 		})
 	}
@@ -50,10 +50,13 @@ func (h *UsersHandler) List(c *gin.Context) {
 }
 
 type upsertUserBody struct {
-	Name  string `json:"name"`
-	Email string `json:"email"`
-	Role  string `json:"role"`
-	Dept  string `json:"dept"`
+	Name    string  `json:"name"`
+	TitleTH *string `json:"title_th"`
+	NameEN  *string `json:"name_en"`
+	TitleEN *string `json:"title_en"`
+	Email   string  `json:"email"`
+	Role    string  `json:"role"`
+	Dept    string  `json:"dept"`
 }
 
 // isParticipant reports whether a role joins events (registers, checks in,
@@ -93,8 +96,8 @@ func (h *UsersHandler) Create(c *gin.Context) {
 
 	res, err := h.DB.Exec(
 		// An admin-made account is trusted: no email confirmation needed.
-		`INSERT INTO users (name, email, password_hash, role, dept, email_verified_at) VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP())`,
-		name, email, string(hash), b.Role, nullIfEmpty(b.Dept),
+		`INSERT INTO users (name, title_th, name_en, title_en, email, password_hash, role, dept, email_verified_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())`,
+		name, optName(b.TitleTH, maxTitleLen), optName(b.NameEN, 150), optName(b.TitleEN, maxTitleLen), email, string(hash), b.Role, nullIfEmpty(b.Dept),
 	)
 	if err != nil {
 		if isDuplicateErr(err) {
@@ -139,6 +142,16 @@ func (h *UsersHandler) Update(c *gin.Context) {
 	if b.Dept != "" {
 		sets = append(sets, "dept = ?")
 		args = append(args, b.Dept)
+	}
+	for col, v := range map[string]*string{"title_th": b.TitleTH, "name_en": b.NameEN, "title_en": b.TitleEN} {
+		if v != nil {
+			sets = append(sets, col+" = ?")
+			max := 150
+			if col != "name_en" {
+				max = maxTitleLen
+			}
+			args = append(args, optName(v, max))
+		}
 	}
 	if len(sets) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "ไม่มีข้อมูลที่จะแก้ไข"})
@@ -260,4 +273,16 @@ func (h *UsersHandler) Delete(c *gin.Context) {
 	activitylog.Log(h.DB, &claims.UserID, "DELETE", "ลบผู้ใช้งาน: "+name)
 	notify.SendToAdmins(h.DB, claims.UserID, "ti-user-x", notify.ToneWarn, "เหตุผิดปกติ: ผู้ใช้ถูกลบ", name+" · ลบโดย "+claims.Name+" · บัญชีนี้ไม่มีประวัติกิจกรรม", "/admin/users")
 	c.Status(http.StatusNoContent)
+}
+
+// optName tidies an optional name field from an admin form ("" or absent = NULL).
+func optName(v *string, max int) any {
+	if v == nil {
+		return nil
+	}
+	s, _ := cleanName(*v, max)
+	if r := []rune(s); len(r) > max {
+		s = string(r[:max])
+	}
+	return nullIfEmpty(s)
 }

@@ -73,6 +73,7 @@ func main() {
 		authGroup.POST("/resend-code", auth.ResendCode)
 		authGroup.POST("/forgot-password", auth.ForgotPassword)
 		authGroup.POST("/reset-password", auth.ResetPassword)
+		authGroup.GET("/me", requireAuth, auth.Me)
 		authGroup.PUT("/me", requireAuth, auth.UpdateMe)
 	}
 

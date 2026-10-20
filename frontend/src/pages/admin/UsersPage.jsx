@@ -4,9 +4,11 @@ import { ROLE_LABEL } from '../../utils/constants';
 import Modal, { ModalHead } from '../../components/ui/Modal';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import { initials } from '../../utils/initials';
+import NameFields from '../../components/common/NameFields';
+import { fullNameTh, joinThai, joinEnglish, hasThai } from '../../utils/personName';
 
 const ROLES = ['admin', 'organizer', 'teacher', 'student'];
-const EMPTY = { name: '', email: '', role: 'student', dept: '' };
+const EMPTY = { title_th: '', name: '', title_en: '', name_en: '', email: '', role: 'student', dept: '' };
 
 export default function UsersPage() {
   const { users, upsertUser, toggleUserActive, deleteUser } = useEvents();
@@ -25,10 +27,15 @@ export default function UsersPage() {
   const teachers = users.filter((u) => u.role === 'teacher').length;
 
   function openNew() { setEditingId(null); setForm(EMPTY); setFormOpen(true); }
-  function openEdit(u) { setEditingId(u.id); setForm({ name: u.name, email: u.email, role: u.role, dept: u.dept }); setFormOpen(true); }
+  function openEdit(u) {
+    setEditingId(u.id);
+    setForm({ title_th: u.title_th || '', name: u.name, title_en: u.title_en || '', name_en: u.name_en || '', email: u.email, role: u.role, dept: u.dept || '' });
+    setFormOpen(true);
+  }
+  const setField = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
 
   function save() {
-    if (!form.name.trim() || !form.email.trim()) return;
+    if (!form.name.trim() || !form.email.trim() || (form.name_en.trim() && hasThai(form.name_en))) return;
     setConfirmOpen(true);
   }
 
@@ -89,7 +96,7 @@ export default function UsersPage() {
                     <td>
                       <div className="ev-cell">
                         <div className={`ev-thumb ${u.role === 'organizer' ? 'alt' : u.role === 'student' || u.role === 'teacher' ? 'dark' : ''}`}>{initials(u.name)}</div>
-                        <div><div className="ev-title">{u.name}</div><div className="ev-sub">{u.email}</div></div>
+                        <div><div className="ev-title">{fullNameTh(u)}</div><div className="ev-sub">{u.email}</div></div>
                       </div>
                     </td>
                     <td><div className="ev-sub" style={{ fontSize: 13, color: 'var(--c4-70)' }}>{u.dept}</div></td>
@@ -120,9 +127,13 @@ export default function UsersPage() {
       </div>
 
       <Modal open={formOpen && !confirmOpen} onClose={() => setFormOpen(false)} size="sm">
-        <ModalHead eyebrow={editingId ? 'แก้ไขผู้ใช้งาน' : 'เพิ่มผู้ใช้งาน'} icon="ti-user-plus" title={editingId ? form.name : 'เพิ่มผู้ใช้งานใหม่'} onClose={() => setFormOpen(false)} />
+        <ModalHead eyebrow={editingId ? 'แก้ไขผู้ใช้งาน' : 'เพิ่มผู้ใช้งาน'} icon="ti-user-plus" title={editingId ? joinThai(form.title_th, form.name) : 'เพิ่มผู้ใช้งานใหม่'} onClose={() => setFormOpen(false)} />
         <div className="modal-body">
-          <div className="form-row full"><div className="field"><label>ชื่อ–นามสกุล <span className="req">*</span></label><input type="text" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} /></div></div>
+          <NameFields
+            key={editingId || 'new'} idPrefix="um" student={form.role === 'student'}
+            titleTh={form.title_th} setTitleTh={setField('title_th')} name={form.name} setName={setField('name')}
+            titleEn={form.title_en} setTitleEn={setField('title_en')} nameEn={form.name_en} setNameEn={setField('name_en')}
+          />
           <div className="form-row full"><div className="field"><label>อีเมล @silpakorn.edu <span className="req">*</span></label><input type="text" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} /></div></div>
           <div className="form-row">
             <div className="field"><label>บทบาท</label><select value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}>{ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}</select></div>
@@ -146,7 +157,7 @@ export default function UsersPage() {
         onCancel={() => setConfirmOpen(false)}
       >
         <p style={{ fontSize: 13.5, color: 'var(--c4-70)', lineHeight: 1.7 }}>
-          <strong style={{ color: 'var(--c4)' }}>{form.name}</strong><br />
+          <strong style={{ color: 'var(--c4)' }}>{joinThai(form.title_th, form.name)}</strong>{form.name_en ? ` · ${joinEnglish(form.title_en, form.name_en)}` : ''}<br />
           {form.email}<br />
           บทบาท: <strong style={{ color: 'var(--c4)' }}>{ROLE_LABEL[form.role]}</strong>{form.dept ? ` · ${form.dept}` : ''}
         </p>
@@ -164,7 +175,7 @@ export default function UsersPage() {
       >
         {roleAsk && (
           <p style={{ fontSize: 13.5, color: 'var(--c4-70)', lineHeight: 1.7 }}>
-            <strong style={{ color: 'var(--c4)' }}>{roleAsk.u.name}</strong> ({roleAsk.u.email})<br />
+            <strong style={{ color: 'var(--c4)' }}>{fullNameTh(roleAsk.u)}</strong> ({roleAsk.u.email})<br />
             จาก <strong style={{ color: 'var(--c4)' }}>{ROLE_LABEL[roleAsk.u.role]}</strong> เป็น <strong style={{ color: 'var(--c4)' }}>{ROLE_LABEL[roleAsk.role]}</strong><br />
             เมนูและสิทธิ์ของผู้ใช้นี้จะเปลี่ยนเมื่อเข้าสู่ระบบครั้งถัดไป
           </p>

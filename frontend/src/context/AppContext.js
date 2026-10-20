@@ -6,6 +6,7 @@ import { formatThaiDate, formatThaiDateRange, formatThaiDateList, formatDayTime,
 import { formatBaht } from '../utils/money';
 import { normalizeLayout, serializeLayout } from '../features/certificates/utils/certLayout';
 import { ROLE_LABEL, EVENT_CATEGORY_ICONS, isParticipant } from '../utils/constants';
+import { fullNameTh } from '../utils/personName';
 
 const AppContext = createContext(null);
 
@@ -190,7 +191,7 @@ function toEventBody(payload) {
 // `via` = attends 'onsite' or 'online'; `checkinKeys` = per day, the key of the
 // self check-in link for online attendees (same on every row).
 function adaptRosterRow(r, eventDays = [], checkinKeys = {}) {
-  return { sid: r.student_id || '', isTeacher: r.role === 'teacher', name: r.name, in: !!r.checked_in, days: r.checkin_dates || [], eventDays, via: r.attend_via || 'onsite', checkinKeys, regId: r.id, status: r.status, wantsLaptop: !!r.wants_laptop, foodAllergy: r.food_allergy || '', dietaryPref: r.dietary_pref || '', paymentStatus: r.payment_status || 'none',
+  return { sid: r.student_id || '', isTeacher: r.role === 'teacher', name: fullNameTh(r), in: !!r.checked_in, days: r.checkin_dates || [], eventDays, via: r.attend_via || 'onsite', checkinKeys, regId: r.id, status: r.status, wantsLaptop: !!r.wants_laptop, foodAllergy: r.food_allergy || '', dietaryPref: r.dietary_pref || '', paymentStatus: r.payment_status || 'none',
     hasSlip: !!r.has_slip, slipTransferredAt: r.slip_transferred_at || '', slipAmount: r.slip_amount ?? null, rejectReason: r.payment_reject_reason || '',
     refundedAt: r.refunded_at || '', refundPromptPay: r.refund_promptpay || '',
   };
@@ -257,6 +258,14 @@ function adaptCertDefaults(d) {
 
 // A failed sign-in call as the sign-in page uses it: the server's reason, and
 // `verify` when the address still needs its emailed code first.
+// What the page keeps about the signed-in person (plus the token).
+function sessionFields(user) {
+  return {
+    id: user.id, role: user.role, email: user.email, student_id: user.student_id, dept: user.dept,
+    name: user.name, title_th: user.title_th || '', name_en: user.name_en || '', title_en: user.title_en || '',
+  };
+}
+
 function authResult(err) {
   return {
     error: err.message || 'เกิดข้อผิดพลาด',
@@ -472,6 +481,8 @@ export function AppProvider({ children }) {
     }
     refreshEvents({ role: session.role });
     loadCertDefaults();
+    // What was remembered at sign-in may be out of date (name, title, role).
+    api.get('/auth/me').then(({ user }) => setSession((cur) => (cur && cur.id === user.id ? { ...cur, ...sessionFields(user) } : cur))).catch(() => {});
     refreshNotifications();
     if (isParticipant(session.role)) {
       refreshMyRegistrations();
@@ -505,7 +516,7 @@ export function AppProvider({ children }) {
   /* ---------- auth ---------- */
   const applySession = useCallback((user, token) => {
     setAuthToken(token);
-    setSession({ id: user.id, role: user.role, name: user.name, email: user.email, student_id: user.student_id, dept: user.dept, token });
+    setSession({ ...sessionFields(user), token });
     pushToast('เข้าสู่ระบบสำเร็จ', `ยินดีต้อนรับ · ${ROLE_LABEL[user.role]}`);
   }, [pushToast, setSession]);
 
@@ -564,9 +575,9 @@ export function AppProvider({ children }) {
   // Sign-up with email and password (always a student account) — the way in
   // that works without Google Sign-In. The account opens once the code mailed
   // to the address is entered (verifyEmail).
-  const registerAccount = useCallback(async ({ name, email, password, studentId }) => {
+  const registerAccount = useCallback(async ({ name, titleTh, nameEn, titleEn, email, password, studentId }) => {
     try {
-      const r = await api.post('/auth/register', { name, email, password, student_id: studentId }, { auth: false });
+      const r = await api.post('/auth/register', { name, title_th: titleTh, name_en: nameEn, title_en: titleEn, email, password, student_id: studentId }, { auth: false });
       return { ok: true, email: r.email, retryAfter: r.retry_after || 60 };
     } catch (err) {
       return authResult(err);
@@ -587,8 +598,8 @@ export function AppProvider({ children }) {
   const updateProfile = useCallback(async (payload) => {
     try {
       const { user } = await api.put('/auth/me', payload);
-      setSession((s) => (s ? { ...s, name: user.name, dept: user.dept, student_id: user.student_id } : s));
-      pushToast('บันทึกโปรไฟล์แล้ว', user.name);
+      setSession((s) => (s ? { ...s, ...sessionFields(user) } : s));
+      pushToast('บันทึกโปรไฟล์แล้ว', fullNameTh(user));
       return true;
     } catch (err) {
       pushToast('บันทึกโปรไฟล์ไม่สำเร็จ', err.message || '', 'warn');
@@ -992,11 +1003,12 @@ export function AppProvider({ children }) {
   const upsertUser = useCallback(async (payload, id) => {
     try {
       if (id) {
-        const { user } = await api.put(`/users/${id}`, { name: payload.name, email: payload.email, role: payload.role, dept: payload.dept });
+        const names = { title_th: payload.title_th || '', name_en: payload.name_en || '', title_en: payload.title_en || '' };
+        const { user } = await api.put(`/users/${id}`, { name: payload.name, email: payload.email, role: payload.role, dept: payload.dept, ...names });
         setUsers((us) => us.map((u) => (u.id === id ? user : u)));
         pushToast('บันทึกการแก้ไขแล้ว', payload.name);
       } else {
-        await api.post('/users', { name: payload.name, email: payload.email, role: payload.role, dept: payload.dept });
+        await api.post('/users', { name: payload.name, email: payload.email, role: payload.role, dept: payload.dept, title_th: payload.title_th || '', name_en: payload.name_en || '', title_en: payload.title_en || '' });
         await refreshUsers();
         pushToast('เพิ่มผู้ใช้งานสำเร็จ', payload.name);
       }

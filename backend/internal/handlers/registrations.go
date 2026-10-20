@@ -767,6 +767,7 @@ type rosterRow struct {
 	RefundPromptPay   models.NullString `json:"refund_promptpay"` // where to transfer a refund; organizer/admin only
 	StudentID         models.NullString `json:"student_id"`
 	Role              string            `json:"role"` // a teacher stays on the roster but off the sign-in sheet and reports
+	TitleTH           models.NullString `json:"title_th"`
 }
 
 // EventRoster is the organizer/admin roster view for one event — the check-in modal's data source.
@@ -796,7 +797,7 @@ func (h *RegistrationsHandler) EventRoster(c *gin.Context) {
 		`SELECT r.id, r.status, r.checked_in, r.checked_in_at, r.registered_at, r.wants_laptop, r.food_allergy, r.dietary_pref, r.payment_status,
 		        r.slip_url IS NOT NULL, r.slip_transferred_at, r.slip_amount, r.slip_submitted_at, r.payment_reject_reason,
 		        r.refunded_at, r.refund_promptpay,
-		        u.id, u.name, u.email, u.student_id, u.role
+		        u.id, u.name, u.email, u.student_id, u.role, u.title_th
 		 FROM registrations r JOIN users u ON u.id = r.user_id
 		 WHERE r.event_id = ? ORDER BY u.name ASC`, c.Param("id"),
 	)
@@ -813,7 +814,7 @@ func (h *RegistrationsHandler) EventRoster(c *gin.Context) {
 		if err := rows.Scan(&r.ID, &r.Status, &checkedIn, &r.CheckedInAt, &r.RegisteredAt, &r.WantsLaptop, &r.FoodAllergy, &r.DietaryPref, &r.PaymentStatus,
 			&r.HasSlip, &r.SlipTransferredAt, &r.SlipAmount, &r.SlipSubmittedAt, &r.RejectReason,
 			&r.RefundedAt, &r.RefundPromptPay,
-			&r.UserID, &r.Name, &r.Email, &r.StudentID, &r.Role); err != nil {
+			&r.UserID, &r.Name, &r.Email, &r.StudentID, &r.Role, &r.TitleTH); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 			return
 		}

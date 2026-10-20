@@ -43,7 +43,10 @@ func (n NullFloat) MarshalJSON() ([]byte, error) {
 
 type User struct {
 	ID        int64      `json:"id"`
-	Name      string     `json:"name"`
+	Name      string     `json:"name"`     // Thai first and last name, without the title
+	TitleTH   NullString `json:"title_th"` // นาย, นางสาว, ผศ.ดร. ...
+	NameEN    NullString `json:"name_en"`
+	TitleEN   NullString `json:"title_en"` // Mr., Miss, Asst. Prof. Dr. ...
 	Email     string     `json:"email"`
 	Role      string     `json:"role"`
 	StudentID NullString `json:"student_id"`

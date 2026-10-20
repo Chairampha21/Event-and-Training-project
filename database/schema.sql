@@ -22,7 +22,16 @@ SET NAMES utf8mb4;
 -- ---------------------------------------------------------------------
 CREATE TABLE users (
   id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  name            VARCHAR(150)      NOT NULL,
+  name            VARCHAR(150)      NOT NULL,             -- Thai first and last name, without the title
+  -- Title and English name, for certificates (Thai, and English ones later).
+  -- Shown together as title + name: "นาย"/"นางสาว"/"เด็กชาย"... join without a
+  -- space ("นายสมชาย ใจดี"), as do abbreviations ending in "." ("ผศ.ดร.สมชาย").
+  -- Existing databases: ALTER TABLE users ADD COLUMN title_th VARCHAR(40) NULL AFTER name,
+  --   ADD COLUMN name_en VARCHAR(150) NULL AFTER title_th, ADD COLUMN title_en VARCHAR(40) NULL AFTER name_en;
+  -- then move titles typed into names into title_th (see the UPDATEs in database/migrations/2026-10-names.sql).
+  title_th        VARCHAR(40)       NULL,
+  name_en         VARCHAR(150)      NULL,                 -- English first and last name, without the title
+  title_en        VARCHAR(40)       NULL,
   email           VARCHAR(190)      NOT NULL,
   password_hash   VARCHAR(255)      NOT NULL,             -- bcrypt/argon2 hash — never store plaintext
   -- teacher: joins events like a student (register, check in, evaluate,

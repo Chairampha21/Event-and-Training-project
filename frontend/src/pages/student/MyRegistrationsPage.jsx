@@ -7,6 +7,7 @@ import OnlineJoinLink from '../../features/events/components/OnlineJoinLink';
 import PaymentBox from '../../features/events/components/PaymentBox';
 import CancelRegistrationButton from '../../features/events/components/CancelRegistrationButton';
 import { buddhistYearOf } from '../../utils/dateFormat';
+import { fullNameTh } from '../../utils/personName';
 
 // The order the status filter is offered in: what still needs doing first.
 const STATUS_ORDER = ['registered', 'attended', 'certified', 'evaluated', 'absent', 'cancelled'];
@@ -65,7 +66,7 @@ export default function MyRegistrationsPage() {
             <div className="avatar">{(session?.name || '').slice(0, 1)}</div>
             <div className="ph-info">
               <span className="ph-role"><i className="ti ti-school" /> {session?.role === 'teacher' ? 'อาจารย์' : 'นักศึกษาปัจจุบัน'}</span>
-              <div className="ph-name">{session?.name}</div>
+              <div className="ph-name">{fullNameTh(session)}</div>
               <div className="ph-id">
                 {session?.role === 'teacher'
                   ? session?.dept && <span><i className="ti ti-briefcase" /> {session.dept}</span>

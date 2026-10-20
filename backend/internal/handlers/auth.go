@@ -45,18 +45,21 @@ func (h *AuthHandler) signToken(u models.User) (string, error) {
 	return token.SignedString([]byte(h.JWTSecret))
 }
 
-const userPublicFields = `id, name, email, role, student_id, dept, active, created_at`
+const userPublicFields = `id, name, title_th, name_en, title_en, email, role, student_id, dept, active, created_at`
 
 func scanUser(row interface{ Scan(dest ...any) error }) (models.User, error) {
 	var u models.User
 	var active int
-	err := row.Scan(&u.ID, &u.Name, &u.Email, &u.Role, &u.StudentID, &u.Dept, &active, &u.CreatedAt)
+	err := row.Scan(&u.ID, &u.Name, &u.TitleTH, &u.NameEN, &u.TitleEN, &u.Email, &u.Role, &u.StudentID, &u.Dept, &active, &u.CreatedAt)
 	u.Active = active == 1
 	return u, err
 }
 
 type registerBody struct {
 	Name      string `json:"name"`
+	TitleTH   string `json:"title_th"`
+	NameEN    string `json:"name_en"`
+	TitleEN   string `json:"title_en"`
 	Email     string `json:"email"`
 	Password  string `json:"password"`
 	StudentID string `json:"student_id"`
@@ -76,6 +79,11 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 	if name == "" || email == "" || body.Password == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "กรอกชื่อ อีเมล และรหัสผ่านให้ครบ"})
+		return
+	}
+	name, titleTH, nameEN, titleEN, msg := checkNames(body.Name, body.TitleTH, body.NameEN, body.TitleEN)
+	if msg != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": msg})
 		return
 	}
 	if !strings.HasSuffix(email, "@silpakorn.edu") {
@@ -103,8 +111,8 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	switch {
 	case err == sql.ErrNoRows:
 		res, err := h.DB.Exec(
-			`INSERT INTO users (name, email, password_hash, role, student_id, dept) VALUES (?, ?, ?, 'student', ?, ?)`,
-			name, email, string(hash), nullIfEmpty(body.StudentID), nullIfEmpty(body.Dept),
+			`INSERT INTO users (name, title_th, name_en, title_en, email, password_hash, role, student_id, dept) VALUES (?, ?, ?, ?, ?, ?, 'student', ?, ?)`,
+			name, titleTH, nullIfEmpty(nameEN), nullIfEmpty(titleEN), email, string(hash), nullIfEmpty(body.StudentID), nullIfEmpty(body.Dept),
 		)
 		if err != nil {
 			if isDuplicateErr(err) {
@@ -124,8 +132,8 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	default:
 		userID = existing.user.ID
-		if _, err := h.DB.Exec(`UPDATE users SET name = ?, password_hash = ?, student_id = ?, dept = ? WHERE id = ?`,
-			name, string(hash), nullIfEmpty(body.StudentID), nullIfEmpty(body.Dept), userID); err != nil {
+		if _, err := h.DB.Exec(`UPDATE users SET name = ?, title_th = ?, name_en = ?, title_en = ?, password_hash = ?, student_id = ?, dept = ? WHERE id = ?`,
+			name, titleTH, nullIfEmpty(nameEN), nullIfEmpty(titleEN), string(hash), nullIfEmpty(body.StudentID), nullIfEmpty(body.Dept), userID); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 			return
 		}
@@ -166,11 +174,11 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		active       int
 	)
 	row := h.DB.QueryRow(
-		`SELECT id, name, email, role, student_id, dept, active, created_at, password_hash, email_verified_at IS NOT NULL FROM users WHERE email = ?`,
+		`SELECT id, name, title_th, name_en, title_en, email, role, student_id, dept, active, created_at, password_hash, email_verified_at IS NOT NULL FROM users WHERE email = ?`,
 		email,
 	)
 	var verified bool
-	err := row.Scan(&u.ID, &u.Name, &u.Email, &u.Role, &u.StudentID, &u.Dept, &active, &u.CreatedAt, &passwordHash, &verified)
+	err := row.Scan(&u.ID, &u.Name, &u.TitleTH, &u.NameEN, &u.TitleEN, &u.Email, &u.Role, &u.StudentID, &u.Dept, &active, &u.CreatedAt, &passwordHash, &verified)
 	if err == sql.ErrNoRows || active != 1 {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "อีเมลหรือรหัสผ่านไม่ถูกต้อง"})
 		return
@@ -292,8 +300,10 @@ func (h *AuthHandler) GoogleLogin(c *gin.Context) {
 			name = email
 		}
 		res, ierr := h.DB.Exec(
-			`INSERT INTO users (name, email, password_hash, role, email_verified_at) VALUES (?, ?, ?, 'student', UTC_TIMESTAMP())`,
-			name, email, string(randomHash),
+			// Google's name is usually in English: it goes into name_en as well;
+			// the person is asked for the Thai name and title on first sign-in.
+			`INSERT INTO users (name, name_en, email, password_hash, role, email_verified_at) VALUES (?, ?, ?, ?, 'student', UTC_TIMESTAMP())`,
+			name, name, email, string(randomHash),
 		)
 		if ierr != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
@@ -343,6 +353,9 @@ func randomHex(n int) string {
 
 type updateMeBody struct {
 	Name      string `json:"name"`
+	TitleTH   string `json:"title_th"`
+	NameEN    string `json:"name_en"`
+	TitleEN   string `json:"title_en"`
 	Dept      string `json:"dept"`
 	StudentID string `json:"student_id"`
 }
@@ -357,15 +370,15 @@ func (h *AuthHandler) UpdateMe(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลไม่ถูกต้อง"})
 		return
 	}
-	name := strings.TrimSpace(b.Name)
-	if name == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "กรอกชื่อให้ครบ"})
+	name, titleTH, nameEN, titleEN, msg := checkNames(b.Name, b.TitleTH, b.NameEN, b.TitleEN)
+	if msg != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": msg})
 		return
 	}
 
 	_, err := h.DB.Exec(
-		`UPDATE users SET name = ?, dept = ?, student_id = ? WHERE id = ?`,
-		name, nullIfEmpty(b.Dept), nullIfEmpty(b.StudentID), claims.UserID,
+		`UPDATE users SET name = ?, title_th = ?, name_en = ?, title_en = ?, dept = ?, student_id = ? WHERE id = ?`,
+		name, titleTH, nullIfEmpty(nameEN), nullIfEmpty(titleEN), nullIfEmpty(b.Dept), nullIfEmpty(b.StudentID), claims.UserID,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
@@ -392,4 +405,44 @@ func nullIfEmpty(s string) any {
 
 func isDuplicateErr(err error) bool {
 	return strings.Contains(err.Error(), "Error 1062")
+}
+
+// checkNames tidies and checks the Thai name with its title and the optional
+// English name: the Thai name and title are required and the name must be in
+// Thai (it is what Thai certificates print).
+func checkNames(name, titleTH, nameEN, titleEN string) (string, string, string, string, string) {
+	var ok1, ok2, ok3, ok4 bool
+	name, ok1 = cleanName(name, 150)
+	titleTH, ok2 = cleanName(titleTH, maxTitleLen)
+	nameEN, ok3 = cleanName(nameEN, 150)
+	titleEN, ok4 = cleanName(titleEN, maxTitleLen)
+	switch {
+	case titleTH == "":
+		return "", "", "", "", "เลือกคำนำหน้าชื่อ"
+	case name == "":
+		return "", "", "", "", "กรอกชื่อ-นามสกุลภาษาไทย"
+	case !hasThai(name):
+		return "", "", "", "", "ชื่อ-นามสกุลภาษาไทยต้องพิมพ์เป็นภาษาไทย · ชื่อภาษาอังกฤษให้ใส่ในช่องภาษาอังกฤษ"
+	case nameEN != "" && hasThai(nameEN):
+		return "", "", "", "", "ชื่อ-นามสกุลภาษาอังกฤษต้องพิมพ์เป็นภาษาอังกฤษ"
+	case !ok1 || !ok2 || !ok3 || !ok4:
+		return "", "", "", "", "ชื่อหรือคำนำหน้ายาวเกินไป"
+	}
+	return name, titleTH, nameEN, titleEN, ""
+}
+
+// Me returns the signed-in user as stored now, so the page can refresh what it
+// remembered at sign-in (name, title, role...).
+func (h *AuthHandler) Me(c *gin.Context) {
+	claims, _ := middleware.CurrentUser(c)
+	user, err := scanUser(h.DB.QueryRow(`SELECT `+userPublicFields+` FROM users WHERE id = ?`, claims.UserID))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "ไม่พบบัญชีผู้ใช้"})
+		return
+	}
+	if !user.Active {
+		c.JSON(http.StatusForbidden, gin.H{"error": "บัญชีนี้ถูกระงับการใช้งาน"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"user": user})
 }

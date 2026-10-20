@@ -6,6 +6,7 @@ import { printCertificate } from '../utils/certificateGen';
 import { formatCertDate, formatCertDateList } from '../../../utils/dateFormat';
 import { layoutVars, normalizeLayout } from '../utils/certLayout';
 import { certTemplateFor } from '../utils/defaultTemplate';
+import { fullNameTh } from '../../../utils/personName';
 
 // Everything needed to draw and download the signed-in student's certificate
 // for one event — shared by the card in the list and the full preview, so the
@@ -35,7 +36,7 @@ export function buildCertificate({ evById, session, myCertificates, certDefaults
     category: ev?.cat || cert?.category || '',
     signature: ev ? ev.signer?.signature || null : certDefaults?.signer.signature || null,
     certId: cert?.cert_code || `SU-CS-${String(eventId).padStart(3, '0')}`,
-    studentName: session?.name || '',
+    studentName: fullNameTh(session),
     // The event's own template, or the department's main one when it has none.
     template: certTemplateFor(ev, certDefaults, cert, certTemplateCache),
   };

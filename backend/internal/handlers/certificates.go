@@ -158,16 +158,16 @@ func (h *CertificatesHandler) MyCertificates(c *gin.Context) {
 // Verify is a public lookup by certificate code (the "รหัสตรวจสอบ" printed on the certificate).
 func (h *CertificatesHandler) Verify(c *gin.Context) {
 	var (
-		issuedAt, holderName, eventTitle, dateStart string
+		issuedAt, holderName, holderTitle, eventTitle, dateStart string
 	)
 	err := h.DB.QueryRow(
-		`SELECT cert.issued_at, u.name, e.title, e.date_start
+		`SELECT cert.issued_at, u.name, COALESCE(u.title_th, ''), e.title, e.date_start
 		 FROM certificates cert
 		 JOIN registrations r ON r.id = cert.registration_id
 		 JOIN users u ON u.id = r.user_id
 		 JOIN events e ON e.id = r.event_id
 		 WHERE cert.cert_code = ?`, c.Param("code"),
-	).Scan(&issuedAt, &holderName, &eventTitle, &dateStart)
+	).Scan(&issuedAt, &holderName, &holderTitle, &eventTitle, &dateStart)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบเกียรติบัตรนี้ในระบบ"})
 		return
@@ -178,6 +178,6 @@ func (h *CertificatesHandler) Verify(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"cert_code": c.Param("code"), "issued_at": issuedAt,
-		"holder_name": holderName, "event_title": eventTitle, "event_date": dateStart,
+		"holder_name": FullNameTH(holderTitle, holderName), "event_title": eventTitle, "event_date": dateStart,
 	})
 }

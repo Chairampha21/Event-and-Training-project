@@ -5,6 +5,7 @@ import { ROLE_LABEL } from '../../utils/constants';
 import './Navbar.css';
 import { initials } from '../../utils/initials';
 import ConfirmDialog from '../ui/ConfirmDialog';
+import { fullNameTh } from '../../utils/personName';
 
 // Staff menus come in groups under a heading ({ section }); the headings
 // hide on narrow screens, where only the icons show.
@@ -153,7 +154,7 @@ export default function Navbar() {
           <button type="button" className="user-pill" title="ดู/แก้ไขโปรไฟล์" onClick={() => navigate('/profile')}>
             <div className={`up-av ${session.role}`}>{initials(session.name)}</div>
             <div className="up-info">
-              <span className="up-name">{session.name}</span>
+              <span className="up-name">{fullNameTh(session)}</span>
               <span className="up-role"><span className={`role-tag ${session.role}`}>{ROLE_LABEL[session.role]}</span></span>
             </div>
           </button>
@@ -185,7 +186,7 @@ export default function Navbar() {
         onCancel={() => setLogoutAsk(false)}
       >
         <p style={{ fontSize: 13.5, color: 'var(--c4-70)', lineHeight: 1.7 }}>
-          คุณกำลังออกจากบัญชี <strong style={{ color: 'var(--c4)' }}>{session.name}</strong> ({session.email})<br />
+          คุณกำลังออกจากบัญชี <strong style={{ color: 'var(--c4)' }}>{fullNameTh(session)}</strong> ({session.email})<br />
           ข้อมูลที่ยังไม่ได้บันทึกในหน้านี้จะหายไป
         </p>
       </ConfirmDialog>

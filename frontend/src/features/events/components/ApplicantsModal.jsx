@@ -62,6 +62,7 @@ export default function ApplicantsModal({ eventId, open, onClose, mode = 'list' 
   const [confirmCert, setConfirmCert] = useState(false);
   const [refundAsk, setRefundAsk] = useState(null); // { p, on } — marking a refund (or taking it back), waiting for confirmation
   const [refundBusy, setRefundBusy] = useState(false);
+  const [checkAllAsk, setCheckAllAsk] = useState(false); // checking (or unchecking) everyone at once waits for a confirmation
 
   const ev = eventId ? evById(eventId) : null;
   const roster = useMemo(() => (eventId ? (rosters[eventId] || []) : []), [eventId, rosters]);
@@ -436,7 +437,7 @@ export default function ApplicantsModal({ eventId, open, onClose, mode = 'list' 
               {checkin && (
                 <label className="ci-checkall">
                   <span>ตรวจสอบทั้งหมด{groupWord}{multiDay ? ` วันที่ ${days.indexOf(activeDay) + 1}` : ''}{query.trim() ? ' (เฉพาะที่ค้นหา)' : ''}</span>
-                  <button type="button" className={`switch sm${allChecked ? ' on' : ''}`} onClick={toggleAll} disabled={filtered.length === 0} />
+                  <button type="button" className={`switch sm${allChecked ? ' on' : ''}`} onClick={() => setCheckAllAsk(true)} disabled={filtered.length === 0} />
                 </label>
               )}
             </div>
@@ -538,6 +539,23 @@ export default function ApplicantsModal({ eventId, open, onClose, mode = 'list' 
             : (certIssued ? 'กิจกรรมนี้ออกเกียรติบัตรไปแล้ว ยืนยันอีกครั้งจะแจ้งเตือนเฉพาะผู้ที่เช็คอินเพิ่มหลังจากนั้น ผู้ที่เคยได้รับแจ้งเตือนแล้วจะไม่ได้รับซ้ำ' : 'ผู้ที่เช็คอินแล้วจะได้รับสิทธิ์รับเกียรติบัตรและได้รับการแจ้งเตือน · ตรวจตัวอย่างด้านล่างก่อนยืนยัน')}
         </p>
         {ev && !noCert && <CertIssueReview ev={ev} onEdit={() => { setConfirmCert(false); onClose(); navigate('/create-event', { state: { editId: ev.id, section: 'cert' } }); }} />}
+      </ConfirmDialog>
+      <ConfirmDialog
+        open={checkAllAsk}
+        eyebrow={allChecked ? 'ยกเลิกเช็คชื่อทั้งหมด' : 'เช็คชื่อทั้งหมด'}
+        icon={allChecked ? 'ti-square-x' : 'ti-checks'}
+        title={allChecked ? 'ยกเลิกการเช็คชื่อทุกคนในรายการ?' : 'เช็คชื่อทุกคนในรายการ?'}
+        confirmLabel={allChecked ? 'ยกเลิกเช็คชื่อทั้งหมด' : 'เช็คชื่อทั้งหมด'}
+        confirmIcon={allChecked ? 'ti-square-x' : 'ti-checks'}
+        onConfirm={() => { setCheckAllAsk(false); toggleAll(); }}
+        onCancel={() => setCheckAllAsk(false)}
+      >
+        <p style={{ fontSize: 13.5, color: 'var(--c4-70)', lineHeight: 1.7 }}>
+          {allChecked
+            ? `ผู้เข้าร่วม ${filtered.length} คนที่แสดงอยู่จะกลับเป็น "ยังไม่ตรวจสอบ"${multiDay ? ` สำหรับวันที่ ${days.indexOf(activeDay) + 1}` : ''} · การเช็คชื่อที่ทำไว้ทั้งหมดในรายการนี้จะหายไป`
+            : `จะเช็คชื่อผู้เข้าร่วมที่ยังไม่ได้ตรวจสอบอีก ${filtered.filter((p) => !inDay(p)).length} คนจากที่แสดงอยู่ ${filtered.length} คน${multiDay ? ` สำหรับวันที่ ${days.indexOf(activeDay) + 1}` : ''} · ใช้เมื่อทุกคนในรายการมาจริงเท่านั้น`}
+          {query.trim() ? ' (เฉพาะรายชื่อที่ค้นหาอยู่)' : ''}
+        </p>
       </ConfirmDialog>
       <ConfirmDialog
         open={!!refundAsk}

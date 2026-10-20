@@ -4,11 +4,13 @@ import { toBuddhistYear } from '../../utils/dateFormat';
 import { fileToDataUrl } from '../../utils/fileToDataUrl';
 import { downloadDataUrl, downloadAllImages } from '../../utils/downloadImage';
 import Modal, { ModalHead } from '../../components/ui/Modal';
+import ConfirmDialog from '../../components/ui/ConfirmDialog';
 
 // คลังโปสเตอร์กิจกรรม — แทนที่แบบฟอร์ม SAR ยาวเดิม ตามที่ผู้จัดกิจกรรมแจ้งว่า
 // สิ่งที่ใช้จริงมีแค่โปสเตอร์กิจกรรมกับโปสเตอร์สรุปข่าว ให้อาจารย์ดูและโหลดได้ทั้งหมด
 export default function SarReportPage() {
   const { events, pushToast, getSar, saveSar } = useEvents();
+  const [removeAsk, setRemoveAsk] = useState(null); // the event whose recap poster is about to be deleted
   const doneEvents = useMemo(() => events.filter((e) => e.listed && e.status === 'done'), [events]);
 
   const years = useMemo(() => {
@@ -180,7 +182,7 @@ export default function SarReportPage() {
                         {recap ? (
                           <>
                             <button type="button" onClick={() => downloadDataUrl(recap, `${ev.title.slice(0, 40)} - โปสเตอร์สรุปข่าว.png`)}><i className="ti ti-download" /> โหลด</button>
-                            <button type="button" onClick={() => onRemoveRecap(ev)} disabled={busy}><i className="ti ti-trash" /> ลบ</button>
+                            <button type="button" onClick={() => setRemoveAsk(ev)} disabled={busy}><i className="ti ti-trash" /> ลบ</button>
                           </>
                         ) : (
                           <button type="button" onClick={() => document.getElementById(`sar-recap-${ev.id}`).click()} disabled={busy}>
@@ -196,6 +198,21 @@ export default function SarReportPage() {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={!!removeAsk}
+        eyebrow="ยืนยันการลบ"
+        icon="ti-trash"
+        title="ลบโปสเตอร์สรุปข่าว?"
+        confirmLabel="ลบโปสเตอร์"
+        confirmIcon="ti-trash"
+        onConfirm={() => { const ev = removeAsk; setRemoveAsk(null); onRemoveRecap(ev); }}
+        onCancel={() => setRemoveAsk(null)}
+      >
+        <p style={{ fontSize: 13.5, color: 'var(--c4-70)', lineHeight: 1.7 }}>
+          โปสเตอร์สรุปข่าวของ <strong style={{ color: 'var(--c4)' }}>{removeAsk?.title}</strong> จะถูกลบออกจากคลัง และกู้คืนไม่ได้ · ดาวน์โหลดเก็บไว้ก่อนได้ด้วยปุ่ม "โหลด"
+        </p>
+      </ConfirmDialog>
 
       <Modal open={!!preview} onClose={() => setPreview(null)} size="lg">
         <ModalHead eyebrow="ตัวอย่างโปสเตอร์" icon="ti-photo" title={preview?.title || ''} onClose={() => setPreview(null)} />

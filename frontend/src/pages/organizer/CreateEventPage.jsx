@@ -98,7 +98,7 @@ function initialDayTimes(editing, dates, parsedTime) {
 }
 
 export default function CreateEventPage() {
-  const { session, evById, createEvent, updateEvent, pushToast, getEventEvalQuestions, saveEventEvalQuestions, certDefaults } = useEvents();
+  const { session, evById, createEvent, updateEvent, pushToast, getEventEvalSetup, saveEventEvalQuestions, certDefaults } = useEvents();
   const navigate = useNavigate();
   const location = useLocation();
   const editId = location.state?.editId;
@@ -292,12 +292,16 @@ export default function CreateEventPage() {
   );
   const [evalQuestionsLoaded, setEvalQuestionsLoaded] = useState(!editing);
   const [evalOn, setEvalOn] = useState(false);
+  // Certificates issued or answers in: the questions stay as they are (saving
+  // them again would delete the answers). The server refuses it too.
+  const [evalLocked, setEvalLocked] = useState(false);
 
   useEffect(() => {
     if (!editing) return;
     let cancelled = false;
-    getEventEvalQuestions(editing.id).then((qs) => {
+    getEventEvalSetup(editing.id).then(({ questions: qs, locked }) => {
       if (cancelled) return;
+      setEvalLocked(locked);
       setEvalQuestions(
         qs.length
           ? qs.map((q) => ({ _key: newEvalKey(), label: q.label, type: q.type, required: q.required, options: q.options || [] }))
@@ -489,7 +493,7 @@ export default function CreateEventPage() {
         // Only write when the section is switched on — "off" just hides the
         // builder, it must never silently wipe questions saved in an earlier
         // session (e.g. from opening the edit form with the toggle off).
-        if (eventId && evalQuestionsLoaded && evalOn) {
+        if (eventId && evalQuestionsLoaded && evalOn && !evalLocked) {
           try {
             const questions = evalQuestions
               .filter((q) => q.label.trim())
@@ -984,9 +988,23 @@ export default function CreateEventPage() {
                 <h2><span className="fc-num">9</span> แบบประเมินกิจกรรม</h2>
                 <p className="fc-sub">คำถามเพิ่มเติมต่อจากแบบประเมินมาตรฐาน · เปิดเมื่อพร้อมตั้งค่า หรือเปิดกลับมาตั้งค่าทีหลังได้เช่นเดียวกับพรีเทส</p>
               </div>
-              <button type="button" className={`switch${evalOn ? ' on' : ''}`} onClick={() => setEvalOn((o) => !o)} title="เปิด/ปิดการใช้แบบประเมินเพิ่มเติม" />
+              {!evalLocked && <button type="button" className={`switch${evalOn ? ' on' : ''}`} onClick={() => setEvalOn((o) => !o)} title="เปิด/ปิดการใช้แบบประเมินเพิ่มเติม" />}
             </div>
-            {evalOn && (!evalQuestionsLoaded ? (
+            {evalLocked ? (
+              <div className="eval-locked">
+                <div className="eval-locked-note"><i className="ti ti-lock" /> ออกเกียรติบัตรหรือมีผู้ทำแบบประเมินแล้ว จึงแก้ไขแบบประเมินไม่ได้ · เพื่อไม่ให้คำตอบที่มีอยู่หายไป</div>
+                {evalOn ? (
+                  <ol className="eval-locked-list">
+                    {evalQuestions.map((q) => (
+                      <li key={q._key}>
+                        <span>{q.label}</span>
+                        <small>{q.type === 'choice' ? `เลือกตอบ: ${q.options.join(' / ')}` : 'คะแนน 1–5'}{q.required ? ' · บังคับตอบ' : ''}</small>
+                      </li>
+                    ))}
+                  </ol>
+                ) : <p className="eval-locked-empty">กิจกรรมนี้ไม่มีคำถามเพิ่มเติม</p>}
+              </div>
+            ) : evalOn && (!evalQuestionsLoaded ? (
               <p style={{ fontSize: 13, color: 'var(--c4-60)' }}>กำลังโหลด...</p>
             ) : (
               <div className="eval-q-list">

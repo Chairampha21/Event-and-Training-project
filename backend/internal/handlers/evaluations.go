@@ -84,7 +84,12 @@ func (h *EvaluationsHandler) EventQuestions(c *gin.Context) {
 		}
 		list = append(list, q)
 	}
-	c.JSON(http.StatusOK, gin.H{"questions": list})
+	locked, err := evalLocked(h.DB, c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"questions": list, "locked": locked})
 }
 
 type setEventQuestionsBody struct {
@@ -115,6 +120,18 @@ func (h *EvaluationsHandler) SetEventQuestions(c *gin.Context) {
 	claims, _ := middleware.CurrentUser(c)
 	if claims.Role != "admin" && !(organizerID.Valid && organizerID.Int64 == claims.UserID) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "ไม่มีสิทธิ์แก้ไขแบบประเมินของกิจกรรมนี้"})
+		return
+	}
+
+	// Saving replaces every question, and their answers go with them: once
+	// certificates are out (or anyone has answered) the form stays as it is.
+	locked, err := evalLocked(h.DB, eventID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
+		return
+	}
+	if locked {
+		c.JSON(http.StatusConflict, gin.H{"error": "ออกเกียรติบัตรหรือมีผู้ทำแบบประเมินแล้ว จึงแก้ไขแบบประเมินไม่ได้"})
 		return
 	}
 
@@ -423,4 +440,20 @@ func (h *EvaluationsHandler) Results(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"results": list})
+}
+
+// evalLocked: an event's evaluation questions can no longer change once its
+// certificates have been issued (cycle stage 4 / closed) or anyone has answered,
+// since replacing the questions deletes the answers given to them.
+func evalLocked(db *sql.DB, eventID string) (bool, error) {
+	var locked bool
+	err := db.QueryRow(
+		`SELECT e.cycle_stage >= 4 OR e.status = 'done' OR EXISTS (
+		   SELECT 1 FROM evaluations ev JOIN registrations r ON r.id = ev.registration_id WHERE r.event_id = e.id)
+		 FROM events e WHERE e.id = ?`, eventID,
+	).Scan(&locked)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	return locked, err
 }

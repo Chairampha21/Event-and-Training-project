@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useEvents } from '../../../hooks/useEvents';
 import Modal, { ModalHead } from '../../../components/ui/Modal';
 import ImageViewer from '../../../components/ui/ImageViewer';
+import ConfirmDialog from '../../../components/ui/ConfirmDialog';
 import { formatBaht } from '../../../utils/money';
 import { formatThaiDateTime } from '../../../utils/dateFormat';
 import { PAYMENT_STATUS } from './PaymentBox';
@@ -29,9 +30,10 @@ export default function SlipReviewModal({ open, person, fee, remaining = 0, onAc
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
+  const [resetAsk, setResetAsk] = useState(false); // undoing a verdict waits for a confirmation
 
   useEffect(() => {
-    setSlip(null); setRejecting(false); setReason(''); setViewerOpen(false);
+    setSlip(null); setRejecting(false); setReason(''); setViewerOpen(false); setResetAsk(false);
     if (!open || !person?.hasSlip) return undefined;
     let alive = true;
     setLoading(true);
@@ -139,7 +141,7 @@ export default function SlipReviewModal({ open, person, fee, remaining = 0, onAc
         ) : (
           <>
             {(person.paymentStatus === 'paid' || person.paymentStatus === 'rejected') && (
-              <button type="button" className="btn btn-ghost" style={{ marginRight: 'auto' }} onClick={() => act('reset')} disabled={busy}><i className="ti ti-arrow-back-up" /> ยกเลิกผลการตรวจ</button>
+              <button type="button" className="btn btn-ghost" style={{ marginRight: 'auto' }} onClick={() => setResetAsk(true)} disabled={busy}><i className="ti ti-arrow-back-up" /> ยกเลิกผลการตรวจ</button>
             )}
             <button type="button" className="btn btn-outline" onClick={onClose}>ปิด</button>
             {person.paymentStatus !== 'rejected' && person.paymentStatus !== 'paid' && person.hasSlip && (
@@ -154,6 +156,22 @@ export default function SlipReviewModal({ open, person, fee, remaining = 0, onAc
         )}
       </div>
       <ImageViewer open={viewerOpen} src={slip?.slip} title={`สลิปการโอนเงิน · ${person.name}`} paper onClose={() => setViewerOpen(false)} />
+      <ConfirmDialog
+        open={resetAsk}
+        eyebrow="ยกเลิกผลการตรวจ"
+        icon="ti-arrow-back-up"
+        title="ยกเลิกผลการตรวจสลิปนี้?"
+        confirmLabel="ยกเลิกผลการตรวจ"
+        confirmIcon="ti-arrow-back-up"
+        busy={busy}
+        onConfirm={() => { setResetAsk(false); act('reset'); }}
+        onCancel={() => setResetAsk(false)}
+      >
+        <p style={{ fontSize: 13.5, color: 'var(--c4-70)', lineHeight: 1.7 }}>
+          สลิปของ <strong style={{ color: 'var(--c4)' }}>{person.name}</strong> จะกลับเป็น "{person.hasSlip ? 'รอตรวจสอบ' : 'รอชำระเงิน'}"
+          ({person.paymentStatus === 'paid' ? 'เดิม: ผ่าน · ชำระแล้ว' : 'เดิม: ไม่ผ่าน'}) และผู้สมัครจะได้รับแจ้งเตือน
+        </p>
+      </ConfirmDialog>
     </Modal>
   );
 }

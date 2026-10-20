@@ -14,6 +14,9 @@ export default function UsersPage() {
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(EMPTY);
   const [deleteId, setDeleteId] = useState(null);
+  // Changes made straight from the table wait here for a confirmation.
+  const [roleAsk, setRoleAsk] = useState(null); // { u, role }
+  const [activeAsk, setActiveAsk] = useState(null); // the user to suspend or reactivate
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const admins = users.filter((u) => u.role === 'admin').length;
@@ -91,7 +94,7 @@ export default function UsersPage() {
                     </td>
                     <td><div className="ev-sub" style={{ fontSize: 13, color: 'var(--c4-70)' }}>{u.dept}</div></td>
                     <td>
-                      <select className="role-select" value={u.role} onChange={(e) => upsertUser({ ...u, role: e.target.value }, u.id)}>
+                      <select className="role-select" value={u.role} onChange={(e) => setRoleAsk({ u, role: e.target.value })}>
                         {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
                       </select>
                     </td>
@@ -103,7 +106,7 @@ export default function UsersPage() {
                     <td className="right">
                       <div className="row-actions">
                         <button className="icon-btn" title="แก้ไข" onClick={() => openEdit(u)}><i className="ti ti-edit" /></button>
-                        <button className="icon-btn" title={u.active ? 'ระงับ' : 'เปิดใช้งาน'} onClick={() => toggleUserActive(u.id)}><i className={`ti ${u.active ? 'ti-lock' : 'ti-lock-open'}`} /></button>
+                        <button className="icon-btn" title={u.active ? 'ระงับ' : 'เปิดใช้งาน'} onClick={() => setActiveAsk(u)}><i className={`ti ${u.active ? 'ti-lock' : 'ti-lock-open'}`} /></button>
                         <button className="icon-btn danger" title="ลบ" onClick={() => setDeleteId(u.id)}><i className="ti ti-trash" /></button>
                       </div>
                     </td>
@@ -147,6 +150,43 @@ export default function UsersPage() {
           {form.email}<br />
           บทบาท: <strong style={{ color: 'var(--c4)' }}>{ROLE_LABEL[form.role]}</strong>{form.dept ? ` · ${form.dept}` : ''}
         </p>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={!!roleAsk}
+        eyebrow="ยืนยันการเปลี่ยนบทบาท"
+        icon="ti-user-cog"
+        title="เปลี่ยนบทบาทผู้ใช้นี้?"
+        confirmLabel="เปลี่ยนบทบาท"
+        confirmIcon="ti-check"
+        onConfirm={() => { upsertUser({ ...roleAsk.u, role: roleAsk.role }, roleAsk.u.id); setRoleAsk(null); }}
+        onCancel={() => setRoleAsk(null)}
+      >
+        {roleAsk && (
+          <p style={{ fontSize: 13.5, color: 'var(--c4-70)', lineHeight: 1.7 }}>
+            <strong style={{ color: 'var(--c4)' }}>{roleAsk.u.name}</strong> ({roleAsk.u.email})<br />
+            จาก <strong style={{ color: 'var(--c4)' }}>{ROLE_LABEL[roleAsk.u.role]}</strong> เป็น <strong style={{ color: 'var(--c4)' }}>{ROLE_LABEL[roleAsk.role]}</strong><br />
+            เมนูและสิทธิ์ของผู้ใช้นี้จะเปลี่ยนเมื่อเข้าสู่ระบบครั้งถัดไป
+          </p>
+        )}
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={!!activeAsk}
+        eyebrow={activeAsk?.active ? 'ยืนยันการระงับบัญชี' : 'ยืนยันการเปิดใช้งาน'}
+        icon={activeAsk?.active ? 'ti-lock' : 'ti-lock-open'}
+        title={activeAsk?.active ? 'ระงับบัญชีนี้?' : 'เปิดใช้งานบัญชีนี้?'}
+        confirmLabel={activeAsk?.active ? 'ระงับบัญชี' : 'เปิดใช้งาน'}
+        confirmIcon={activeAsk?.active ? 'ti-lock' : 'ti-lock-open'}
+        onConfirm={() => { toggleUserActive(activeAsk.id); setActiveAsk(null); }}
+        onCancel={() => setActiveAsk(null)}
+      >
+        {activeAsk && (
+          <p style={{ fontSize: 13.5, color: 'var(--c4-70)', lineHeight: 1.7 }}>
+            <strong style={{ color: 'var(--c4)' }}>{activeAsk.name}</strong> ({activeAsk.email})<br />
+            {activeAsk.active ? 'ผู้ใช้นี้จะเข้าสู่ระบบไม่ได้จนกว่าจะเปิดใช้งานอีกครั้ง' : 'ผู้ใช้นี้จะกลับมาเข้าสู่ระบบได้ตามปกติ'}
+          </p>
+        )}
       </ConfirmDialog>
 
       <Modal open={!!deleteId} onClose={() => setDeleteId(null)} size="sm">

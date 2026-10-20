@@ -38,6 +38,7 @@ export default function Navbar() {
   const { session, notifs, refreshNotifications, markAllRead, markNotifRead, clearAllNotif, logout } = useEvents();
   const [notifOpen, setNotifOpen] = useState(false);
   const [logoutAsk, setLogoutAsk] = useState(false);
+  const [clearAsk, setClearAsk] = useState(false);
   const wrapRef = useRef(null);
   const navigate = useNavigate();
 
@@ -86,7 +87,7 @@ export default function Navbar() {
                 <h4><i className="ti ti-bell-ringing" /> การแจ้งเตือน <span className="count-badge">{unread} ใหม่</span></h4>
                 <div className="actions">
                   <button onClick={markAllRead}>อ่านทั้งหมด</button>
-                  <button onClick={clearAllNotif}>ล้าง</button>
+                  <button onClick={() => setClearAsk(true)}>ล้าง</button>
                 </div>
               </div>
               <div className="notif-list">
@@ -142,6 +143,20 @@ export default function Navbar() {
           <button className="btn-logout" title="ออกจากระบบ" onClick={() => setLogoutAsk(true)}><i className="ti ti-logout" /> <span>ออกจากระบบ</span></button>
         </div>
       </nav>
+      <ConfirmDialog
+        open={clearAsk}
+        eyebrow="ล้างการแจ้งเตือน"
+        icon="ti-bell-off"
+        title="ลบการแจ้งเตือนทั้งหมด?"
+        confirmLabel="ลบทั้งหมด"
+        confirmIcon="ti-trash"
+        onConfirm={() => { setClearAsk(false); clearAllNotif(); }}
+        onCancel={() => setClearAsk(false)}
+      >
+        <p style={{ fontSize: 13.5, color: 'var(--c4-70)', lineHeight: 1.7 }}>
+          การแจ้งเตือนทั้ง {notifs.length} รายการจะถูกลบ และกู้คืนไม่ได้ · ถ้าแค่ไม่อยากเห็นตัวเลข ใช้ "อ่านทั้งหมด" แทน
+        </p>
+      </ConfirmDialog>
       <ConfirmDialog
         open={logoutAsk}
         eyebrow="ออกจากระบบ"

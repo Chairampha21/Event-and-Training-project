@@ -758,6 +758,17 @@ export function AppProvider({ children }) {
     }
   }, []);
 
+  // The edit form's view: the questions plus whether they may still change
+  // (not once certificates are out or anyone has answered).
+  const getEventEvalSetup = useCallback(async (eventId) => {
+    try {
+      const { questions, locked } = await api.get(`/events/${eventId}/evaluation-questions`);
+      return { questions, locked: !!locked };
+    } catch {
+      return { questions: [], locked: false };
+    }
+  }, []);
+
   // Replaces the full set of extra questions for an event — used from the
   // create/edit event form, whether set up at creation or added later.
   const saveEventEvalQuestions = useCallback(async (eventId, questions) => {
@@ -959,7 +970,7 @@ export function AppProvider({ children }) {
     registerForEvent, toggleEventStatus, createEvent, updateEvent, deleteEvent,
     toggleCheckin, setPaymentStatus, getSlip, submitSlip, setRefundAccount, cancelRegistration, selfCheckin, issueCertificate, submitEvaluation, downloadCert,
     addToBlacklist, restoreFromBlacklist,
-    getSar, saveSar, getEvaluationResults, getEventEvalQuestions, saveEventEvalQuestions, getDashboardYearly, getDashboardSummary, certDefaults, saveCertDefaults, certTemplateCache,
+    getSar, saveSar, getEvaluationResults, getEventEvalQuestions, getEventEvalSetup, saveEventEvalQuestions, getDashboardYearly, getDashboardSummary, certDefaults, saveCertDefaults, certTemplateCache,
     getDashboardBudget, saveBudgetActual,
     upsertUser, toggleUserActive, deleteUser,
     refreshNotifications, markAllRead, markNotifRead, clearAllNotif,
@@ -970,7 +981,7 @@ export function AppProvider({ children }) {
     registerForEvent, toggleEventStatus, createEvent, updateEvent, deleteEvent,
     toggleCheckin, setPaymentStatus, getSlip, submitSlip, setRefundAccount, cancelRegistration, selfCheckin, issueCertificate, submitEvaluation, downloadCert,
     addToBlacklist, restoreFromBlacklist,
-    getSar, saveSar, getEvaluationResults, getEventEvalQuestions, saveEventEvalQuestions, getDashboardYearly, getDashboardSummary, certDefaults, saveCertDefaults, certTemplateCache,
+    getSar, saveSar, getEvaluationResults, getEventEvalQuestions, getEventEvalSetup, saveEventEvalQuestions, getDashboardYearly, getDashboardSummary, certDefaults, saveCertDefaults, certTemplateCache,
     getDashboardBudget, saveBudgetActual,
     upsertUser, toggleUserActive, deleteUser,
     refreshNotifications, markAllRead, markNotifRead, clearAllNotif, pushToast, dismissToast,

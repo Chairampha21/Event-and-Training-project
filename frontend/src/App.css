@@ -216,3 +216,11 @@
 .lf-field input:-webkit-autofill,.lf-field input:-webkit-autofill:hover,.lf-field input:-webkit-autofill:focus{
   -webkit-text-fill-color:var(--c4);-webkit-box-shadow:0 0 0 1000px var(--white) inset;box-shadow:0 0 0 1000px var(--white) inset;
   caret-color:var(--c4);font-family:inherit;transition:background-color 9999s ease-out}
+/* The form sits on a white panel over a light grey page; content and order unchanged. */
+.login-form{background:#eceef6}
+.lf-inner{max-width:448px;background:var(--white);border:1px solid var(--c2-08);border-radius:18px;padding:36px 36px 30px;box-shadow:0 1px 2px rgba(42,34,98,.04),0 18px 44px -24px rgba(42,34,98,.28)}
+.lf-inner h2{margin-bottom:18px}
+.lf-inner .lf-sub{margin-top:-10px}
+.lf-field input{background:#fbfbfe}
+.lf-field input:focus{background:var(--white)}
+@media (max-width:860px){.login-form{padding:32px 16px}.lf-inner{padding:28px 22px 24px}}

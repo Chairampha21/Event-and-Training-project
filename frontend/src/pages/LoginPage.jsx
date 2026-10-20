@@ -122,9 +122,9 @@ function SignIn({ go, google }) {
           aside={<button type="button" className="lf-link" onClick={() => go('forgot', { email: normEmail(email) })}>ลืมรหัสผ่าน?</button>}>
           <PasswordInput id="li-pass" value={password} onChange={(e) => { setPassword(e.target.value); setError(''); }} autoComplete="current-password" placeholder="รหัสผ่าน" />
         </Field>
-        <button type="submit" className="lf-submit" disabled={busy}>{busy ? 'กำลังเข้าสู่ระบบ...' : <>เข้าสู่ระบบ <i className="ti ti-arrow-right" /></>}</button>
+        <button type="submit" className="lf-submit" disabled={busy}>{busy ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบ'}</button>
       </form>
-      <p className="lf-switch lf-foot">นักศึกษายังไม่มีบัญชี? <button type="button" onClick={() => go('register')}>สมัครสมาชิก</button></p>
+      <p className="lf-switch">นักศึกษายังไม่มีบัญชี? <button type="button" onClick={() => go('register')}>สมัครสมาชิก</button></p>
     </>
   );
 }
@@ -187,8 +187,8 @@ function Register({ go, google }) {
         </Field>
         <button type="submit" className="lf-submit" disabled={busy}>{busy ? 'กำลังสมัคร...' : 'สมัครและรับรหัสยืนยัน'}</button>
       </form>
+      <p className="lf-switch">มีบัญชีแล้ว? <button type="button" onClick={() => go('signin')}>เข้าสู่ระบบ</button></p>
       <p className="lf-hint">บัญชีอาจารย์และผู้จัดกิจกรรมสร้างโดยผู้ดูแลระบบ</p>
-      <p className="lf-switch lf-foot">มีบัญชีแล้ว? <button type="button" onClick={() => go('signin')}>เข้าสู่ระบบ</button></p>
     </>
   );
 }
@@ -385,7 +385,6 @@ export default function LoginPage() {
 
       <div className="login-form">
         <div className="lf-inner">
-          <div className="lf-brand"><span className="mark">CS</span><span>CPSU ETMS</span></div>
           {step === 'signin' && <SignIn go={go} google={google} />}
           {step === 'register' && <Register go={go} google={google} />}
           {step === 'verify' && <Verify key={ctx.email} go={go} ctx={ctx} />}

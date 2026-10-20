@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useEvents } from '../../../hooks/useEvents';
 import { STATUS_META, isParticipant } from '../../../utils/constants';
 import Modal, { ModalHead } from '../../../components/ui/Modal';
@@ -9,6 +10,7 @@ import PaymentBox from './PaymentBox';
 import CancelRegistrationButton, { cancelInfo } from './CancelRegistrationButton';
 import { formatBaht } from '../../../utils/money';
 import { formatThaiDate } from '../../../utils/dateFormat';
+import { needsNames } from '../../../utils/personName';
 import DietaryQuestions, { EMPTY_DIETARY, dietaryComplete, dietaryPayload } from './DietaryQuestions';
 
 // Event details for whoever opened it; students register from here (with the
@@ -19,6 +21,7 @@ import DietaryQuestions, { EMPTY_DIETARY, dietaryComplete, dietaryPayload } from
 // screens, walked through the same way, but nothing is submitted.
 export default function EventDetailModal({ eventId, open, onClose, preview }) {
   const { evById, myStatus, registerForEvent, session, regs } = useEvents();
+  const navigate = useNavigate();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [borrowLaptop, setBorrowLaptop] = useState(false);
   const [attendVia, setAttendVia] = useState(''); // hybrid events: 'onsite' | 'online', chosen while registering
@@ -43,6 +46,7 @@ export default function EventDetailModal({ eventId, open, onClose, preview }) {
   const studentView = preview || isParticipant(session?.role);
   // Teachers don't pay the fee: they register only so the organizer knows the seats they take.
   const isTeacher = !preview && session?.role === 'teacher';
+  const namesMissing = !preview && !!session && session.title_th !== undefined && needsNames(session);
   const teacherFree = isTeacher && ev.fee > 0 && (
     <div className="prep-box teacher-free"><i className="ti ti-school" /> อาจารย์ไม่ต้องชำระค่าลงทะเบียน · การลงทะเบียนใช้เพื่อให้ผู้จัดทราบจำนวนที่นั่ง</div>
   );
@@ -119,10 +123,13 @@ export default function EventDetailModal({ eventId, open, onClose, preview }) {
           {ev.fee > 0 && (isTeacher ? teacherFree : <PaymentBox fee={ev.fee} info={ev.paymentInfo} refundMethod={ev.refundMethod} refundNote={ev.refundNote} />)}
         </div>
         <div className="modal-foot">
-          {!preview && viaMissing && (
+          {!preview && namesMissing && (
+            <span className="diet-need" role="status"><i className="ti ti-info-circle" /> <span>กรอกคำนำหน้าและชื่อภาษาไทยใน <a href="/profile" onClick={(e) => { e.preventDefault(); closeAll(); navigate('/profile'); }}>โปรไฟล์</a> ก่อนสมัคร</span></span>
+          )}
+          {!preview && !namesMissing && viaMissing && (
             <span className="diet-need" role="status"><i className="ti ti-info-circle" /> เลือกรูปแบบการเข้าร่วมก่อนยืนยัน</span>
           )}
-          {!preview && !viaMissing && askFood && !dietaryComplete(dietary) && (
+          {!preview && !namesMissing && !viaMissing && askFood && !dietaryComplete(dietary) && (
             <span className="diet-need" role="status"><i className="ti ti-info-circle" /> {dietary.hasAllergy ? 'ระบุอาหารที่แพ้ก่อนยืนยัน' : 'ตอบคำถามเรื่องแพ้อาหารก่อนยืนยัน'}</span>
           )}
           <button className="btn btn-outline" onClick={() => setConfirmOpen(false)}>ย้อนกลับ</button>
@@ -131,7 +138,7 @@ export default function EventDetailModal({ eventId, open, onClose, preview }) {
           ) : (
             <button
               className="btn btn-primary"
-              disabled={viaMissing || (askFood && !dietaryComplete(dietary))}
+              disabled={namesMissing || viaMissing || (askFood && !dietaryComplete(dietary))}
               onClick={() => { registerForEvent(ev.id, { attendVia, borrowLaptop: inRoom && borrowLaptop, ...(askFood ? dietaryPayload(dietary) : {}) }); closeAll(); }}
             ><i className="ti ti-user-plus" /> ยืนยันสมัคร</button>
           )}

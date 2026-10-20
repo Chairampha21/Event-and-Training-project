@@ -18,7 +18,6 @@ const EVENT_TABS = [
 const RESULT_TABS = [
   { section: 'ผลและรายงาน' },
   { to: '/report', icon: 'ti-report-analytics', label: 'รายงาน' },
-  { to: '/admin/evaluations', icon: 'ti-clipboard-check', label: 'แบบประเมิน' },
 ];
 const NAV_TABS = {
   admin: [

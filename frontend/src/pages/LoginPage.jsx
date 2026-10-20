@@ -17,8 +17,40 @@ function GoogleIcon() {
   );
 }
 
-const EMAIL_RE = /^[^\s@]+@silpakorn\.edu$/;
-const normEmail = (v) => v.trim().toLowerCase();
+const DOMAIN = '@silpakorn.edu';
+const EMAIL_RE = /^[a-z0-9._-]+@silpakorn\.edu$/;
+// The email boxes take only the part before "@": the domain is fixed and shown
+// at the end of the box, so it can't be mistyped (as on university sign-in pages).
+const stripDomain = (v) => (v || '').trim().replace(/@silpakorn\.edu$/i, '');
+const normEmail = (v) => { const t = (v || '').trim().toLowerCase(); return t.includes('@') ? t : `${t}${DOMAIN}`; };
+
+/**
+ * What is wrong with what has been typed so far. A Thai keyboard or a typed
+ * "@" is pointed out at once; other characters only after leaving the box,
+ * so it doesn't turn red while someone is still typing.
+ */
+function emailProblem(v, left) {
+  const t = (v || '').trim();
+  if (!t) return {};
+  if (/[\u0E00-\u0E7F]/.test(t)) return { warn: 'แป้นพิมพ์ยังเป็นภาษาไทย · สลับเป็นภาษาอังกฤษ (ปุ่ม ~ หรือ Alt+Shift) แล้วพิมพ์ใหม่' };
+  if (t.includes('@')) return { warn: `ไม่ต้องพิมพ์ @ และชื่อโดเมน · ระบบเติม ${DOMAIN} ให้ (ใช้ได้เฉพาะอีเมลมหาวิทยาลัย)` };
+  if (left && !/^[a-z0-9._-]+$/i.test(t)) return { error: 'ชื่ออีเมลใช้ได้เฉพาะ a–z, 0–9 และ . _ -' };
+  return {};
+}
+
+/** The part of the address before "@silpakorn.edu", with the domain fixed at the end of the box. */
+function EmailInput({ id, value, onChange, onBlur, autoComplete, autoFocus, invalid }) {
+  return (
+    <>
+      <input id={id} type="text" inputMode="email" value={value} autoComplete={autoComplete} autoFocus={autoFocus}
+        autoCapitalize="none" spellCheck={false} placeholder="username" className="has-domain"
+        aria-invalid={invalid} aria-describedby={invalid ? `${id}-err` : undefined}
+        onChange={(e) => onChange(stripDomain(e.target.value) === e.target.value.trim() ? e.target.value : stripDomain(e.target.value))}
+        onBlur={onBlur} />
+      <span className="lf-domain" aria-hidden="true">{DOMAIN}</span>
+    </>
+  );
+}
 
 /** Countdown in seconds, for "send the code again in N s". */
 function useCountdown() {
@@ -31,7 +63,7 @@ function useCountdown() {
   return [left, setLeft];
 }
 
-function Field({ id, label, labelIcon, icon, error, aside, children }) {
+function Field({ id, label, labelIcon, icon, error, warn, aside, children }) {
   return (
     <div className="lf-field">
       <div className="lf-label-row">
@@ -43,6 +75,7 @@ function Field({ id, label, labelIcon, icon, error, aside, children }) {
         {children}
       </div>
       {error && <span className="lf-error" id={`${id}-err`}><i className="ti ti-alert-circle" /> {error}</span>}
+      {!error && warn && <span className="lf-warn" role="status"><i className="ti ti-keyboard" /> {warn}</span>}
     </div>
   );
 }
@@ -94,13 +127,16 @@ function Banner({ tone = 'error', children }) {
 function SignIn({ go, google }) {
   const { login } = useEvents();
   const [email, setEmail] = useState('');
+  const [emailLeft, setEmailLeft] = useState(false);
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const ep = emailProblem(email, emailLeft);
 
   async function submit(e) {
     e.preventDefault();
     if (!email.trim() || !password) { setError('กรอกอีเมลและรหัสผ่าน'); return; }
+    if (!EMAIL_RE.test(normEmail(email))) { setEmailLeft(true); return; }
     setBusy(true);
     const r = await login(normEmail(email), password);
     setBusy(false);
@@ -113,8 +149,8 @@ function SignIn({ go, google }) {
       <h2>เข้าสู่ระบบ</h2>
       <form onSubmit={submit} noValidate>
         <Banner>{error}</Banner>
-        <Field id="li-email" label="อีเมล" labelIcon="ti-at" icon="ti-mail">
-          <input id="li-email" type="email" value={email} onChange={(e) => { setEmail(e.target.value); setError(''); }} placeholder="username@silpakorn.edu" autoComplete="username" autoFocus />
+        <Field id="li-email" label="อีเมล" labelIcon="ti-at" icon="ti-mail" error={ep.error} warn={ep.warn}>
+          <EmailInput id="li-email" value={email} onChange={(v) => { setEmail(v); setError(''); }} onBlur={() => setEmailLeft(true)} autoComplete="username" autoFocus invalid={!!ep.error} />
         </Field>
         <Field id="li-pass" label="รหัสผ่าน" labelIcon="ti-lock" icon="ti-key"
           aside={<button type="button" className="lf-link" onClick={() => go('forgot', { email: normEmail(email) })}>ลืมรหัสผ่าน?</button>}>
@@ -132,6 +168,7 @@ function Register({ go }) {
   const { registerAccount } = useEvents();
   const [f, setF] = useState({ name: '', email: '', studentId: '', password: '', confirm: '' });
   const [errors, setErrors] = useState({});
+  const [emailLeft, setEmailLeft] = useState(false);
   const [serverError, setServerError] = useState('');
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => { setF((x) => ({ ...x, [k]: e.target.value })); setErrors((x) => ({ ...x, [k]: '' })); setServerError(''); };
@@ -139,7 +176,8 @@ function Register({ go }) {
   function check() {
     const e = {};
     if (!f.name.trim()) e.name = 'กรอกชื่อ-นามสกุล';
-    if (!EMAIL_RE.test(normEmail(f.email))) e.email = 'ใช้อีเมลของมหาวิทยาลัย @silpakorn.edu';
+    if (!f.email.trim()) e.email = 'กรอกอีเมลมหาวิทยาลัย';
+    else if (!EMAIL_RE.test(normEmail(f.email))) e.email = emailProblem(f.email, true).error || emailProblem(f.email, true).warn || 'ใช้อีเมลของมหาวิทยาลัย @silpakorn.edu';
     if (!/^\d{8,11}$/.test(f.studentId.trim())) e.studentId = 'รหัสนักศึกษาเป็นตัวเลข 8–11 หลัก';
     if (f.password.length < 8) e.password = 'รหัสผ่านอย่างน้อย 8 ตัวอักษร';
     else if (f.password !== f.confirm) e.confirm = 'รหัสผ่านทั้งสองช่องไม่ตรงกัน';
@@ -167,8 +205,9 @@ function Register({ go }) {
         <Field id="rg-name" label="ชื่อ-นามสกุล" labelIcon="ti-user" icon="ti-user" error={errors.name}>
           <input id="rg-name" value={f.name} onChange={set('name')} placeholder="เช่น สมชาย ใจดี" autoComplete="name" aria-invalid={!!errors.name} />
         </Field>
-        <Field id="rg-email" label="อีเมลมหาวิทยาลัย" labelIcon="ti-at" icon="ti-mail" error={errors.email}>
-          <input id="rg-email" type="email" value={f.email} onChange={set('email')} placeholder="username@silpakorn.edu" autoComplete="email" aria-invalid={!!errors.email} />
+        <Field id="rg-email" label="อีเมลมหาวิทยาลัย" labelIcon="ti-at" icon="ti-mail"
+          error={errors.email || emailProblem(f.email, emailLeft).error} warn={emailProblem(f.email, emailLeft).warn}>
+          <EmailInput id="rg-email" value={f.email} onChange={(v) => set('email')({ target: { value: v } })} onBlur={() => setEmailLeft(true)} autoComplete="email" invalid={!!errors.email} />
         </Field>
         <Field id="rg-sid" label="รหัสนักศึกษา" labelIcon="ti-id" icon="ti-id" error={errors.studentId}>
           <input id="rg-sid" inputMode="numeric" value={f.studentId} onChange={set('studentId')} placeholder="เช่น 670710001" autoComplete="off" aria-invalid={!!errors.studentId} />
@@ -244,7 +283,8 @@ function Verify({ go, ctx }) {
 /** Forgot password: the address, then the code mailed to it and a new password. */
 function Forgot({ go, ctx }) {
   const { forgotPassword, resetPassword } = useEvents();
-  const [email, setEmail] = useState(ctx.email || '');
+  const [email, setEmail] = useState(stripDomain(ctx.email));
+  const [emailLeft, setEmailLeft] = useState(false);
   const [sent, setSent] = useState(false);
   const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
@@ -255,7 +295,7 @@ function Forgot({ go, ctx }) {
 
   async function send(e) {
     e?.preventDefault();
-    if (!EMAIL_RE.test(normEmail(email))) { setError('ใช้อีเมลของมหาวิทยาลัย @silpakorn.edu'); return; }
+    if (!EMAIL_RE.test(normEmail(email))) { setEmailLeft(true); setError(email.trim() ? '' : 'กรอกอีเมลของบัญชี'); return; }
     setBusy(true);
     const r = await forgotPassword(normEmail(email));
     setBusy(false);
@@ -283,8 +323,8 @@ function Forgot({ go, ctx }) {
           <p className="lf-sub">กรอกอีเมลของบัญชี เราจะส่งรหัส 6 หลักสำหรับตั้งรหัสผ่านใหม่ไปให้</p>
           <form onSubmit={send} noValidate>
             <Banner>{error}</Banner>
-            <Field id="fg-email" label="อีเมล" labelIcon="ti-at" icon="ti-mail">
-              <input id="fg-email" type="email" value={email} onChange={(e) => { setEmail(e.target.value); setError(''); }} placeholder="username@silpakorn.edu" autoComplete="username" autoFocus />
+            <Field id="fg-email" label="อีเมล" labelIcon="ti-at" icon="ti-mail" error={emailProblem(email, emailLeft).error} warn={emailProblem(email, emailLeft).warn}>
+              <EmailInput id="fg-email" value={email} onChange={(v) => { setEmail(v); setError(''); }} onBlur={() => setEmailLeft(true)} autoComplete="username" autoFocus />
             </Field>
             <button type="submit" className="lf-submit" disabled={busy}>{busy ? 'กำลังส่ง...' : 'ส่งรหัส'}</button>
           </form>

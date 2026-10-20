@@ -162,7 +162,6 @@ function Register({ go }) {
   return (
     <>
       <h2>สมัครสมาชิก</h2>
-      <p className="lf-sub">สำหรับนักศึกษามหาวิทยาลัยศิลปากร · ต้องยืนยันอีเมล @silpakorn.edu ก่อนใช้งาน</p>
       <form onSubmit={submit} noValidate>
         <Banner>{serverError}</Banner>
         <Field id="rg-name" label="ชื่อ-นามสกุล" labelIcon="ti-user" icon="ti-user" error={errors.name}>

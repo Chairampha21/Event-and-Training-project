@@ -39,7 +39,7 @@ function Routed() {
       <Route path="/" element={<RootRedirect />} />
 
       <Route element={<AppLayout />}>
-        <Route element={<ProtectedRoute roles={[...PARTICIPANT_ROLES, 'organizer']} />}>
+        <Route element={<ProtectedRoute roles={[...PARTICIPANT_ROLES, 'organizer', 'admin']} />}>
           <Route path="/home" element={<HomePage />} />
         </Route>
         <Route element={<ProtectedRoute roles={PARTICIPANT_ROLES} />}>

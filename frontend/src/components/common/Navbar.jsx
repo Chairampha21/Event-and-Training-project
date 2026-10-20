@@ -7,15 +7,17 @@ import { initials } from '../../utils/initials';
 import ConfirmDialog from '../ui/ConfirmDialog';
 
 const NAV_TABS = {
+  // The organizer's pages first (same names and order), then the admin's own.
   admin: [
-    { to: '/admin/dashboard', icon: 'ti-layout-dashboard', label: 'ภาพรวม' },
-    { to: '/events', icon: 'ti-calendar', label: 'จัดการกิจกรรม' },
+    { to: '/admin/dashboard', icon: 'ti-chart-pie', label: 'แดชบอร์ดกิจกรรม' },
+    { to: '/home', icon: 'ti-home-2', label: 'กิจกรรม' },
     { to: '/create-event', icon: 'ti-square-rounded-plus', label: 'สร้างกิจกรรม' },
+    { to: '/events', icon: 'ti-calendar', label: 'กิจกรรมทั้งหมด' },
+    { to: '/report', icon: 'ti-report-analytics', label: 'รายงาน' },
     { to: '/admin/users', icon: 'ti-users-group', label: 'ผู้ใช้งาน' },
     { to: '/admin/blacklist', icon: 'ti-user-off', label: 'Blacklist' },
     { to: '/admin/certificate', icon: 'ti-certificate', label: 'ตั้งค่าเกียรติบัตร' },
     { to: '/admin/activity-log', icon: 'ti-history', label: 'Log ระบบ' },
-    { to: '/report', icon: 'ti-report-analytics', label: 'รายงาน' },
   ],
   organizer: [
     { to: '/home', icon: 'ti-home-2', label: 'กิจกรรม' },

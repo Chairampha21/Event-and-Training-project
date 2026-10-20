@@ -31,11 +31,11 @@ function useCountdown() {
   return [left, setLeft];
 }
 
-function Field({ id, label, icon, error, aside, children }) {
+function Field({ id, label, labelIcon, icon, error, aside, children }) {
   return (
     <div className="lf-field">
       <div className="lf-label-row">
-        <label htmlFor={id}>{label}</label>
+        <label htmlFor={id}>{labelIcon && <i className={`ti ${labelIcon}`} />} {label}</label>
         {aside}
       </div>
       <div className={`with-icon${error ? ' has-error' : ''}`}>
@@ -111,25 +111,24 @@ function SignIn({ go, google }) {
   return (
     <>
       <h2>เข้าสู่ระบบ</h2>
-      <p className="lf-sub">ใช้บัญชีอีเมลมหาวิทยาลัย @silpakorn.edu</p>
-      {google}
       <form onSubmit={submit} noValidate>
         <Banner>{error}</Banner>
-        <Field id="li-email" label="อีเมล" icon="ti-mail">
+        <Field id="li-email" label="อีเมล" labelIcon="ti-at" icon="ti-mail">
           <input id="li-email" type="email" value={email} onChange={(e) => { setEmail(e.target.value); setError(''); }} placeholder="username@silpakorn.edu" autoComplete="username" autoFocus />
         </Field>
-        <Field id="li-pass" label="รหัสผ่าน" icon="ti-lock"
+        <Field id="li-pass" label="รหัสผ่าน" labelIcon="ti-lock" icon="ti-key"
           aside={<button type="button" className="lf-link" onClick={() => go('forgot', { email: normEmail(email) })}>ลืมรหัสผ่าน?</button>}>
-          <PasswordInput id="li-pass" value={password} onChange={(e) => { setPassword(e.target.value); setError(''); }} autoComplete="current-password" placeholder="รหัสผ่าน" />
+          <PasswordInput id="li-pass" value={password} onChange={(e) => { setPassword(e.target.value); setError(''); }} autoComplete="current-password" placeholder="••••••••" />
         </Field>
-        <button type="submit" className="lf-submit" disabled={busy}>{busy ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบ'}</button>
+        <button type="submit" className="lf-submit" disabled={busy}><i className="ti ti-login-2" /> {busy ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบ'}</button>
       </form>
+      {google}
       <p className="lf-switch">นักศึกษายังไม่มีบัญชี? <button type="button" onClick={() => go('register')}>สมัครสมาชิก</button></p>
     </>
   );
 }
 
-function Register({ go, google }) {
+function Register({ go }) {
   const { registerAccount } = useEvents();
   const [f, setF] = useState({ name: '', email: '', studentId: '', password: '', confirm: '' });
   const [errors, setErrors] = useState({});
@@ -164,25 +163,24 @@ function Register({ go, google }) {
     <>
       <h2>สมัครสมาชิก</h2>
       <p className="lf-sub">สำหรับนักศึกษามหาวิทยาลัยศิลปากร · ต้องยืนยันอีเมล @silpakorn.edu ก่อนใช้งาน</p>
-      {google}
       <form onSubmit={submit} noValidate>
         <Banner>{serverError}</Banner>
-        <Field id="rg-name" label="ชื่อ-นามสกุล" icon="ti-user" error={errors.name}>
+        <Field id="rg-name" label="ชื่อ-นามสกุล" labelIcon="ti-user" icon="ti-user" error={errors.name}>
           <input id="rg-name" value={f.name} onChange={set('name')} placeholder="เช่น สมชาย ใจดี" autoComplete="name" aria-invalid={!!errors.name} />
         </Field>
-        <Field id="rg-email" label="อีเมลมหาวิทยาลัย" icon="ti-mail" error={errors.email}>
+        <Field id="rg-email" label="อีเมลมหาวิทยาลัย" labelIcon="ti-at" icon="ti-mail" error={errors.email}>
           <input id="rg-email" type="email" value={f.email} onChange={set('email')} placeholder="username@silpakorn.edu" autoComplete="email" aria-invalid={!!errors.email} />
         </Field>
-        <Field id="rg-sid" label="รหัสนักศึกษา" icon="ti-id" error={errors.studentId}>
+        <Field id="rg-sid" label="รหัสนักศึกษา" labelIcon="ti-id" icon="ti-id" error={errors.studentId}>
           <input id="rg-sid" inputMode="numeric" value={f.studentId} onChange={set('studentId')} placeholder="เช่น 670710001" autoComplete="off" aria-invalid={!!errors.studentId} />
         </Field>
-        <Field id="rg-pass" label="รหัสผ่าน" icon="ti-lock" error={errors.password}>
+        <Field id="rg-pass" label="รหัสผ่าน" labelIcon="ti-lock" icon="ti-key" error={errors.password}>
           <PasswordInput id="rg-pass" value={f.password} onChange={set('password')} autoComplete="new-password" placeholder="อย่างน้อย 8 ตัวอักษร" invalid={!!errors.password} />
         </Field>
         {pwLen > 0 && !errors.password && (
           <div className={`lf-strength s${pwLen < 8 ? 1 : pwLen < 12 ? 2 : 3}`}><span /><span /><span /><em>{pwLen < 8 ? `อีก ${8 - pwLen} ตัวอักษร` : pwLen < 12 ? 'ใช้ได้' : 'ดีมาก'}</em></div>
         )}
-        <Field id="rg-confirm" label="ยืนยันรหัสผ่าน" icon="ti-lock-check" error={errors.confirm}>
+        <Field id="rg-confirm" label="ยืนยันรหัสผ่าน" labelIcon="ti-lock" icon="ti-key" error={errors.confirm}>
           <PasswordInput id="rg-confirm" value={f.confirm} onChange={set('confirm')} autoComplete="new-password" placeholder="พิมพ์รหัสผ่านอีกครั้ง" invalid={!!errors.confirm} />
         </Field>
         <button type="submit" className="lf-submit" disabled={busy}>{busy ? 'กำลังสมัคร...' : 'สมัครและรับรหัสยืนยัน'}</button>
@@ -286,7 +284,7 @@ function Forgot({ go, ctx }) {
           <p className="lf-sub">กรอกอีเมลของบัญชี เราจะส่งรหัส 6 หลักสำหรับตั้งรหัสผ่านใหม่ไปให้</p>
           <form onSubmit={send} noValidate>
             <Banner>{error}</Banner>
-            <Field id="fg-email" label="อีเมล" icon="ti-mail">
+            <Field id="fg-email" label="อีเมล" labelIcon="ti-at" icon="ti-mail">
               <input id="fg-email" type="email" value={email} onChange={(e) => { setEmail(e.target.value); setError(''); }} placeholder="username@silpakorn.edu" autoComplete="username" autoFocus />
             </Field>
             <button type="submit" className="lf-submit" disabled={busy}>{busy ? 'กำลังส่ง...' : 'ส่งรหัส'}</button>
@@ -298,10 +296,10 @@ function Forgot({ go, ctx }) {
           <form onSubmit={reset} noValidate>
             <Banner>{error}</Banner>
             <CodeInput value={code} onChange={(v) => { setCode(v); setError(''); }} disabled={busy} />
-            <Field id="fg-pass" label="รหัสผ่านใหม่" icon="ti-lock">
+            <Field id="fg-pass" label="รหัสผ่านใหม่" labelIcon="ti-lock" icon="ti-key">
               <PasswordInput id="fg-pass" value={password} onChange={(e) => { setPassword(e.target.value); setError(''); }} autoComplete="new-password" placeholder="อย่างน้อย 8 ตัวอักษร" />
             </Field>
-            <Field id="fg-confirm" label="ยืนยันรหัสผ่านใหม่" icon="ti-lock-check">
+            <Field id="fg-confirm" label="ยืนยันรหัสผ่านใหม่" labelIcon="ti-lock" icon="ti-key">
               <PasswordInput id="fg-confirm" value={confirm} onChange={(e) => { setConfirm(e.target.value); setError(''); }} autoComplete="new-password" placeholder="พิมพ์อีกครั้ง" />
             </Field>
             <button type="submit" className="lf-submit" disabled={busy}>{busy ? 'กำลังบันทึก...' : 'ตั้งรหัสผ่านใหม่และเข้าสู่ระบบ'}</button>
@@ -339,6 +337,10 @@ export default function LoginPage() {
   if (session) return <Navigate to={location.state?.from || ROLE_LANDING[session.role]} replace />;
 
   function handleGoogleClick() {
+    if (!GOOGLE_CLIENT_ID) {
+      pushToast('ยังไม่ได้ตั้งค่า Google Sign-In', 'ต้องเพิ่ม Google Client ID ในระบบก่อน', 'warn');
+      return;
+    }
     if (!window.google?.accounts?.id) {
       pushToast('กำลังโหลด Google Sign-In', 'กรุณาลองใหม่อีกครั้งในอีกสักครู่', 'warn');
       return;
@@ -354,16 +356,15 @@ export default function LoginPage() {
     window.google.accounts.id.prompt();
   }
 
-  // "Continue with Google" leads, as on most sign-in pages — only when it is
-  // set up; Google also confirms the address, so no code is needed.
-  const google = GOOGLE_CLIENT_ID ? (
+  // Google Sign-In under the form. Google confirms the address itself, so no code is needed.
+  const google = (
     <>
+      <div className="lf-divider"><span>หรือ</span></div>
       <button type="button" className="google-btn" onClick={handleGoogleClick} disabled={googleBusy}>
-        <GoogleIcon /> {googleBusy ? 'กำลังเข้าสู่ระบบ...' : 'ดำเนินการต่อด้วย Google'}
+        <GoogleIcon /> {googleBusy ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบด้วย Google'}
       </button>
-      <div className="lf-divider"><span>หรือใช้อีเมลและรหัสผ่าน</span></div>
     </>
-  ) : null;
+  );
 
   return (
     <div className="login-page">
@@ -386,7 +387,7 @@ export default function LoginPage() {
       <div className="login-form">
         <div className="lf-inner">
           {step === 'signin' && <SignIn go={go} google={google} />}
-          {step === 'register' && <Register go={go} google={google} />}
+          {step === 'register' && <Register go={go} />}
           {step === 'verify' && <Verify key={ctx.email} go={go} ctx={ctx} />}
           {step === 'forgot' && <Forgot go={go} ctx={ctx} />}
         </div>

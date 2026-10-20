@@ -1,0 +1,21 @@
+.mix .ch-sub{margin-bottom:16px}
+.mix-share{margin-bottom:12px}
+.mix-share-label{display:flex;justify-content:space-between;align-items:baseline;font-size:12.5px;color:var(--c4-70);margin-bottom:5px}
+.mix-share-label strong{font-size:13.5px;color:var(--c4);font-variant-numeric:tabular-nums}
+.mix-bar{display:flex;gap:2px;height:14px}
+.mix-bar span{min-width:4px;border-radius:2px}
+.mix-bar span:first-child{border-radius:4px 2px 2px 4px}
+.mix-bar span:last-child{border-radius:2px 4px 4px 2px}
+.mix-bar span:only-child{border-radius:4px}
+.mix-bar span:hover{filter:brightness(.9)}
+.mix-table{width:100%;border-collapse:collapse;margin-top:16px;font-size:13px}
+.mix-table th{font-size:11.5px;font-weight:600;color:var(--c4-60);text-align:right;padding:0 0 6px;border-bottom:1px solid var(--c2-08);white-space:nowrap}
+.mix-table th:first-child,.mix-table td:first-child{text-align:left}
+.mix-table td{padding:9px 0;border-bottom:1px solid var(--c2-08);text-align:right;color:var(--c4);font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.mix-table td:first-child{font-weight:500;white-space:normal;padding-right:8px}
+.mix-table th+th,.mix-table td+td{padding-left:12px}
+.mix-table small{font-size:11px;font-weight:500;color:var(--c4-60);margin-left:2px}
+.mix-chip{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.mix-insight{display:flex;align-items:flex-start;gap:7px;margin-top:14px;padding:10px 12px;border-radius:10px;background:var(--c2-04);font-size:12.5px;color:var(--c4-70);line-height:1.5}
+.mix-insight i{font-size:16px;color:var(--c2);margin-top:1px}
+.mix-insight strong{color:var(--c4)}

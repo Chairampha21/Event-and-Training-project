@@ -2,9 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useEvents } from '../../hooks/useEvents';
 import { downloadCsv } from '../../utils/csvExport';
 import BudgetSection, { exportBudgetCsv } from '../../features/budget/components/BudgetSection';
+import CategoryMixCard from '../../features/dashboard/components/CategoryMixCard';
 import AttendanceCard from '../../features/dashboard/components/AttendanceCard';
 
-const DASH_COLORS = ['var(--c2)', 'var(--c1)', 'var(--c3)', 'var(--c4)', 'var(--c2-15)'];
 
 // "1 ตุลาคม 2568 – 30 กันยายน 2569" for ปีงบประมาณ 2569 (the year is named after its end).
 function fiscalYearRange(fy) {
@@ -55,16 +55,6 @@ export default function DashboardPage() {
     ? (yearRows.reduce((a, r) => a + (r.avg_satisfaction || 0), 0) / yearRows.length).toFixed(1)
     : '0.0';
 
-  const pieStops = useMemo(() => {
-    if (!totals.events) return '';
-    let acc = 0;
-    return yearRows.map((r, i) => {
-      const pct = (r.event_count / totals.events) * 100;
-      const stop = `${DASH_COLORS[i % DASH_COLORS.length]} ${acc}% ${acc + pct}%`;
-      acc += pct;
-      return stop;
-    }).join(',');
-  }, [yearRows, totals.events]);
 
   function exportDash() {
     downloadCsv(`dashboard-ปีงบประมาณ-${year}`, yearRows.map((r) => ({
@@ -130,24 +120,7 @@ export default function DashboardPage() {
             </div>
 
             <div className="chart-row">
-              <div className="chart-card">
-                <h3><i className="ti ti-chart-pie" /> สัดส่วนประเภทกิจกรรม</h3>
-                <div className="ch-sub">ปีงบประมาณ {year} · {totals.events} กิจกรรม</div>
-                <div className="pie-wrap">
-                  <div style={{ position: 'relative', width: 160, height: 160 }}>
-                    <div className="pie" style={{ background: pieStops ? `conic-gradient(${pieStops})` : 'var(--c2-10)' }} />
-                    <div className="pie-center">{totals.events}<small>กิจกรรม</small></div>
-                  </div>
-                  <div className="pie-legend">
-                    {yearRows.map((r, i) => (
-                      <div className="pl-row" key={r.category}>
-                        <span className="lbl"><span className="dot" style={{ background: DASH_COLORS[i % DASH_COLORS.length] }} /> {r.category}</span>
-                        <span className="val">{r.event_count}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
+              <CategoryMixCard rows={yearRows} year={year} />
               <AttendanceCard rows={yearDoneRows} certificates={totals.certs} year={year} />
             </div>
 

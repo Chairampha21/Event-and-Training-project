@@ -23,7 +23,7 @@ export default function EventBudgetReport({ ev, attended, payers }) {
   const diff = hasPlan && hasActual ? planned - actual : null; // + left over, − over budget
   const used = hasPlan && hasActual ? pct(actual, planned) : null;
   const perHead = hasActual && attended > 0 ? Math.round(actual / attended) : null;
-  const feeIncome = ev.fee > 0 ? ev.fee * payers : null;
+  const feeIncome = ev.fee > 0 && payers != null ? ev.fee * payers : null;
   const canRecord = ev.ended && (session?.role === 'admin' || ev.organizerId === session?.id);
 
   const status = hasPlan && hasActual ? (actual > planned ? { label: 'เกินงบประมาณ', icon: 'ti-alert-triangle', cls: 'bad' } : { label: 'อยู่ในงบประมาณ', icon: 'ti-circle-check', cls: 'good' })
@@ -37,6 +37,7 @@ export default function EventBudgetReport({ ev, attended, payers }) {
         <h3><i className="ti ti-coin" /> งบประมาณกิจกรรม · {ev.title.slice(0, 30)}</h3>
         <div className="tools">
           <span className={`bud-flag ${status.cls}`}><i className={`ti ${status.icon}`} /> {status.label}</span>
+          {!canRecord && session?.role === 'teacher' && <span className="bud-flag muted"><i className="ti ti-eye" /> ดูได้อย่างเดียว</span>}
           {canRecord && (
             <button type="button" className="btn btn-outline" style={{ padding: '7px 12px' }} onClick={() => setActualOpen(true)}>
               <i className="ti ti-pencil" /> {hasActual ? 'แก้ไขงบที่ใช้จริง' : 'บันทึกงบที่ใช้จริง'}

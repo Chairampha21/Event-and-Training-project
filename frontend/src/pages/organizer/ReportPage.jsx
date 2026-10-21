@@ -9,7 +9,7 @@ import EventBudgetReport from '../../features/budget/components/EventBudgetRepor
 
 export default function ReportPage() {
   const { session, events, rosters, pushToast, getEvaluationResults } = useEvents();
-  // A teacher reads the reports of the events they coordinate, without the money side.
+  // A teacher reads the reports of the events they coordinate (the budget too, read-only).
   const coordinator = session?.role === 'teacher';
   const listed = useMemo(() => events.filter((e) => e.listed && (!coordinator || e.coordinatorId === session.id)), [events, coordinator, session?.id]);
   // /report?event=<id> (from the teacher's list or a notification) opens that event.
@@ -280,11 +280,9 @@ export default function ReportPage() {
             <button type="button" className={`filter-chip${tab === 'eval' ? ' active' : ''}`} style={{ cursor: 'pointer' }} onClick={() => setTab('eval')}>
               <i className="ti ti-clipboard-check" /> แบบประเมิน
             </button>
-            {!coordinator && (
-              <button type="button" className={`filter-chip${tab === 'budget' ? ' active' : ''}`} style={{ cursor: 'pointer' }} onClick={() => setTab('budget')}>
-                <i className="ti ti-coin" /> งบประมาณกิจกรรม
-              </button>
-            )}
+            <button type="button" className={`filter-chip${tab === 'budget' ? ' active' : ''}`} style={{ cursor: 'pointer' }} onClick={() => setTab('budget')}>
+              <i className="ti ti-coin" /> งบประมาณกิจกรรม
+            </button>
           </div>
         </div>
 
@@ -384,8 +382,9 @@ export default function ReportPage() {
         </>
         )}
 
-        {tab === 'budget' && !coordinator && (
-          <EventBudgetReport ev={ev} attended={attended} payers={roster.filter((p) => p.paymentStatus === 'paid').length} />
+        {tab === 'budget' && (
+          // A teacher's roster carries no payments, so there is no fee income to show them.
+          <EventBudgetReport ev={ev} attended={attended} payers={coordinator ? null : roster.filter((p) => p.paymentStatus === 'paid').length} />
         )}
 
         {tab === 'eval' && (

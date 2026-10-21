@@ -672,3 +672,8 @@ INSERT INTO activity_logs (id, user_id, action, detail, created_at) VALUES
   (900005, 2, 'BLACKLIST', 'เพิ่มรายชื่อ Blacklist', TIMESTAMP((@t + INTERVAL -6 DAY), '10:00:00')),
   (900006, 2, 'UPDATE', 'ยืนยันการชำระเงิน: ค่ายติวเข้ม Python สำหรับการแข่งขันเขียนโปรแกรม', TIMESTAMP((@t + INTERVAL -5 DAY), '10:00:00')),
   (900007, 2, 'CREATE', 'สร้างกิจกรรม: CPSU Code Challenge 2026', TIMESTAMP((@t + INTERVAL -2 DAY), '10:00:00'));
+
+-- The demo students are made-up addresses: mark them verified, or signing in
+-- as one would wait for an email code that can never arrive.
+UPDATE users SET email_verified_at = UTC_TIMESTAMP()
+WHERE email_verified_at IS NULL AND email LIKE 'demo.student__@silpakorn.edu';

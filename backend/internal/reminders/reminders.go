@@ -520,7 +520,7 @@ func postEventTasks(db *sql.DB) error {
 	// a week later if it is still there (the due() steps per event), and each
 	// time replaces the previous summary instead of adding another.
 	type pending struct {
-		items []notify.Item
+		items  []notify.Item
 		events int
 		send   bool
 	}

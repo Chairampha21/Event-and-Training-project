@@ -39,3 +39,11 @@ INSERT INTO users (id, name, email, password_hash, role, student_id, dept, activ
   (6, 'พิมพ์ชนก แก้วมณี', 'pimchanok_k@silpakorn.edu', '$2a$10$Cynp0lxKUuHSODqnhQgKM.3/uWI8ka9kxYW5Cg9m5GWbfur9GaK9y', 'student', '670710003', 'นักศึกษาชั้นปีที่ 3 · เทคโนโลยีสารสนเทศ', 1),
   (7, 'ธนกฤต วงศ์ไทย', 'thanakrit_w@silpakorn.edu', '$2a$10$Cynp0lxKUuHSODqnhQgKM.3/uWI8ka9kxYW5Cg9m5GWbfur9GaK9y', 'student', '680710004', 'นักศึกษาชั้นปีที่ 2 · วิทยาการคอมพิวเตอร์', 1),
   (8, 'กัญญารัตน์ ทองดี', 'kanyarat_t@silpakorn.edu', '$2a$10$Cynp0lxKUuHSODqnhQgKM.3/uWI8ka9kxYW5Cg9m5GWbfur9GaK9y', 'student', '690710005', 'นักศึกษาชั้นปีที่ 1 · เทคโนโลยีสารสนเทศ', 1);
+
+-- These are known demo addresses: mark them verified, or every first sign-in
+-- would wait for an email code that can never arrive.
+UPDATE users SET email_verified_at = UTC_TIMESTAMP()
+WHERE email_verified_at IS NULL AND email IN (
+  'piya_c@silpakorn.edu', 'sonsanguan_w@silpakorn.edu', 'phat_y@silpakorn.edu', 'natthawut_s@silpakorn.edu',
+  'pimchanok_k@silpakorn.edu', 'thanakrit_w@silpakorn.edu', 'kanyarat_t@silpakorn.edu'
+);

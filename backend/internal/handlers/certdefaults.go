@@ -54,13 +54,22 @@ func (h *CertDefaultsHandler) Get(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 		return
 	}
+	if err == sql.ErrNoRows {
+		// Never saved yet: start from the signer the latest event with a
+		// signature uses, so the page shows the signature already in use
+		// instead of an empty box (saving makes it the real default).
+		_ = h.DB.QueryRow(
+			`SELECT cert_signer_name, cert_signer_title, cert_signature_url FROM events
+			 WHERE COALESCE(cert_signature_url, '') <> '' ORDER BY updated_at DESC, id DESC LIMIT 1`,
+		).Scan(&d.SignerName, &d.SignerTitle, &d.SignatureURL)
+	}
 	if templateID.Valid {
 		d.TemplateID = &templateID.Int64
 	}
 	if updated.Valid {
 		d.UpdatedAt = models.NullString{NullString: sql.NullString{String: time.Unix(updated.Int64, 0).UTC().Format(time.RFC3339), Valid: true}}
 	}
-	c.JSON(http.StatusOK, gin.H{"defaults": d}) // never saved yet: all null
+	c.JSON(http.StatusOK, gin.H{"defaults": d}) // never saved yet: template null, signer from the latest event
 }
 
 // Template returns one saved version of the main template — what a

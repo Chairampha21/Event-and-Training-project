@@ -390,8 +390,8 @@ type evalResultRow struct {
 
 // Results returns the per-question average score for one event (organizer/admin).
 func (h *EvaluationsHandler) Results(c *gin.Context) {
-	var organizerID sql.NullInt64
-	err := h.DB.QueryRow(`SELECT organizer_id FROM events WHERE id = ?`, c.Param("id")).Scan(&organizerID)
+	var organizerID, coordinatorID sql.NullInt64
+	err := h.DB.QueryRow(`SELECT organizer_id, coordinator_id FROM events WHERE id = ?`, c.Param("id")).Scan(&organizerID, &coordinatorID)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบกิจกรรม"})
 		return
@@ -401,7 +401,7 @@ func (h *EvaluationsHandler) Results(c *gin.Context) {
 		return
 	}
 	claims, _ := middleware.CurrentUser(c)
-	if claims.Role != "admin" && !(organizerID.Valid && organizerID.Int64 == claims.UserID) {
+	if claims.Role != "admin" && !(organizerID.Valid && organizerID.Int64 == claims.UserID) && !coordinates(c, coordinatorID) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "ไม่มีสิทธิ์เข้าถึงผลประเมิน"})
 		return
 	}

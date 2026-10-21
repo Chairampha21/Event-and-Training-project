@@ -60,7 +60,7 @@
     ['blacklist_entries', 'user', 1260, 110, 'รายชื่อระงับสิทธิ์', ['PK id', 'FK user_id', 'name', 'email', 'student_id', 'reason', 'FK created_by', 'created_at', 'restored_at']],
     ['cert_templates', 'cert', 1620, 110, 'แม่แบบเกียรติบัตร', ['PK id', 'template_url', 'layout', 'FK created_by', 'created_at']],
     ['cert_defaults', 'cert', 1940, 110, 'ค่าตั้งต้นกลาง', ['PK id', 'FK template_id', 'signer_name', 'signer_title', 'signature_url', 'FK updated_by', 'updated_at']],
-    ['events', 'event', 900, 560, 'กิจกรรม', ['PK id', 'FK organizer_id', 'title', 'category', 'day_mode', 'date_start · date_end', 'event_dates', 'reg_start · reg_end', 'attend_mode', 'capacity', 'fee · refund_method', 'issue_certificate', 'status', 'cycle_stage', 'is_listed'], '+ อีก 34 คอลัมน์: สถานที่ ลิงก์ งบประมาณ โปสเตอร์ ผู้ลงนาม ฯลฯ'],
+    ['events', 'event', 900, 560, 'กิจกรรม', ['PK id', 'FK organizer_id', 'FK coordinator_id', 'title', 'category', 'day_mode', 'date_start · date_end', 'event_dates', 'reg_start · reg_end', 'attend_mode', 'capacity', 'fee · refund_method', 'issue_certificate', 'status', 'cycle_stage', 'is_listed'], '+ อีก 33 คอลัมน์: สถานที่ ลิงก์ งบประมาณ โปสเตอร์ ผู้ลงนาม ฯลฯ'],
     ['sar_reports', 'event', 560, 600, 'สรุปข่าว / SAR', ['PK id', 'FK UK event_id', 'UK report_code', 'recap_poster_url', 'purpose · outcome', 'gaps · improvement', 'status', 'FK created_by', 'created_at · updated_at']],
     ['event_evaluation_questions', 'eval', 900, 1090, 'คำถามเพิ่มของกิจกรรม', ['PK id', 'FK event_id', 'label', 'question_type', 'options', 'required', 'sort_order']],
     ['registrations', 'reg', 1260, 560, 'การลงทะเบียน', ['PK id', 'FK event_id', 'FK user_id', 'status', 'attend_via', 'checked_in · checked_in_at', 'cert_notified_at', 'wants_laptop', 'food_allergy · dietary_pref', 'payment_status · paid_at', 'slip_url · slip_amount', 'refunded_at', 'registered_at'], '+ อีก 6 คอลัมน์รายละเอียดสลิปและคืนเงิน'],
@@ -104,6 +104,7 @@
     const N = box('notifications');
     rel('notifications', 'users', { from: 'top', to: 'top', toShift: -70, via: [[N.l + N.w / 2, 80], [U.l + U.w / 2 - 70, 80]] });
     rel('events', 'users', { from: 'top', to: 'bottom', fromShift: -60, toShift: -60 });
+    rel('events', 'users', { from: 'top', to: 'bottom', fromShift: 40, toShift: 40 }); // coordinator_id: the teacher who follows its report
     const B = box('blacklist_entries');
     rel('blacklist_entries', 'users', { from: 'left', to: 'right', route: 'elbow', fromShift: row('blacklist_entries', 'user_id') - (B.t + B.h / 2), toShift: -100, midX: 1210 });
     rel('blacklist_entries', 'users', { from: 'left', to: 'right', route: 'elbow', fromShift: row('blacklist_entries', 'created_by') - (B.t + B.h / 2), toShift: -10, midX: 1230 });

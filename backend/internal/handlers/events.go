@@ -43,7 +43,7 @@ const effectiveStatusSQL = `CASE
 
 const eventFields = `
   id, title, description, category, subcategory, poster_url,
-  organizer_id, organizer_name,
+  organizer_id, organizer_name, coordinator_id,
   day_mode, date_start, date_end, event_dates, event_times, time_range, reg_start, reg_end,
   attend_mode, place, online_link, capacity, capacity_onsite, capacity_online,
   budget_planned, budget_other, budget_actual,
@@ -86,7 +86,7 @@ func scanEvent(row interface{ Scan(dest ...any) error }) (models.Event, error) {
 	var eventDates, eventTimes sql.NullString
 	err := row.Scan(
 		&e.ID, &e.Title, &e.Description, &e.Category, &e.Subcategory, &e.PosterURL,
-		&e.OrganizerID, &e.OrganizerName,
+		&e.OrganizerID, &e.OrganizerName, &e.CoordinatorID,
 		&e.DayMode, &e.DateStart, &e.DateEnd, &eventDates, &eventTimes, &e.TimeRange, &e.RegStart, &e.RegEnd,
 		&e.AttendMode, &e.Place, &e.OnlineLink, &e.Capacity, &e.CapacityOnsite, &e.CapacityOnline,
 		&e.BudgetPlanned, &e.BudgetOther, &e.BudgetActual,
@@ -792,7 +792,7 @@ func (h *EventsHandler) Create(c *gin.Context) {
 
 	res, err := h.DB.Exec(`INSERT INTO events (
 		title, description, category, subcategory, poster_url,
-		organizer_id, organizer_name,
+		organizer_id, organizer_name, coordinator_id,
 		day_mode, date_start, date_end, event_dates, event_times, time_range, reg_start, reg_end,
 		attend_mode, place, online_link, capacity, capacity_onsite, capacity_online,
 		budget_planned, budget_other,
@@ -801,9 +801,9 @@ func (h *EventsHandler) Create(c *gin.Context) {
 		pretest_enabled, pretest_link, pretest_pass_pct, pretest_time_limit_min,
 		cert_template_url, cert_signer_name, cert_signer_title, cert_signature_url, cert_layout,
 		email_on_register, email_before_event, email_after_event
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		strings.TrimSpace(b.Title), b.Description, strings.TrimSpace(b.Category), b.Subcategory, b.PosterURL,
-		organizerID, b.OrganizerName,
+		organizerID, b.OrganizerName, coordinatorFor(h.DB, b.OrganizerName),
 		b.DayMode, b.DateStart, b.DateEnd, eventDates, eventTimes, b.TimeRange, nullIfEmpty(regStart), nullIfEmpty(regEnd),
 		b.AttendMode, b.Place, b.OnlineLink, capacity, b.CapacityOnsite, b.CapacityOnline,
 		b.BudgetPlanned, b.BudgetOther,
@@ -875,7 +875,7 @@ func (h *EventsHandler) Update(c *gin.Context) {
 
 	updatable := map[string]bool{
 		"title": true, "description": true, "category": true, "subcategory": true, "poster_url": true,
-		"organizer_name": true, "day_mode": true, "date_start": true, "date_end": true, "time_range": true,
+		"organizer_name": true, "coordinator_id": true, "day_mode": true, "date_start": true, "date_end": true, "time_range": true,
 		"reg_start": true, "reg_end": true, "event_dates": true, "event_times": true,
 		"attend_mode": true, "place": true, "online_link": true, "capacity": true, "capacity_onsite": true, "capacity_online": true,
 		"status": true, "cycle_stage": true, "budget_planned": true, "budget_other": true, "budget_actual": true,
@@ -884,6 +884,13 @@ func (h *EventsHandler) Update(c *gin.Context) {
 		"pretest_enabled": true, "pretest_link": true, "pretest_pass_pct": true, "pretest_time_limit_min": true,
 		"cert_template_url": true, "cert_signer_name": true, "cert_signer_title": true, "cert_signature_url": true, "cert_layout": true,
 		"email_on_register": true, "email_before_event": true, "email_after_event": true,
+	}
+
+	// The coordinator account follows the coordinator's name; it is never set directly.
+	delete(raw, "coordinator_id")
+	if v, present := raw["organizer_name"]; present {
+		name, _ := v.(string)
+		raw["coordinator_id"] = coordinatorFor(h.DB, &name)
 	}
 
 	// Signature image: a PNG/JPEG data: URL of sane size; "" clears it.

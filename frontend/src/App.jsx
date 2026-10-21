@@ -17,6 +17,7 @@ import SelfCheckinPage from './pages/student/SelfCheckinPage';
 import CreateEventPage from './pages/organizer/CreateEventPage';
 import EventsTablePage from './pages/organizer/EventsTablePage';
 import ReportPage from './pages/organizer/ReportPage';
+import CoordinatedEventsPage from './pages/teacher/CoordinatedEventsPage';
 import DashboardPage from './pages/admin/DashboardPage';
 import ActivityLogPage from './pages/admin/ActivityLogPage';
 import BlacklistPage from './pages/admin/BlacklistPage';
@@ -51,13 +52,19 @@ function Routed() {
         <Route element={<ProtectedRoute roles={['organizer', 'admin']} />}>
           <Route path="/create-event" element={<CreateEventPage />} />
           <Route path="/events" element={<EventsTablePage />} />
-          <Route path="/report" element={<ReportPage />} />
           <Route path="/admin/dashboard" element={<DashboardPage />} />
           <Route path="/admin/blacklist" element={<BlacklistPage />} />
         </Route>
         <Route element={<ProtectedRoute roles={['organizer', 'admin']} />}>
           <Route path="/admin/evaluations" element={<EvaluationsPage />} />
           <Route path="/admin/sar" element={<SarReportPage />} />
+        </Route>
+        {/* A teacher reads the reports of the events they coordinate. */}
+        <Route element={<ProtectedRoute roles={['organizer', 'admin', 'teacher']} />}>
+          <Route path="/report" element={<ReportPage />} />
+        </Route>
+        <Route element={<ProtectedRoute roles={['teacher']} />}>
+          <Route path="/coordinated" element={<CoordinatedEventsPage />} />
         </Route>
         <Route element={<ProtectedRoute roles={['admin']} />}>
           <Route path="/admin/users" element={<UsersPage />} />

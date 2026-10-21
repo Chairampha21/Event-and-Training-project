@@ -64,6 +64,7 @@ type Event struct {
 	PosterURL           NullString `json:"poster_url"`
 	OrganizerID         NullInt    `json:"organizer_id"`
 	OrganizerName       NullString `json:"organizer_name"`
+	CoordinatorID       NullInt    `json:"coordinator_id"` // the teacher account organizer_name names, if it has one
 	DayMode             string     `json:"day_mode"`
 	DateStart           string     `json:"date_start"`
 	DateEnd             NullString `json:"date_end"`

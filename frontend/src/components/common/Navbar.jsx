@@ -47,7 +47,12 @@ const NAV_TABS = {
     { to: '/certificates', icon: 'ti-certificate', label: 'เกียรติบัตร' },
   ],
 };
-NAV_TABS.teacher = NAV_TABS.student;
+// A teacher takes part like a student, and also follows the events they coordinate.
+NAV_TABS.teacher = [
+  ...NAV_TABS.student,
+  { to: '/coordinated', icon: 'ti-briefcase', label: 'กิจกรรมที่รับผิดชอบ' },
+  { to: '/report', icon: 'ti-report-analytics', label: 'รายงานกิจกรรม' },
+];
 
 // Lines of a summary notification shown before "ดูอีก n รายการ".
 const NOTIF_ITEMS_SHOWN = 4;

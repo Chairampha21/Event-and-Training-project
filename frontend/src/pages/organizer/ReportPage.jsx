@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useEvents } from '../../hooks/useEvents';
 import { downloadCsv } from '../../utils/csvExport';
 import { downloadXlsx, STYLE } from '../../utils/xlsxExport';
@@ -7,9 +8,13 @@ import EvalResultChart from '../../features/evaluations/components/EvalResultCha
 import EventBudgetReport from '../../features/budget/components/EventBudgetReport';
 
 export default function ReportPage() {
-  const { events, rosters, pushToast, getEvaluationResults } = useEvents();
-  const listed = useMemo(() => events.filter((e) => e.listed), [events]);
-  const [eventId, setEventId] = useState(listed[0]?.id);
+  const { session, events, rosters, pushToast, getEvaluationResults } = useEvents();
+  // A teacher reads the reports of the events they coordinate, without the money side.
+  const coordinator = session?.role === 'teacher';
+  const listed = useMemo(() => events.filter((e) => e.listed && (!coordinator || e.coordinatorId === session.id)), [events, coordinator, session?.id]);
+  // /report?event=<id> (from the teacher's list or a notification) opens that event.
+  const [params] = useSearchParams();
+  const [eventId, setEventId] = useState(() => Number(params.get('event')) || listed[0]?.id);
   const ev = listed.find((e) => e.id === Number(eventId)) || listed[0];
   // Teachers join events but are not counted as participants in reports.
   const roster = ((ev && rosters[ev.id]) || []).filter((p) => !p.isTeacher);
@@ -171,7 +176,7 @@ export default function ReportPage() {
   }
 
   if (!ev) {
-    return <div className="wrap tight"><div className="empty-state">ยังไม่มีกิจกรรมสำหรับออกรายงาน</div></div>;
+    return <div className="wrap tight"><div className="empty-state">{coordinator ? 'ยังไม่มีกิจกรรมที่คุณเป็นอาจารย์ผู้ประสานงาน' : 'ยังไม่มีกิจกรรมสำหรับออกรายงาน'}</div></div>;
   }
 
   return (
@@ -179,7 +184,7 @@ export default function ReportPage() {
       <div className="page-header">
         <div className="ph-inner">
           <div>
-            <h1>รายงานสรุปกิจกรรม</h1>
+            <h1>{coordinator ? 'รายงานกิจกรรมที่รับผิดชอบ' : 'รายงานสรุปกิจกรรม'}</h1>
             <p>สรุปผลกิจกรรมรายรายการ · จำนวนผู้สมัครและผู้เข้าร่วม · อัตราเข้าร่วม · เกียรติบัตรที่ออก</p>
           </div>
           <div className="ph-actions">
@@ -275,9 +280,11 @@ export default function ReportPage() {
             <button type="button" className={`filter-chip${tab === 'eval' ? ' active' : ''}`} style={{ cursor: 'pointer' }} onClick={() => setTab('eval')}>
               <i className="ti ti-clipboard-check" /> แบบประเมิน
             </button>
-            <button type="button" className={`filter-chip${tab === 'budget' ? ' active' : ''}`} style={{ cursor: 'pointer' }} onClick={() => setTab('budget')}>
-              <i className="ti ti-coin" /> งบประมาณกิจกรรม
-            </button>
+            {!coordinator && (
+              <button type="button" className={`filter-chip${tab === 'budget' ? ' active' : ''}`} style={{ cursor: 'pointer' }} onClick={() => setTab('budget')}>
+                <i className="ti ti-coin" /> งบประมาณกิจกรรม
+              </button>
+            )}
           </div>
         </div>
 
@@ -377,7 +384,7 @@ export default function ReportPage() {
         </>
         )}
 
-        {tab === 'budget' && (
+        {tab === 'budget' && !coordinator && (
           <EventBudgetReport ev={ev} attended={attended} payers={roster.filter((p) => p.paymentStatus === 'paid').length} />
         )}
 

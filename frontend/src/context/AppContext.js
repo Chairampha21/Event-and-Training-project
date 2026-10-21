@@ -101,6 +101,7 @@ function adaptEvent(be) {
     status: be.status,
     stage: deriveStage(be.status, be.date_start, be.date_end),
     org: be.organizer_name || '',
+    coordinatorId: be.coordinator_id ?? null, // the teacher account coordinating it (reads its report)
     organizerId: be.organizer_id,
     listed: be.is_listed,
     poster: assetUrl(be.poster_url),
@@ -389,7 +390,10 @@ export function AppProvider({ children }) {
       // Only fetch rosters for events this account can actually see the roster of —
       // admins can see every event, but an organizer only owns a subset, and the
       // roster endpoint 403s (correctly) for events they don't organize.
-      const rosterTargets = role === 'admin' ? adapted : role === 'organizer' ? adapted.filter((e) => e.organizerId === session?.id) : [];
+      // A teacher reads the rosters of the events they coordinate.
+      const rosterTargets = role === 'admin' ? adapted
+        : role === 'organizer' ? adapted.filter((e) => e.organizerId === session?.id)
+        : role === 'teacher' ? adapted.filter((e) => e.coordinatorId === session?.id) : [];
       if (rosterTargets.length > 0) {
         const entries = await Promise.all(rosterTargets.map(async (e) => {
           try {

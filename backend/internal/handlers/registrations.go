@@ -784,12 +784,12 @@ type rosterRow struct {
 
 // EventRoster is the organizer/admin roster view for one event — the check-in modal's data source.
 func (h *RegistrationsHandler) EventRoster(c *gin.Context) {
-	var organizerID sql.NullInt64
+	var organizerID, coordinatorID sql.NullInt64
 	var dateStart string
 	var dateEnd, eventDates sql.NullString
 	err := h.DB.QueryRow(
-		`SELECT organizer_id, DATE_FORMAT(date_start, '%Y-%m-%d'), DATE_FORMAT(date_end, '%Y-%m-%d'), event_dates FROM events WHERE id = ?`, c.Param("id"),
-	).Scan(&organizerID, &dateStart, &dateEnd, &eventDates)
+		`SELECT organizer_id, coordinator_id, DATE_FORMAT(date_start, '%Y-%m-%d'), DATE_FORMAT(date_end, '%Y-%m-%d'), event_dates FROM events WHERE id = ?`, c.Param("id"),
+	).Scan(&organizerID, &coordinatorID, &dateStart, &dateEnd, &eventDates)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบกิจกรรม"})
 		return
@@ -800,7 +800,9 @@ func (h *RegistrationsHandler) EventRoster(c *gin.Context) {
 	}
 
 	claims, _ := middleware.CurrentUser(c)
-	if claims.Role != "admin" && !(organizerID.Valid && organizerID.Int64 == claims.UserID) {
+	// The coordinating teacher reads the roster too, without the money side.
+	readOnly := coordinates(c, coordinatorID)
+	if claims.Role != "admin" && !(organizerID.Valid && organizerID.Int64 == claims.UserID) && !readOnly {
 		c.JSON(http.StatusForbidden, gin.H{"error": "ไม่มีสิทธิ์เข้าถึงรายชื่อผู้สมัคร"})
 		return
 	}
@@ -832,6 +834,11 @@ func (h *RegistrationsHandler) EventRoster(c *gin.Context) {
 		}
 		r.CheckedIn = checkedIn == 1
 		r.CheckinDates = []string{}
+		if readOnly {
+			r.PaymentStatus, r.HasSlip = "", false
+			r.SlipTransferredAt, r.SlipAmount, r.SlipSubmittedAt = models.NullString{}, models.NullFloat{}, models.NullString{}
+			r.RejectReason, r.RefundedAt, r.RefundPromptPay = models.NullString{}, models.NullString{}, models.NullString{}
+		}
 		list = append(list, r)
 	}
 	checked, err := checkinDates(h.DB, `r.event_id = ?`, c.Param("id"))
@@ -854,7 +861,9 @@ func (h *RegistrationsHandler) EventRoster(c *gin.Context) {
 	days := eventDays(dateStart, dateEnd, eventDates)
 	keys := map[string]string{}
 	for _, d := range days {
-		keys[d] = checkinKey(c.Param("id"), d)
+		if !readOnly { // the links are for the organizer to hand out
+			keys[d] = checkinKey(c.Param("id"), d)
+		}
 	}
 	// checked_in on a row means every one of `days` was checked.
 	c.JSON(http.StatusOK, gin.H{"registrations": list, "days": days, "checkin_keys": keys})

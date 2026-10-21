@@ -72,6 +72,7 @@ func Run(db *sql.DB) {
 		{"evaluation pending", evaluationPending},
 		{"slip pending", slipPending},
 		{"post-event tasks", postEventTasks},
+		{"coordinator summary", coordinatorSummary},
 	} {
 		if err := rule.fn(db); err != nil {
 			log.Printf("reminders: %s: %v", rule.name, err)
@@ -555,6 +556,60 @@ func postEventTasks(db *sql.DB) error {
 			items = nil
 		}
 		notify.SendWithItems(db, it.organizer, "ti-checklist", notify.ToneWarn, title+again(step), msg, link, items)
+	}
+	return nil
+}
+
+// coordinatorSummary sends the event's coordinating teacher one summary when
+// it is closed (certificates opened) and the evaluations have had three days
+// to come in: how many registered and came, and how it was rated. Events
+// closed more than two weeks ago are left alone, so turning this on doesn't
+// send a summary of every past event at once.
+func coordinatorSummary(db *sql.DB) error {
+	rows, err := db.Query(`
+		SELECT e.id, e.coordinator_id, e.title,
+		       (SELECT COUNT(*) FROM registrations r JOIN users u ON u.id = r.user_id WHERE r.event_id = e.id AND u.role <> 'teacher'),
+		       (SELECT COUNT(*) FROM registrations r JOIN users u ON u.id = r.user_id WHERE r.event_id = e.id AND u.role <> 'teacher' AND r.status IN ('attended', 'certified')),
+		       (SELECT AVG(a.score) FROM event_evaluation_answers a JOIN evaluations ev ON ev.id = a.evaluation_id
+		          JOIN registrations r ON r.id = ev.registration_id WHERE r.event_id = e.id AND a.score IS NOT NULL)
+		FROM events e
+		WHERE e.is_listed = 1 AND e.status = 'done' AND e.coordinator_id IS NOT NULL
+		  AND DATEDIFF(` + todayTH + `, DATE(e.updated_at + INTERVAL 7 HOUR)) BETWEEN 3 AND 14`)
+	if err != nil {
+		return err
+	}
+	type item struct {
+		id, coordinator int64
+		title           string
+		regs, came      int
+		avg             sql.NullFloat64
+	}
+	var items []item
+	for rows.Next() {
+		var it item
+		if err := rows.Scan(&it.id, &it.coordinator, &it.title, &it.regs, &it.came, &it.avg); err != nil {
+			rows.Close()
+			return err
+		}
+		items = append(items, it)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, it := range items {
+		if !claim(db, "coord_summary", it.id, it.coordinator, 1) {
+			continue
+		}
+		parts := []string{it.title, fmt.Sprintf("ลงทะเบียน %d คน", it.regs)}
+		if it.regs > 0 {
+			parts = append(parts, fmt.Sprintf("เข้าร่วม %d คน (%d%%)", it.came, it.came*100/it.regs))
+		}
+		if it.avg.Valid {
+			parts = append(parts, fmt.Sprintf("ความพึงพอใจเฉลี่ย %.1f/5", it.avg.Float64))
+		}
+		notify.Send(db, it.coordinator, "ti-report-analytics", notify.ToneAccent, "สรุปผลกิจกรรมที่คุณรับผิดชอบ",
+			strings.Join(parts, " · "), fmt.Sprintf("/report?event=%d", it.id))
 	}
 	return nil
 }

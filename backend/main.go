@@ -87,11 +87,11 @@ func main() {
 
 		eventsGroup.POST("/:id/register", requireAuth, middleware.RequireRole("student", "teacher"), regs.RegisterForEvent)
 		eventsGroup.POST("/:id/self-checkin", requireAuth, middleware.RequireRole("student", "teacher"), regs.SelfCheckIn)
-		eventsGroup.GET("/:id/registrations", requireAuth, middleware.RequireRole("organizer", "admin"), regs.EventRoster)
+		eventsGroup.GET("/:id/registrations", requireAuth, middleware.RequireRole("organizer", "admin", "teacher"), regs.EventRoster)
 
 		eventsGroup.GET("/:id/sar", requireAuth, middleware.RequireRole("organizer", "admin"), sar.Get)
 		eventsGroup.PUT("/:id/sar", requireAuth, middleware.RequireRole("organizer", "admin"), sar.Upsert)
-		eventsGroup.GET("/:id/evaluations", requireAuth, middleware.RequireRole("organizer", "admin"), evals.Results)
+		eventsGroup.GET("/:id/evaluations", requireAuth, middleware.RequireRole("organizer", "admin", "teacher"), evals.Results)
 		eventsGroup.GET("/:id/evaluation-questions", requireAuth, evals.EventQuestions)
 		eventsGroup.PUT("/:id/evaluation-questions", requireAuth, middleware.RequireRole("organizer", "admin"), evals.SetEventQuestions)
 	}
@@ -127,6 +127,7 @@ func main() {
 	r.GET("/api/dashboard/budget", requireAuth, middleware.RequireRole("organizer", "admin"), dashboard.Budget)
 	r.GET("/api/dashboard/summary", requireAuth, dashboard.Summary)
 
+	r.GET("/api/coordinators", requireAuth, middleware.RequireRole("organizer", "admin"), users.Coordinators)
 	usersGroup := r.Group("/api/users", requireAuth, middleware.RequireRole("admin"))
 	{
 		usersGroup.GET("", users.List)

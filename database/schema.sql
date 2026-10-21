@@ -68,6 +68,10 @@ CREATE TABLE events (
 
   organizer_id          INT UNSIGNED  NULL,                -- account that owns/manages this event
   organizer_name        VARCHAR(190)  NULL,                -- display text (may be a club/committee, not a login)
+  -- the teacher account organizer_name names, set by the API from that name;
+  -- the teacher follows the event's report (read-only). NULL = not a teacher account.
+  -- Existing databases: database/migrations/2026-10-coordinators.sql
+  coordinator_id        INT UNSIGNED  NULL,
 
   day_mode              ENUM('single','multi') NOT NULL DEFAULT 'single',
   date_start            DATE          NOT NULL,
@@ -173,6 +177,7 @@ CREATE TABLE events (
   updated_at            TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
   CONSTRAINT fk_events_organizer FOREIGN KEY (organizer_id) REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT fk_events_coordinator FOREIGN KEY (coordinator_id) REFERENCES users(id) ON DELETE SET NULL,
   CONSTRAINT chk_events_capacity_hybrid CHECK (
     attend_mode <> 'hybrid' OR (capacity_onsite IS NOT NULL AND capacity_online IS NOT NULL)
   )
@@ -182,6 +187,7 @@ CREATE INDEX idx_events_status ON events (status);
 CREATE INDEX idx_events_category ON events (category);
 CREATE INDEX idx_events_date_start ON events (date_start);
 CREATE INDEX idx_events_organizer ON events (organizer_id);
+CREATE INDEX idx_events_coordinator ON events (coordinator_id);
 
 -- ---------------------------------------------------------------------
 -- registrations — one row per (event, student); doubles as the

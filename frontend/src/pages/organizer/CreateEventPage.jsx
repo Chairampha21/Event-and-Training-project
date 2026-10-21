@@ -15,6 +15,7 @@ import { parseMoney, formatBaht } from '../../utils/money';
 
 import Modal, { ModalHead } from '../../components/ui/Modal';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import { api } from '../../services/api';
 import { withProgress } from '../../utils/alert';
 import CertTemplateUpload from '../../features/certificates/components/CertTemplateUpload';
 import SignatureUpload from '../../features/certificates/components/SignatureUpload';
@@ -116,6 +117,14 @@ export default function CreateEventPage() {
   const [newCatName, setNewCatName] = useState('');
   const catOptions = useMemo(() => [...EVENT_CATEGORIES, ...customCats], [customCats]);
   const [org, setOrg] = useState(editing?.org || '');
+  // Teachers with an account come first: choosing one lets them follow the event's report.
+  const [teacherNames, setTeacherNames] = useState([]);
+  useEffect(() => {
+    let cancelled = false;
+    api.get('/coordinators').then(({ coordinators }) => { if (!cancelled) setTeacherNames(coordinators.map((t) => t.name)); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+  const otherCoordinators = COORDINATOR_OPTIONS.filter((n) => !teacherNames.includes(n));
 
   function addCategory() {
     const name = newCatName.trim();
@@ -659,8 +668,15 @@ export default function CreateEventPage() {
                   <i className="ti ti-user-cog" />
                   <select value={org} onChange={(e) => setOrg(e.target.value)}>
                     <option value="" disabled hidden>เลือกอาจารย์ผู้ประสานงาน</option>
-                    {org && !COORDINATOR_OPTIONS.includes(org) && <option value={org}>{org}</option>}
-                    {COORDINATOR_OPTIONS.map((name) => <option key={name} value={name}>{name}</option>)}
+                    {org && !COORDINATOR_OPTIONS.includes(org) && !teacherNames.includes(org) && <option value={org}>{org}</option>}
+                    {teacherNames.length > 0 && (
+                      <optgroup label="อาจารย์ที่มีบัญชีในระบบ · ดูรายงานกิจกรรมนี้ได้">
+                        {teacherNames.map((name) => <option key={name} value={name}>{name}</option>)}
+                      </optgroup>
+                    )}
+                    <optgroup label={teacherNames.length > 0 ? 'รายชื่ออื่น' : 'อาจารย์ผู้ประสานงาน'}>
+                      {otherCoordinators.map((name) => <option key={name} value={name}>{name}</option>)}
+                    </optgroup>
                   </select>
                 </div>
               </div>

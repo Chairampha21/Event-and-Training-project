@@ -10,6 +10,7 @@ package reminders
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -706,23 +707,22 @@ func Reconsider(db *sql.DB, userID, regID int64) {
 // only when it changed (or a week has passed) —
 // so they don't have to go looking through the activity log.
 func AdminDigest(db *sql.DB, adminID int64) {
-	// One line per event, each opening the place where that event's task is done.
+	// One line per event, each opening the place where that event's task is
+	// done; the bell folds them under their kind of task (group).
 	type part struct {
 		query string
+		group string
 		label func(title string, n int) string
 		link  string
 	}
+	eventTitle := func(t string, _ int) string { return t }
 	parts := []part{
 		{`SELECT e.id, e.title, 1 FROM events e WHERE e.is_listed = 1 AND e.status <> 'done' AND ` + lastDay + ` < ` + todayTH + ` ORDER BY ` + lastDay,
-			func(t string, _ int) string { return "ปิดงาน · " + t }, "/events?applicants=%d"},
+			"ปิดงาน", eventTitle, "/events?applicants=%d"},
 		{`SELECT e.id, e.title, 1 FROM events e WHERE e.is_listed = 1 AND e.budget_actual IS NULL AND (e.budget_planned IS NOT NULL OR e.budget_other IS NOT NULL) AND ` + lastDay + ` < ` + todayTH + ` ORDER BY ` + lastDay,
-			func(t string, _ int) string {
-				return "กรอกงบประมาณที่ใช้จริง · " + t
-			}, "/events?budget=%d"},
+			"กรอกงบประมาณที่ใช้จริง", eventTitle, "/events?budget=%d"},
 		{`SELECT e.id, e.title, COUNT(*) FROM registrations r JOIN events e ON e.id = r.event_id WHERE e.is_listed = 1 AND r.payment_status = 'submitted' GROUP BY e.id ORDER BY MIN(r.updated_at)`,
-			func(t string, n int) string {
-				return fmt.Sprintf("ตรวจสลิป %d รายการ · %s", n, t)
-			}, "/events?slips=%d"},
+			"ตรวจสลิป", func(t string, n int) string { return fmt.Sprintf("%s · %d รายการ", t, n) }, "/events?slips=%d"},
 	}
 	var counts [3]int
 	var items []notify.Item
@@ -742,7 +742,7 @@ func AdminDigest(db *sql.DB, adminID int64) {
 				return
 			}
 			counts[i] += n
-			items = append(items, notify.Item{Label: pt.label(title, n), Link: fmt.Sprintf(pt.link, id)})
+			items = append(items, notify.Item{Group: pt.group, Label: pt.label(title, n), Link: fmt.Sprintf(pt.link, id)})
 		}
 		rows.Close()
 	}
@@ -763,8 +763,9 @@ func AdminDigest(db *sql.DB, adminID int64) {
 	// a week, so a backlog nobody clears doesn't fill the bell day after day.
 	msg := strings.Join(summary, " · ")
 	var same int
+	itemsJSON, _ := json.Marshal(items)
 	_ = db.QueryRow(`SELECT COUNT(*) FROM notifications WHERE user_id = ? AND title LIKE 'สรุปเรื่องค้าง%' AND message = ?
-		AND created_at > NOW() - INTERVAL ? DAY`, adminID, msg, repeatAfterDays).Scan(&same)
+		AND items = CAST(? AS JSON) AND created_at > NOW() - INTERVAL ? DAY`, adminID, msg, string(itemsJSON), repeatAfterDays).Scan(&same)
 	if same > 0 {
 		return
 	}

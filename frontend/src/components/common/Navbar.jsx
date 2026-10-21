@@ -52,12 +52,22 @@ NAV_TABS.teacher = NAV_TABS.student;
 // Lines of a summary notification shown before "ดูอีก n รายการ".
 const NOTIF_ITEMS_SHOWN = 4;
 
+// A summary's lines by their group, in order of first appearance, or null
+// when the lines carry no group (they are then listed as they are).
+function groupsOf(items) {
+  if (!items.every((it) => it.group)) return null;
+  const map = new Map();
+  items.forEach((it) => map.set(it.group, [...(map.get(it.group) || []), it]));
+  return [...map.entries()];
+}
+
 export default function Navbar() {
   const { session, notifs, refreshNotifications, markAllRead, markNotifRead, clearAllNotif, logout } = useEvents();
   const [notifOpen, setNotifOpen] = useState(false);
   const [logoutAsk, setLogoutAsk] = useState(false);
   const [clearAsk, setClearAsk] = useState(false);
-  const [expanded, setExpanded] = useState(() => new Set()); // summaries showing all their lines
+  const [expanded, setExpanded] = useState(() => new Set()); // open groups / summaries showing all lines, by key
+  const toggleExpanded = (key) => setExpanded((s) => { const x = new Set(s); if (x.has(key)) x.delete(key); else x.add(key); return x; });
   const wrapRef = useRef(null);
   const navigate = useNavigate();
 
@@ -133,7 +143,36 @@ export default function Navbar() {
                       <div className="notif-body">
                         <div className="notif-title">{n.title}</div>
                         <div className="notif-msg">{n.msg}</div>
-                        {sub && (
+                        {sub && groupsOf(n.items) && (
+                          // Lines that name their kind of task fold under it, each kind a dropdown.
+                          <div className="notif-groups">
+                            {groupsOf(n.items).map(([group, list]) => {
+                              const key = `${n.id}:${group}`;
+                              const isOpen = expanded.has(key);
+                              return (
+                                <div key={group} className={`notif-group${isOpen ? ' open' : ''}`}>
+                                  <button type="button" className="notif-group-head" aria-expanded={isOpen} onClick={() => toggleExpanded(key)}>
+                                    <i className="ti ti-chevron-right notif-group-caret" />
+                                    <span>{group}</span>
+                                    <span className="notif-group-count">{list.length}</span>
+                                  </button>
+                                  {isOpen && (
+                                    <ul className="notif-sub">
+                                      {list.map((it, i) => (
+                                        <li key={i}>
+                                          <button type="button" title={it.label} onClick={() => openItem(n, it)}>
+                                            <span>{it.label}</span><i className="ti ti-chevron-right" />
+                                          </button>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                        {sub && !groupsOf(n.items) && (
                           <ul className="notif-sub">
                             {shown.map((it, i) => (
                               <li key={i}>
@@ -144,7 +183,7 @@ export default function Navbar() {
                             ))}
                             {n.items.length > NOTIF_ITEMS_SHOWN && (
                               <li>
-                                <button type="button" className="notif-sub-more" onClick={() => setExpanded((s) => { const x = new Set(s); if (open) x.delete(n.id); else x.add(n.id); return x; })}>
+                                <button type="button" className="notif-sub-more" onClick={() => toggleExpanded(n.id)}>
                                   {open ? 'แสดงน้อยลง' : `ดูอีก ${n.items.length - NOTIF_ITEMS_SHOWN} รายการ`}
                                 </button>
                               </li>

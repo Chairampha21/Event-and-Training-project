@@ -149,6 +149,7 @@ func SendToRegistrantsGrouped(db execer, eventID any, icon, tone, title, message
 // that opens its own place when pressed, so a summary of six things leads to
 // each of the six instead of to one page to search through.
 type Item struct {
+	Group string `json:"group,omitempty"` // the kind of task; the bell folds a group's lines under it
 	Label string `json:"label"`
 	Link  string `json:"link"`
 }

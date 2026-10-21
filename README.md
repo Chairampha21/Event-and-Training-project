@@ -24,7 +24,6 @@
 | Database | MySQL 8.0 (`database/`) |
 | ติดตั้งจริง | Docker Compose + Caddy (HTTPS อัตโนมัติ) (`deploy/`) |
 
-
 ## รันบนเครื่อง (สำหรับพัฒนา)
 
 ต้องมี Docker, Go 1.26 และ Node.js 18 ขึ้นไป

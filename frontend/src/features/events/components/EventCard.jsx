@@ -54,7 +54,7 @@ export default function EventCard({ event, isStudent, myStatus, myPayment, onApp
           {!event.poster && <span className={`badge ${sm.badge}`}><i className={`ti ${sm.ico}`} /> {sm.label}</span>}
         </div>
         <h3 className="card-title"><button type="button" className="card-open" onClick={() => onApply(event.id)} aria-label={`ดูรายละเอียด ${event.title}`}>{event.title}</button></h3>
-        {!isStudent && <CycleProgress stage={event.stage} status={event.status} />}
+        {!isStudent && <CycleProgress stage={event.stage} status={event.status} dense />}
         <div className="meta">
           <div className="row"><i className="ti ti-calendar-event" /> {event.date}</div>
           <div className="row"><i className="ti ti-clock" /> {event.time}</div>

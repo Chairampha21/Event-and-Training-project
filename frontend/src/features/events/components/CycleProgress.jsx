@@ -8,9 +8,10 @@ const REG_STOPPED = { closed: 'ปิดรับแล้ว', full: 'เต็
 /**
  * 5-stage cycle tracker: ประกาศ → รับสมัคร → จัดกิจกรรม → เกียรติบัตร → ปิดกิจกรรม.
  * `status` (the event's) lets the รับสมัคร step say why it is over before the
- * event day, with a small note under the steps.
+ * event day, with a small note under the steps. `dense` (narrow cards) keeps
+ * the dots and puts one caption under them instead of five crowded labels.
  */
-export default function CycleProgress({ stage, status, compact }) {
+export default function CycleProgress({ stage, status, compact, dense }) {
   const stopped = stage === 1 && REG_STOPPED[status];
   const at = stopped ? 2 : stage;
   const notes = stopped ? { 1: stopped, 2: 'รอวันจัด' } : {};
@@ -26,17 +27,24 @@ export default function CycleProgress({ stage, status, compact }) {
     );
   }
   return (
-    <div className="cycle">
-      {CYCLE.map((label, i) => {
-        const cls = i < at ? 'done' : i === at ? 'current' : '';
-        return (
-          <div key={label} className={`cycle-step ${cls}`}>
-            <div className="cd" />
-            <div className="cl">{label}</div>
-            {notes[i] && <div className="cn">{notes[i]}</div>}
-          </div>
-        );
-      })}
+    <div className={`cycle${dense ? ' dense' : ''}`}>
+      <div className="cycle-steps">
+        {CYCLE.map((label, i) => {
+          const cls = i < at ? 'done' : i === at ? 'current' : '';
+          return (
+            <div key={label} className={`cycle-step ${cls}`} title={dense ? label : undefined}>
+              <div className="cd" />
+              {!dense && <div className="cl">{label}</div>}
+              {!dense && notes[i] && <div className="cn">{notes[i]}</div>}
+            </div>
+          );
+        })}
+      </div>
+      {dense && (
+        <div className="cycle-caption">
+          <strong>{CYCLE[at]}</strong>{stopped && <> · รอวันจัด ({stopped})</>}
+        </div>
+      )}
     </div>
   );
 }

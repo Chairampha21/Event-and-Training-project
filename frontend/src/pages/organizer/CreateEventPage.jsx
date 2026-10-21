@@ -277,6 +277,9 @@ export default function CreateEventPage() {
   // Whether the event gives certificates at all. Off: nothing to set up here,
   // and the sign-in sheet has one signature box per day instead of morning/afternoon.
   const [issueCert, setIssueCert] = useState(editing ? editing.issueCert !== false : true);
+  // Once certificates are opened, whether the event gives them can't change
+  // (some attendees already hold one); the server refuses it too.
+  const certSettled = !!editing && editing.stage === 4;
   // A new event starts with the signer an admin set as the department default
   // (ตั้งค่าเกียรติบัตร); the organizer may change it for this event.
   const [signerName, setSignerName] = useState(editing?.signer?.name || certDefaults?.signer.name || '');
@@ -978,7 +981,11 @@ export default function CreateEventPage() {
                   ? 'อัปโหลด template (ไม่บังคับ) และตั้งค่าผู้ลงนาม · ระบบออกให้อัตโนมัติเมื่อผู้เข้าร่วมทำแบบประเมินสำเร็จ · ใบลงชื่อมีช่องเช้า/บ่าย'
                   : 'กิจกรรมนี้ไม่ออกเกียรติบัตร · ใบลงชื่อมีช่องลงชื่อช่องเดียวต่อวัน'}</p>
               </div>
-              <button type="button" className={`switch${issueCert ? ' on' : ''}`} onClick={() => setIssueCert((o) => !o)} role="switch" aria-checked={issueCert} aria-label="ออกเกียรติบัตร" title="เปิด/ปิดการออกเกียรติบัตร" />
+              {certSettled ? (
+                <span className="setup-locked"><i className="ti ti-lock" /> เปิดสิทธิ์เกียรติบัตรแล้ว · เปลี่ยนไม่ได้</span>
+              ) : (
+                <button type="button" className={`switch${issueCert ? ' on' : ''}`} onClick={() => setIssueCert((o) => !o)} role="switch" aria-checked={issueCert} aria-label="ออกเกียรติบัตร" title="เปิด/ปิดการออกเกียรติบัตร" />
+              )}
             </div>
             {issueCert && (<>
             <CertTemplateUpload

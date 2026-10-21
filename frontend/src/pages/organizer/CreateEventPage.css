@@ -47,6 +47,7 @@
 .setup-head{display:flex;align-items:center;gap:14px;margin-bottom:18px}
 .setup-head-text{flex:1}
 .setup-head-text h2{margin-bottom:2px}
+.setup-locked{display:inline-flex;align-items:center;gap:6px;flex:none;padding:6px 12px;border-radius:999px;background:var(--c2-08);color:var(--c4-70);font-size:12.5px;font-weight:600}
 .setup-head-text .fc-sub{margin:0}
 .setup-body{display:flex;flex-direction:column;gap:14px}
 

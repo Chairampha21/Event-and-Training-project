@@ -873,6 +873,19 @@ func (h *EventsHandler) Update(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": msg})
 		return
 	}
+	// Whether the event gives certificates is settled once they are opened (or
+	// any was issued): switching it then would leave some attendees with a
+	// certificate and the rest unable to get one for the same event.
+	if v, present := raw["issue_certificate"]; present {
+		if on, ok := v.(bool); ok && on != existing.IssueCertificate {
+			var issued int
+			_ = h.DB.QueryRow(`SELECT COUNT(*) FROM certificates c JOIN registrations r ON r.id = c.registration_id WHERE r.event_id = ?`, existing.ID).Scan(&issued)
+			if existing.CycleStage >= 4 || issued > 0 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "เปลี่ยนการออกเกียรติบัตรไม่ได้ เพราะเปิดสิทธิ์เกียรติบัตรให้ผู้เข้าร่วมไปแล้ว"})
+				return
+			}
+		}
+	}
 
 	updatable := map[string]bool{
 		"title": true, "description": true, "category": true, "subcategory": true, "poster_url": true,

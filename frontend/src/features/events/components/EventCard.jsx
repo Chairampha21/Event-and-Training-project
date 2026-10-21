@@ -2,6 +2,7 @@ import React from 'react';
 import { STATUS_META } from '../../../utils/constants';
 import CycleProgress from './CycleProgress';
 import { formatBaht } from '../../../utils/money';
+import { formatThaiDayMonth } from '../../../utils/dateFormat';
 import { PAYMENT_STATUS } from './PaymentBox';
 import './EventCard.css';
 
@@ -22,7 +23,8 @@ function ApplyButton({ event, status, payment, onApply }) {
   if (status === 'registered') return <button className="btn-apply disabled" disabled><i className="ti ti-check" /> ลงทะเบียนแล้ว</button>;
   if (status === 'attended' || status === 'certified') return <button className="btn-apply disabled" disabled><i className="ti ti-circle-check" /> เข้าร่วมแล้ว</button>;
   if (event.status === 'open') return <button className="btn-apply" onClick={() => onApply(event.id)}><i className="ti ti-user-plus" /> สมัคร</button>;
-  if (event.status === 'soon') return <button className="btn-apply disabled" disabled><i className="ti ti-clock" /> เร็ว ๆ นี้</button>;
+  // Announced, registration not open yet: say when it opens.
+  if (event.status === 'soon') return <button className="btn-apply disabled" disabled><i className="ti ti-clock" /> {event.regStart ? `เปิดรับ ${formatThaiDayMonth(event.regStart)}` : 'รอเปิดรับสมัคร'}</button>;
   if (event.status === 'full') return <button className="btn-apply disabled" disabled><i className="ti ti-users" /> เต็มแล้ว</button>;
   if (event.status === 'closed') return <button className="btn-apply disabled" disabled><i className="ti ti-lock" /> ปิดรับสมัคร</button>;
   return <button className="btn-apply" onClick={() => onApply(event.id)}><i className="ti ti-eye" /> ดูรายละเอียด</button>;

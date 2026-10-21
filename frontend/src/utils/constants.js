@@ -32,7 +32,7 @@ export const ROLE_LANDING = {
 export const STATUS_META = {
   open: { badge: 'badge-open', pill: 'ps-open', label: 'เปิดรับสมัคร', ico: 'ti-circle-check-filled' },
   closed: { badge: 'badge-draft', pill: 'ps-soon', label: 'ปิดรับสมัคร', ico: 'ti-circle-minus' },
-  soon: { badge: 'badge-soon', pill: 'ps-soon', label: 'เร็ว ๆ นี้', ico: 'ti-circle-filled' },
+  soon: { badge: 'badge-soon', pill: 'ps-soon', label: 'รอเปิดรับสมัคร', ico: 'ti-circle-filled' },
   full: { badge: 'badge-full', pill: 'ps-full', label: 'เต็มแล้ว', ico: 'ti-circle-filled' },
   done: { badge: 'badge-done', pill: 'ps-done', label: 'สิ้นสุดแล้ว', ico: 'ti-circle-filled' },
 };

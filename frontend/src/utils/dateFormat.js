@@ -23,6 +23,12 @@ export function formatThaiDate(iso) {
   return `${p.d} ${THAI_MONTHS_FULL[p.m - 1]} ${toBuddhistYear(p.y)}`;
 }
 
+/** ISO date → "15 พ.ย." (day and short month), for tight spots such as a button. */
+export function formatThaiDayMonth(iso) {
+  const p = parseIso(iso);
+  return p ? `${p.d} ${THAI_MONTHS[p.m - 1]}` : '';
+}
+
 /** Formats a start/end ISO date pair as a Thai range, collapsing month/year when they match. */
 export function formatThaiDateRange(startIso, endIso) {
   const s = parseIso(startIso);

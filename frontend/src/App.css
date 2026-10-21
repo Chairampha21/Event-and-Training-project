@@ -226,8 +226,6 @@
 @media (max-width:860px){.login-form{padding:32px 16px}.lf-inner{padding:28px 22px 24px}}
 
 /* Email boxes: the user types the part before "@", the domain is fixed at the end. */
-.lf-field input.has-domain{padding-right:128px}
-.lf-domain{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:14px;color:var(--c4-60);pointer-events:none;white-space:nowrap}
 .lf-warn{display:flex;align-items:flex-start;gap:5px;font-size:12px;font-weight:600;color:#9a6408;line-height:1.45}
 .lf-warn i{font-size:14px;margin-top:1px}
 

@@ -20,9 +20,7 @@ function GoogleIcon() {
 
 const DOMAIN = '@silpakorn.edu';
 const EMAIL_RE = /^[a-z0-9._-]+@silpakorn\.edu$/;
-// The email boxes take only the part before "@": the domain is fixed and shown
-// at the end of the box, so it can't be mistyped (as on university sign-in pages).
-const stripDomain = (v) => (v || '').trim().replace(/@silpakorn\.edu$/i, '');
+// The whole address is typed; one without "@" gets the university domain.
 const normEmail = (v) => { const t = (v || '').trim().toLowerCase(); return t.includes('@') ? t : `${t}${DOMAIN}`; };
 
 /**
@@ -34,21 +32,26 @@ function emailProblem(v, left) {
   const t = (v || '').trim();
   if (!t) return {};
   if (/[\u0E00-\u0E7F]/.test(t)) return { warn: 'แป้นพิมพ์ยังเป็นภาษาไทย · สลับเป็นภาษาอังกฤษ (ปุ่ม ~ หรือ Alt+Shift) แล้วพิมพ์ใหม่' };
-  if (t.includes('@')) return { warn: `ไม่ต้องพิมพ์ @ และชื่อโดเมน · ระบบเติม ${DOMAIN} ให้ (ใช้ได้เฉพาะอีเมลมหาวิทยาลัย)` };
+  if (t.includes('@')) {
+    // A wrong domain is pointed out as soon as the part after "@" can't become ours.
+    const domain = t.slice(t.indexOf('@')).toLowerCase();
+    if (!DOMAIN.startsWith(domain) && domain !== DOMAIN) return { warn: `ใช้ได้เฉพาะอีเมลมหาวิทยาลัย ${DOMAIN}` };
+    if (left && !EMAIL_RE.test(t.toLowerCase())) return { error: `อีเมลไม่ถูกต้อง · ตัวอย่าง username${DOMAIN}` };
+    return {};
+  }
   if (left && !/^[a-z0-9._-]+$/i.test(t)) return { error: 'ชื่ออีเมลใช้ได้เฉพาะ a–z, 0–9 และ . _ -' };
   return {};
 }
 
-/** The part of the address before "@silpakorn.edu", with the domain fixed at the end of the box. */
+/** The university email address (typing just the name before "@" is enough). */
 function EmailInput({ id, value, onChange, onBlur, autoComplete, autoFocus, invalid }) {
   return (
     <>
       <input id={id} type="text" inputMode="email" value={value} autoComplete={autoComplete} autoFocus={autoFocus}
-        autoCapitalize="none" spellCheck={false} placeholder="username" className="has-domain"
+        autoCapitalize="none" spellCheck={false} placeholder={`username${DOMAIN}`}
         aria-invalid={invalid} aria-describedby={invalid ? `${id}-err` : undefined}
-        onChange={(e) => onChange(stripDomain(e.target.value) === e.target.value.trim() ? e.target.value : stripDomain(e.target.value))}
+        onChange={(e) => onChange(e.target.value)}
         onBlur={onBlur} />
-      <span className="lf-domain" aria-hidden="true">{DOMAIN}</span>
     </>
   );
 }
@@ -386,7 +389,7 @@ function Verify({ go, ctx }) {
 /** Forgot password: the address, then the code mailed to it and a new password. */
 function Forgot({ go, ctx }) {
   const { forgotPassword, resetPassword } = useEvents();
-  const [email, setEmail] = useState(stripDomain(ctx.email));
+  const [email, setEmail] = useState(ctx.email || '');
   const [emailLeft, setEmailLeft] = useState(false);
   const [sent, setSent] = useState(false);
   const [code, setCode] = useState('');

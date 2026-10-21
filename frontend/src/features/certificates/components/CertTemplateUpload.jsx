@@ -4,7 +4,7 @@ import ImageViewer from '../../../components/ui/ImageViewer';
 import { CertOrgOverlay, CertBodyOverlay, CertSignerOverlay } from './CertOverlays';
 import { COLOR_PRESETS, DEFAULT_LAYOUT, LAYOUT_LIMITS, analyzeTemplate, isDefaultLayout, layoutVars, normalizeLayout } from '../utils/certLayout';
 import './CertTemplateUpload.css';
-import { DEFAULT_CERT_TEMPLATE_URL, mainTemplate } from '../utils/defaultTemplate';
+import { DEFAULT_CERT_TEMPLATE_URL, DEFAULT_TEMPLATE_LAYOUT, mainTemplate } from '../utils/defaultTemplate';
 import { useEvents } from '../../../hooks/useEvents';
 
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -73,6 +73,8 @@ function checkTemplate(dims) {
 export default function CertTemplateUpload({ value, onChange, layout, onLayoutChange, signerName, signerTitle, signature, eventTitle, certDate, category, asDefault }) {
   const { certDefaults } = useEvents();
   const fallbackUrl = asDefault ? DEFAULT_CERT_TEMPLATE_URL : mainTemplate(certDefaults).url;
+  // How the text sits on that template, so its preview matches the real certificate.
+  const fallbackLay = normalizeLayout(asDefault ? DEFAULT_TEMPLATE_LAYOUT : mainTemplate(certDefaults).layout);
   const adminSet = !asDefault && !!certDefaults?.template;
   const lay = normalizeLayout(layout);
   const setLayout = (patch) => onLayoutChange({ ...lay, ...patch });
@@ -132,6 +134,16 @@ export default function CertTemplateUpload({ value, onChange, layout, onLayoutCh
     <div className="cert-canvas" style={layoutVars(lay)}>
       <img src={value.dataUrl} alt="template เกียรติบัตร" onLoad={(e) => setDims({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })} />
       {lay.showOrg && <CertOrgOverlay />}
+      <CertBodyOverlay name={SAMPLE_NAME} eventTitle={eventTitle || 'ชื่อกิจกรรม'} certDate={certDate || 'วันที่จัดกิจกรรม'} category={category} />
+      <CertSignerOverlay name={signerName} title={signerTitle} signature={signature} />
+    </div>
+  );
+
+  // The same preview on the main template, for an event that uses it.
+  const fallbackCanvas = (
+    <div className="cert-canvas" style={layoutVars(fallbackLay)}>
+      <img src={fallbackUrl} alt="แม่แบบเกียรติบัตรหลักของภาควิชา" />
+      {fallbackLay.showOrg && <CertOrgOverlay />}
       <CertBodyOverlay name={SAMPLE_NAME} eventTitle={eventTitle || 'ชื่อกิจกรรม'} certDate={certDate || 'วันที่จัดกิจกรรม'} category={category} />
       <CertSignerOverlay name={signerName} title={signerTitle} signature={signature} />
     </div>
@@ -199,19 +211,25 @@ export default function CertTemplateUpload({ value, onChange, layout, onLayoutCh
             <div className="ctu-empty-hint">JPG หรือ PNG · สูงสุด 5 MB · A4 แนวนอน แนะนำ {PRINT_SHARP_W} × 2480 px</div>
             <div className="ctu-empty-opt"><i className="ti ti-info-circle" /> {asDefault ? 'หากไม่อัปโหลด ระบบใช้แม่แบบที่ติดมากับระบบ (ด้านล่าง)' : 'ไม่บังคับ · หากไม่อัปโหลด ระบบใช้แม่แบบหลักของภาควิชา (ด้านล่าง)'}</div>
           </div>
-          <div className="ctu-default">
-            <button type="button" className="ctu-default-thumb" onClick={() => setFallbackOpen(true)} aria-label="ดูแม่แบบเต็มจอ">
-              <img src={fallbackUrl} alt="แม่แบบเกียรติบัตรหลักของภาควิชา" />
-              <span className="ctu-default-zoom"><i className="ti ti-zoom-in" /> ดูภาพเต็ม</span>
+          <div className="ctu-filled ctu-main">
+            <button type="button" className="ctu-thumb" onClick={() => setFallbackOpen(true)} aria-label="ดูตัวอย่างเกียรติบัตรเต็มจอและซูม">
+              {fallbackCanvas}
+              <span className="ctu-thumb-zoom"><i className="ti ti-zoom-in" /> คลิกเพื่อดูเต็มจอและซูม</span>
             </button>
-            <ImageViewer open={fallbackOpen} src={fallbackUrl} title={asDefault ? 'แม่แบบที่ติดมากับระบบ' : 'แม่แบบหลักของภาควิชา'} onClose={() => setFallbackOpen(false)} />
-            <div>
-              <strong>{asDefault ? 'แม่แบบที่ติดมากับระบบ' : 'แม่แบบหลักของภาควิชา'}</strong>
-              <span>{asDefault
+            <div className="ctu-info">
+              <div className="ctu-status"><i className="ti ti-circle-check-filled" /> {asDefault ? 'ใช้แม่แบบที่ติดมากับระบบ' : 'ใช้แม่แบบหลักของภาควิชา'}</div>
+              <div className="ctu-main-note">{asDefault
                 ? 'ใช้เป็นแม่แบบหลักถ้าไม่อัปโหลดแม่แบบของภาควิชาเอง'
-                : `ใช้กับกิจกรรมนี้โดยอัตโนมัติถ้าไม่อัปโหลด template ของตัวเอง ระบบวางชื่อผู้รับ ชื่อกิจกรรม วันที่ และผู้ลงนามให้${adminSet ? ' · ตั้งค่าโดยผู้ดูแลระบบ' : ''}`}</span>
+                : `ใช้กับกิจกรรมนี้โดยอัตโนมัติถ้าไม่อัปโหลด template ของตัวเอง · ระบบวางชื่อผู้รับ ชื่อกิจกรรม วันที่ และผู้ลงนามให้${adminSet ? ' · ตั้งค่าโดยผู้ดูแลระบบ' : ''}`}</div>
+              <div className="ctu-actions">
+                <button type="button" className="btn btn-primary" onClick={() => setFallbackOpen(true)}><i className="ti ti-zoom-in" /> ดูตัวอย่างเต็มจอ</button>
+              </div>
+              <div className="ctu-tip">{asDefault ? 'ตัวอย่างใช้ชื่อผู้รับและชื่อกิจกรรมสมมติ · ผู้ลงนามตามที่กรอกในหน้านี้' : 'ตัวอย่างใช้ชื่อสมมติ · ชื่อกิจกรรม วันที่ และผู้ลงนามตามที่กรอกในหน้านี้'}</div>
             </div>
           </div>
+          <ImageViewer open={fallbackOpen} title="ตัวอย่างเกียรติบัตร · ชื่อผู้เข้าร่วมเป็นชื่อสมมติ" aspect={A4_RATIO} onClose={() => setFallbackOpen(false)}>
+            {fallbackCanvas}
+          </ImageViewer>
         </>
       )}
 

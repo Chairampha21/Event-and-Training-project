@@ -49,7 +49,9 @@ const NAV_TABS = {
 };
 // A teacher takes part like a student, and also follows the events they coordinate.
 NAV_TABS.teacher = [
+  { section: 'เข้าร่วมกิจกรรม' },
   ...NAV_TABS.student,
+  { section: 'ผู้ประสานงาน' },
   { to: '/coordinated', icon: 'ti-briefcase', label: 'กิจกรรมที่รับผิดชอบ' },
   { to: '/report', icon: 'ti-report-analytics', label: 'รายงานกิจกรรม' },
 ];

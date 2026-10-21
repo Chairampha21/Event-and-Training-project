@@ -5,6 +5,7 @@ import { initials } from '../utils/initials';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import { useLocation } from 'react-router-dom';
 import NameFields from '../components/common/NameFields';
+import StudentDeptFields from '../components/common/StudentDeptFields';
 import { fullNameTh, fullNameEn, joinThai, joinEnglish, needsNames, hasThai } from '../utils/personName';
 
 // "My profile" — one page for every role. Email and role are fixed (accounts
@@ -17,14 +18,11 @@ export default function ProfilePage() {
   const [titleTh, setTitleTh] = useState('');
   const [nameEn, setNameEn] = useState('');
   const [titleEn, setTitleEn] = useState('');
-  const [yearLevel, setYearLevel] = useState('');
-  const [major, setMajor] = useState('');
   const [dept, setDept] = useState('');
   const [studentId, setStudentId] = useState('');
   const [saving, setSaving] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  // Students keep "year · major" in the one dept field; split it for editing.
   function load() {
     if (!session) return;
     setName(hasThai(session.name) ? session.name || '' : '');
@@ -32,9 +30,6 @@ export default function ProfilePage() {
     setNameEn(session.name_en || '');
     setTitleEn(session.title_en || '');
     setStudentId(session.student_id || '');
-    const [y, ...rest] = (session.dept || '').split('·').map((s) => s.trim());
-    setYearLevel(y || '');
-    setMajor(rest.join(' · '));
     setDept(session.dept || '');
   }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -42,7 +37,7 @@ export default function ProfilePage() {
 
   if (!session) return null;
   const isStudent = session.role === 'student';
-  const deptValue = isStudent ? [yearLevel.trim(), major.trim()].filter(Boolean).join(' · ') : dept.trim();
+  const deptValue = dept.trim();
   const dirty = name.trim() !== (session.name || '')
     || titleTh.trim() !== (session.title_th || '') || nameEn.trim() !== (session.name_en || '') || titleEn.trim() !== (session.title_en || '')
     || deptValue !== (session.dept || '')
@@ -119,16 +114,7 @@ export default function ProfilePage() {
               </div>
             )}
             {isStudent ? (
-              <div className="form-row">
-                <div className="field">
-                  <label htmlFor="pf-year">ชั้นปี</label>
-                  <input id="pf-year" type="text" value={yearLevel} onChange={(e) => setYearLevel(e.target.value)} placeholder="เช่น นักศึกษาชั้นปีที่ 3" />
-                </div>
-                <div className="field">
-                  <label htmlFor="pf-major">สาขา</label>
-                  <input id="pf-major" type="text" value={major} onChange={(e) => setMajor(e.target.value)} placeholder="เช่น วท.บ. คอมพิวเตอร์" />
-                </div>
-              </div>
+              <StudentDeptFields key={session.id} idPrefix="pf" value={dept} onChange={setDept} />
             ) : (
               <div className="form-row full">
                 <div className="field">

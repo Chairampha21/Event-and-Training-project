@@ -5,6 +5,7 @@ import Modal, { ModalHead } from '../../components/ui/Modal';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import { initials } from '../../utils/initials';
 import NameFields from '../../components/common/NameFields';
+import StudentDeptFields from '../../components/common/StudentDeptFields';
 import { fullNameTh, joinThai, joinEnglish, hasThai } from '../../utils/personName';
 
 const ROLES = ['admin', 'organizer', 'teacher', 'student'];
@@ -135,10 +136,11 @@ export default function UsersPage() {
             titleEn={form.title_en} setTitleEn={setField('title_en')} nameEn={form.name_en} setNameEn={setField('name_en')}
           />
           <div className="form-row full"><div className="field"><label>อีเมล @silpakorn.edu <span className="req">*</span></label><input type="text" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} /></div></div>
-          <div className="form-row">
+          <div className={form.role === 'student' ? 'form-row full' : 'form-row'}>
             <div className="field"><label>บทบาท</label><select value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}>{ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}</select></div>
-            <div className="field"><label>สังกัด / หน่วยงาน</label><input type="text" value={form.dept} onChange={(e) => setForm((f) => ({ ...f, dept: e.target.value }))} /></div>
+            {form.role !== 'student' && <div className="field"><label>สังกัด / หน่วยงาน</label><input type="text" value={form.dept} onChange={(e) => setForm((f) => ({ ...f, dept: e.target.value }))} /></div>}
           </div>
+          {form.role === 'student' && <StudentDeptFields key={editingId || 'new'} idPrefix="um" value={form.dept} onChange={setField('dept')} />}
         </div>
         <div className="modal-foot">
           <button className="btn btn-outline" onClick={() => setFormOpen(false)}>ยกเลิก</button>

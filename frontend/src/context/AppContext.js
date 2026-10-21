@@ -328,13 +328,15 @@ export function AppProvider({ children }) {
 
   // Notifications are created server-side by the action that causes them (so
   // the right person gets them, on any device) — the client only reads them.
-  const refreshNotifications = useCallback(async () => {
+  // { silent: true } after the user's own action: the bell gets its line, but
+  // it doesn't pop up on top of the action's own message.
+  const refreshNotifications = useCallback(async (opts) => {
     try {
       const { notifications } = await api.get('/me/notifications');
       const list = notifications.map(adaptNotif);
       setNotifs(list);
       // Anything unread that was not there on the previous check is new: pop it up.
-      if (seenNotifs.current) {
+      if (seenNotifs.current && !opts?.silent) {
         const fresh = list.filter((n) => n.unread && !seenNotifs.current.has(n.id));
         fresh.slice(0, NOTIF_TOAST_MAX).forEach((n) => pushToast(n.title, n.msg, 'notif', { duration: NOTIF_TOAST_MS, icon: n.icon, tone: n.tone, link: n.link, notifId: n.id }));
         if (fresh.length > NOTIF_TOAST_MAX) pushToast(`และการแจ้งเตือนใหม่อีก ${fresh.length - NOTIF_TOAST_MAX} รายการ`, 'กดที่กระดิ่งเพื่อดูทั้งหมด', 'notif', { duration: NOTIF_TOAST_MS, icon: 'ti-bell' });
@@ -631,7 +633,7 @@ export function AppProvider({ children }) {
         dietary_pref: opts?.dietaryPref || '',
         attend_via: opts?.attendVia || '',
       });
-      await Promise.all([refreshEvents(), refreshMyRegistrations(), refreshNotifications()]);
+      await Promise.all([refreshEvents(), refreshMyRegistrations(), refreshNotifications({ silent: true })]);
       pushToast('ลงทะเบียนสำเร็จ', ev.title.slice(0, 32) + '…');
     } catch (err) {
       pushToast('ลงทะเบียนไม่สำเร็จ', err.message, 'warn');

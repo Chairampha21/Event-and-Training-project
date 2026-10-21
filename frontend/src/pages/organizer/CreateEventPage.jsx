@@ -14,6 +14,7 @@ import { REFUND_METHODS } from '../../features/events/components/PaymentBox';
 import { parseMoney, formatBaht } from '../../utils/money';
 
 import Modal, { ModalHead } from '../../components/ui/Modal';
+import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import { withProgress } from '../../utils/alert';
 import CertTemplateUpload from '../../features/certificates/components/CertTemplateUpload';
 import SignatureUpload from '../../features/certificates/components/SignatureUpload';
@@ -445,8 +446,8 @@ export default function CreateEventPage() {
 
   const [publishing, setPublishing] = useState(false);
 
-  async function doPublish() {
-    const payload = {
+  function buildPayload() {
+    return {
       title, desc, cat, org,
       dayMode, attendMode,
       // Keep the stored time only when the day mode is unchanged — a multi-day
@@ -479,7 +480,29 @@ export default function CreateEventPage() {
       eventTimes: dayMode === 'multi' ? eventTimes : [],
       regStartIso, regEndIso,
     };
+  }
 
+  // Leaving with unsaved edits asks first. The baseline is taken at the first
+  // key press or click in the form, once everything loaded has settled in.
+  const baseline = useRef(null);
+  const snapshot = () => JSON.stringify([buildPayload(), evalOn, evalQuestions]);
+  const markBaseline = () => { if (baseline.current === null) baseline.current = snapshot(); };
+  const isDirty = () => baseline.current !== null && !publishing && snapshot() !== baseline.current;
+  const dirtyRef = useRef(isDirty);
+  dirtyRef.current = isDirty;
+  useEffect(() => {
+    const warn = (e) => { if (dirtyRef.current()) { e.preventDefault(); e.returnValue = ''; } };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, []);
+  const [leaveAsk, setLeaveAsk] = useState(false);
+  function handleCancel() {
+    if (isDirty()) setLeaveAsk(true);
+    else navigate(-1);
+  }
+
+  async function doPublish() {
+    const payload = buildPayload();
     setPublishing(true);
     try {
       // One "working…" pop-up from the first step to the last, then the result.
@@ -565,7 +588,7 @@ export default function CreateEventPage() {
       </div>
 
       <div className="wrap ce-layout" style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 28, alignItems: 'flex-start', paddingTop: 30 }}>
-        <div className="ce-main">
+        <div className="ce-main" onKeyDownCapture={markBaseline} onPointerDownCapture={markBaseline}>
           <div className="form-card">
             <h2><span className="fc-num">1</span> โปสเตอร์กิจกรรม <span className="req">*</span></h2>
             <p className="fc-sub">ภาพประกาศสัมพันธ์ที่จะแสดงบนการ์ดกิจกรรมและหน้ารายละเอียด · ต้องอัปโหลดก่อนเผยแพร่</p>
@@ -1067,10 +1090,9 @@ export default function CreateEventPage() {
           </div>
 
           <div className="form-actions">
-            <span className="fa-left"><i className="ti ti-device-floppy" /> ยังไม่ได้บันทึก</span>
+            <span className="fa-left">{isDirty() && <><i className="ti ti-device-floppy" /> มีการแก้ไขที่ยังไม่ได้บันทึก</>}</span>
             <div className="fa-right">
-              <button className="btn btn-outline" onClick={() => navigate(-1)}>ยกเลิก</button>
-              <button className="btn btn-outline" onClick={() => pushToast('บันทึกร่างแล้ว', 'คุณสามารถกลับมาแก้ไขภายหลัง')}><i className="ti ti-device-floppy" /> บันทึกร่าง</button>
+              <button className="btn btn-outline" onClick={handleCancel}>ยกเลิก</button>
               <button className="btn btn-primary" onClick={handlePublish}><i className="ti ti-send" /> {editing ? 'บันทึกการแก้ไข' : 'เผยแพร่กิจกรรม'}</button>
             </div>
           </div>
@@ -1140,6 +1162,20 @@ export default function CreateEventPage() {
         </div>
       </Modal>
 
+      <ConfirmDialog
+        open={leaveAsk}
+        eyebrow="ออกจากหน้านี้"
+        icon="ti-alert-triangle"
+        title="ออกโดยไม่บันทึก?"
+        confirmLabel="ออกโดยไม่บันทึก"
+        confirmIcon="ti-logout"
+        onConfirm={() => { setLeaveAsk(false); baseline.current = null; navigate(-1); }}
+        onCancel={() => setLeaveAsk(false)}
+      >
+        <p style={{ fontSize: 13.5, color: 'var(--c4-70)', lineHeight: 1.7 }}>
+          {editing ? 'การแก้ไขกิจกรรมนี้' : 'ข้อมูลกิจกรรมที่กรอกไว้'}ยังไม่ได้บันทึก และจะหายไปเมื่อออกจากหน้านี้
+        </p>
+      </ConfirmDialog>
     </div>
   );
 }

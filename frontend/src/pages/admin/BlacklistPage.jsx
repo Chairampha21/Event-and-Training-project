@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useEvents } from '../../hooks/useEvents';
 import Modal, { ModalHead } from '../../components/ui/Modal';
+import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import { api } from '../../services/api';
 
 function formatDate(ts) {
@@ -54,8 +55,15 @@ export default function BlacklistPage() {
       )
     : blacklist;
 
-  async function addEntry() {
+  // Suspending someone takes effect at once and tells them, so it is asked first.
+  const [addAsk, setAddAsk] = useState(false);
+  function askAdd() {
     if (!form.name.trim() || !form.reason.trim()) return;
+    setAddAsk(true);
+  }
+
+  async function addEntry() {
+    setAddAsk(false);
     setSaving(true);
     await addToBlacklist(form);
     setSaving(false);
@@ -168,7 +176,7 @@ export default function BlacklistPage() {
         </div>
         <div className="modal-foot">
           <button className="btn btn-outline" onClick={() => setAddOpen(false)}>ยกเลิก</button>
-          <button className="btn btn-dark" onClick={addEntry} disabled={saving}><i className="ti ti-user-off" /> {saving ? 'กำลังบันทึก...' : 'เพิ่มรายชื่อ'}</button>
+          <button className="btn btn-dark" onClick={askAdd} disabled={saving}><i className="ti ti-user-off" /> {saving ? 'กำลังบันทึก...' : 'เพิ่มรายชื่อ'}</button>
         </div>
       </Modal>
 
@@ -180,6 +188,21 @@ export default function BlacklistPage() {
           <button className="btn btn-primary" onClick={() => restore(restoreId)}><i className="ti ti-user-check" /> คืนสิทธิ์</button>
         </div>
       </Modal>
+      <ConfirmDialog
+        open={addAsk}
+        eyebrow="ระงับสิทธิ์การลงทะเบียน"
+        icon="ti-user-off"
+        title="เพิ่มรายชื่อเข้า Blacklist?"
+        confirmLabel="ระงับสิทธิ์"
+        confirmIcon="ti-user-off"
+        onConfirm={addEntry}
+        onCancel={() => setAddAsk(false)}
+      >
+        <p style={{ fontSize: 13.5, color: 'var(--c4-70)', lineHeight: 1.7 }}>
+          <strong style={{ color: 'var(--c4)' }}>{form.name}</strong>{form.sid && <> (รหัสนักศึกษา {form.sid})</>} จะลงทะเบียนกิจกรรมไม่ได้ทันที และได้รับแจ้งเตือนพร้อมเหตุผล<br />
+          เหตุผล: {form.reason}
+        </p>
+      </ConfirmDialog>
     </div>
   );
 }

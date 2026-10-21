@@ -17,6 +17,7 @@ import (
 	"cpsu-etms-backend/internal/middleware"
 	"cpsu-etms-backend/internal/models"
 	"cpsu-etms-backend/internal/notify"
+	"cpsu-etms-backend/internal/reminders"
 )
 
 type EventsHandler struct {
@@ -827,12 +828,11 @@ func (h *EventsHandler) Create(c *gin.Context) {
 
 	event.HasOnlineLink = event.OnlineLink.Valid && event.OnlineLink.String != ""
 	activitylog.Log(h.DB, &claims.UserID, "CREATE", "สร้างกิจกรรม: "+b.Title)
-	// event.Status is already narrowed by the registration window.
-	switch {
-	case event.Status == "open":
+	// event.Status is already narrowed by the registration window. An event
+	// that opens later is announced once, on its opening day (reminders), not
+	// now as well.
+	if event.Status == "open" && reminders.Claim(h.DB, "reg_opened", event.ID, 0) {
 		notify.SendToStudents(h.DB, "ti-sparkles", notify.ToneDark, "กิจกรรมใหม่", event.Title+" เปิดรับสมัครแล้ว", fmt.Sprintf("/home?event=%d", event.ID))
-	case event.Status == "soon" && status == "open" && regStart != "":
-		notify.SendToStudents(h.DB, "ti-sparkles", notify.ToneDark, "กิจกรรมใหม่", event.Title+" · เปิดรับสมัคร "+thaiDate(regStart), fmt.Sprintf("/home?event=%d", event.ID))
 	}
 	c.JSON(http.StatusCreated, gin.H{"event": event})
 }
@@ -1151,8 +1151,8 @@ func (h *EventsHandler) Update(c *gin.Context) {
 	h.notifyEventChanges(existing, event)
 	// Someone other than the organizer (an admin) changed the event: its organizer should know.
 	if existing.OrganizerID.Valid && existing.OrganizerID.Int64 != claims.UserID {
-		notify.Send(h.DB, existing.OrganizerID.Int64, "ti-edit", notify.ToneWarn, "ผู้ดูแลระบบแก้ไขกิจกรรมของคุณ",
-			existing.Title+" · แก้ไขโดย "+claims.Name+" · ตรวจสอบรายละเอียดกิจกรรมอีกครั้ง", "/events")
+		notify.SendGrouped(h.DB, existing.OrganizerID.Int64, "ti-edit", notify.ToneWarn, "ผู้ดูแลระบบแก้ไขกิจกรรมของคุณ",
+			existing.Title+" · แก้ไขโดย "+claims.Name+" · ตรวจสอบรายละเอียดกิจกรรมอีกครั้ง", fmt.Sprintf("/events?manage=%d", existing.ID))
 	}
 	event.HasOnlineLink = event.OnlineLink.Valid && event.OnlineLink.String != ""
 	res := gin.H{"event": event}
@@ -1220,12 +1220,13 @@ func (h *EventsHandler) notifyEventChanges(before, after models.Event) {
 	if !after.IsListed {
 		return
 	}
-	if before.Status == "soon" && after.Status == "open" {
+	// Announced once per event, whichever comes first: this edit or the opening-day reminder.
+	if before.Status == "soon" && after.Status == "open" && reminders.Claim(h.DB, "reg_opened", after.ID, 0) {
 		notify.SendToStudents(h.DB, "ti-sparkles", notify.ToneDark, "กิจกรรมใหม่", after.Title+" เปิดรับสมัครแล้ว", fmt.Sprintf("/home?event=%d", after.ID))
 	}
 	// A new or reworded message to attendees reaches those already registered.
 	if after.AttendeeNote.Valid && after.AttendeeNote != before.AttendeeNote {
-		notify.SendToRegistrants(h.DB, after.ID, "ti-message-2", notify.ToneDark,
+		notify.SendToRegistrantsGrouped(h.DB, after.ID, "ti-message-2", notify.ToneDark,
 			"ข้อความจากผู้จัดกิจกรรม", after.Title+" · "+after.AttendeeNote.String,
 			fmt.Sprintf("/home?event=%d", after.ID), "registered")
 	}
@@ -1234,7 +1235,7 @@ func (h *EventsHandler) notifyEventChanges(before, after models.Event) {
 		strings.Join(before.EventTimes, ",") != strings.Join(after.EventTimes, ",") ||
 		before.TimeRange != after.TimeRange || before.Place != after.Place ||
 		before.AttendMode != after.AttendMode || before.OnlineLink != after.OnlineLink {
-		notify.SendToRegistrants(h.DB, after.ID, "ti-calendar-event", notify.ToneWarn,
+		notify.SendToRegistrantsGrouped(h.DB, after.ID, "ti-calendar-event", notify.ToneWarn,
 			"กิจกรรมมีการเปลี่ยนแปลง", after.Title+" · วัน เวลา หรือสถานที่มีการแก้ไข กรุณาตรวจสอบรายละเอียดอีกครั้ง",
 			fmt.Sprintf("/home?event=%d", after.ID), "registered")
 	}

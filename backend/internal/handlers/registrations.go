@@ -389,7 +389,7 @@ func (h *RegistrationsHandler) CheckIn(c *gin.Context) {
 		return
 	}
 
-	reg, checked, err := h.recordCheckin(c.Param("id"), day, dayNo, days, body.CheckedIn, status, title, studentUserID)
+	reg, checked, err := h.recordCheckin(c.Param("id"), day, dayNo, days, body.CheckedIn, status, title, studentUserID, true)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 		return
@@ -400,18 +400,15 @@ func (h *RegistrationsHandler) CheckIn(c *gin.Context) {
 // recordCheckin writes (or takes back) one day's check-in for a registration
 // and brings the registration's own status in line — used both when the
 // organizer ticks someone off and when an online attendee checks in by link.
-func (h *RegistrationsHandler) recordCheckin(regID, day string, dayNo int, days []string, on bool, status, title string, studentUserID int64) (reg models.Registration, dates []string, err error) {
-	var res sql.Result
+func (h *RegistrationsHandler) recordCheckin(regID, day string, dayNo int, days []string, on bool, status, title string, studentUserID int64, tell bool) (reg models.Registration, dates []string, err error) {
 	if on {
-		res, err = h.DB.Exec(`INSERT IGNORE INTO registration_checkins (registration_id, event_date, checked_in_at) VALUES (?, ?, NOW())`, regID, day)
+		_, err = h.DB.Exec(`INSERT IGNORE INTO registration_checkins (registration_id, event_date, checked_in_at) VALUES (?, ?, NOW())`, regID, day)
 	} else {
-		res, err = h.DB.Exec(`DELETE FROM registration_checkins WHERE registration_id = ? AND event_date = ?`, regID, day)
+		_, err = h.DB.Exec(`DELETE FROM registration_checkins WHERE registration_id = ? AND event_date = ?`, regID, day)
 	}
 	if err != nil {
 		return reg, nil, err
 	}
-	changed, _ := res.RowsAffected()
-
 	checked, err := checkinDates(h.DB, `c.registration_id = ?`, regID)
 	if err != nil {
 		return reg, nil, err
@@ -448,11 +445,13 @@ func (h *RegistrationsHandler) recordCheckin(regID, day string, dayNo int, days 
 			reminders.Reconsider(h.DB, studentUserID, regID) // may lift a suspension the system added
 		}
 	}
-	// Only on the off -> on transition, so re-saving the roster doesn't spam the bell.
-	if on && changed == 1 {
+	// Once per event, when the attendance becomes complete — not for every
+	// day of a multi-day event — and not when the student checked themselves
+	// in (tell=false): they just saw it happen.
+	if tell && newStatus == "attended" && status != "attended" {
 		msg := title + " · ยืนยันการเข้าร่วมกิจกรรมแล้ว"
 		if len(days) > 1 {
-			msg = fmt.Sprintf("%s · ยืนยันการเข้าร่วมวันที่ %d (%s) แล้ว · เข้าร่วม %d จาก %d วัน", title, dayNo, thaiDate(day), attendedDays, len(days))
+			msg = fmt.Sprintf("%s · เข้าร่วมครบทั้ง %d วันแล้ว", title, len(days))
 		}
 		notify.Send(h.DB, studentUserID, "ti-circle-check", notify.ToneAccent, "เช็คอินสำเร็จ", msg, "/my-registrations")
 	}
@@ -519,7 +518,7 @@ func (h *RegistrationsHandler) SelfCheckIn(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 		return
 	}
-	_, dates, err := h.recordCheckin(strconv.FormatInt(regID, 10), body.Date, dayNo, days, true, status, title, claims.UserID)
+	_, dates, err := h.recordCheckin(strconv.FormatInt(regID, 10), body.Date, dayNo, days, true, status, title, claims.UserID, false)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 		return
@@ -623,7 +622,7 @@ func (h *RegistrationsHandler) CancelRegistration(c *gin.Context) {
 
 	activitylog.Log(h.DB, &claims.UserID, "DELETE", "ยกเลิกลงทะเบียน: "+title)
 	if isOwner {
-		notify.Send(h.DB, reg.UserID, "ti-user-x", notify.ToneWarn, "ยกเลิกการลงทะเบียนแล้ว", title, "/home")
+		// The registrant cancelled it themselves and saw it happen: no bell for them.
 		if organizerID.Valid && organizerID.Int64 != claims.UserID {
 			// Grouped per event: where the registrations stand now, and who left last.
 			var left int

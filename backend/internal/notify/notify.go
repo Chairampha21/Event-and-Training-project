@@ -114,6 +114,36 @@ func SendToRegistrants(db execer, eventID any, icon, tone, title, message, link 
 	}
 }
 
+// SendToRegistrantsGrouped is SendToRegistrants with SendGrouped's rule: a
+// registrant who still has an unread notification with the same title and
+// link gets that one rewritten and moved to the top instead of a new one, so
+// an organizer saving several edits in a row makes one line in each bell.
+func SendToRegistrantsGrouped(db execer, eventID any, icon, tone, title, message, link string, statuses ...string) {
+	filter, fargs := "", []any{}
+	if len(statuses) > 0 {
+		filter = ` AND r.status IN (?` + repeat(", ?", len(statuses)-1) + `)`
+		for _, s := range statuses {
+			fargs = append(fargs, s)
+		}
+	}
+	msg, l := truncate(message), link0([]string{link})
+	upd := append([]any{icon, tone, msg, eventID}, fargs...)
+	upd = append(upd, title, l)
+	if _, err := db.Exec(`UPDATE notifications n JOIN registrations r ON r.user_id = n.user_id
+		 SET n.icon = ?, n.tone = ?, n.message = ?, n.created_at = NOW()
+		 WHERE r.event_id = ?`+filter+` AND n.title = ? AND n.link <=> ? AND n.is_read = 0`, upd...); err != nil {
+		log.Printf("notification write failed: %v", err)
+		return
+	}
+	ins := append([]any{icon, tone, title, msg, l, eventID}, fargs...)
+	ins = append(ins, title, l)
+	if _, err := db.Exec(`INSERT INTO notifications (user_id, icon, tone, title, message, link)
+		 SELECT r.user_id, ?, ?, ?, ?, ? FROM registrations r WHERE r.event_id = ?`+filter+`
+		   AND NOT EXISTS (SELECT 1 FROM notifications n WHERE n.user_id = r.user_id AND n.title = ? AND n.link <=> ? AND n.is_read = 0)`, ins...); err != nil {
+		log.Printf("notification write failed: %v", err)
+	}
+}
+
 // payerSQL matches registrations whose money the organizer holds: a slip was
 // sent or the payment confirmed, and it has not been given back yet.
 const payerSQL = `payment_status IN ('submitted', 'paid')`

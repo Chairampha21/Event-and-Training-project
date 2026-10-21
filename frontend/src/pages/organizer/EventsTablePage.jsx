@@ -20,7 +20,8 @@ export default function EventsTablePage() {
   const [manageId, setManageId] = useState(null); // the full action menu, same as on the event card
 
   // A notification links here as /events?applicants=<id>, /events?slips=<id>
-  // (the list window on its slip-checking tab) or /events?budget=<id>:
+  // (the list window on its slip-checking tab), /events?budget=<id> or
+  // /events?manage=<id> (the event's action menu):
   // open that event's window straight away, then drop the parameter so closing
   // the window (or reloading) does not bring it back.
   const [params, setParams] = useSearchParams();
@@ -28,10 +29,12 @@ export default function EventsTablePage() {
     const applicants = Number(params.get('applicants'));
     const slips = Number(params.get('slips'));
     const budget = Number(params.get('budget'));
-    if (!applicants && !slips && !budget) return;
+    const manage = Number(params.get('manage'));
+    if (!applicants && !slips && !budget && !manage) return;
     if (slips) { setApplicantsMode('slips'); setApplicantsId(slips); }
     else if (applicants) { setApplicantsMode('list'); setApplicantsId(applicants); }
-    else setBudgetId(budget);
+    else if (budget) setBudgetId(budget);
+    else setManageId(manage);
     setParams({}, { replace: true });
   }, [params, setParams]);
   const [query, setQuery] = useState('');

@@ -71,8 +71,6 @@ func Run(db *sql.DB) {
 		{"evaluation pending", evaluationPending},
 		{"slip pending", slipPending},
 		{"post-event tasks", postEventTasks},
-		{"actual budget", actualBudget},
-		{"recap poster", recapPoster},
 	} {
 		if err := rule.fn(db); err != nil {
 			log.Printf("reminders: %s: %v", rule.name, err)
@@ -90,6 +88,20 @@ func claim(db *sql.DB, kind string, refID, userID int64, step int) bool {
 	}
 	n, _ := res.RowsAffected()
 	return n == 1
+}
+
+// claimed reports whether the first message of a kind already went out.
+func claimed(db *sql.DB, kind string, refID, userID int64) bool {
+	var n int
+	_ = db.QueryRow(`SELECT COUNT(*) FROM reminder_log WHERE kind = ? AND ref_id = ? AND user_id = ? AND step = 1`, kind, refID, userID).Scan(&n)
+	return n > 0
+}
+
+// Claim is claim for a one-off message sent from outside this package (e.g.
+// an event announced when it is created), so the matching reminder here
+// knows it already went out.
+func Claim(db *sql.DB, kind string, refID, userID int64) bool {
+	return claim(db, kind, refID, userID, 1)
 }
 
 // due decides which reminder of a two-step rule to send now, and claims it:
@@ -185,13 +197,15 @@ const isEventDay = `(CASE WHEN e.event_dates IS NOT NULL AND e.event_dates <> ''
 	THEN FIND_IN_SET(DATE_FORMAT(` + todayTH + `, '%Y-%m-%d'), e.event_dates) > 0
 	ELSE ` + todayTH + ` BETWEEN e.date_start AND ` + lastDay + ` END)`
 
-// eventToday reminds registrants on each day of the event itself — the
-// reminder that matters most for an online event, where the link to join and
-// to check in is what the person needs that day. Not sent to someone already
-// checked in for the day.
+// eventToday reminds registrants on the day of the event — the reminder that
+// matters most for an online attendee, who needs the link to join and to
+// check in, so they get it on every day of the event. Someone coming in
+// person only gets it on the first day, and only if the day-before reminder
+// didn't reach them (they registered on the last day). Not sent to someone
+// already checked in for the day.
 func eventToday(db *sql.DB) error {
 	rows, err := db.Query(`
-		SELECT r.id, r.user_id, e.id, e.title, COALESCE(e.time_range, ''), r.attend_via, COALESCE(e.place, ''),
+		SELECT r.id, r.user_id, e.id, e.title, COALESCE(e.time_range, ''), IF(e.attend_mode = 'online', 'online', COALESCE(r.attend_via, '')), COALESCE(e.place, ''),
 		       DATEDIFF(` + todayTH + `, e.date_start) + 1, DATEDIFF(` + lastDay + `, e.date_start) + 1
 		FROM registrations r JOIN events e ON e.id = r.event_id
 		WHERE e.is_listed = 1 AND r.status = 'registered' AND ` + isEventDay + `
@@ -218,6 +232,9 @@ func eventToday(db *sql.DB) error {
 		return err
 	}
 	for _, it := range items {
+		if it.via != "online" && (it.dayNo > 1 || claimed(db, "event_tomorrow", it.regID, it.userID)) {
+			continue
+		}
 		if it.dayNo < 1 || it.dayNo > 250 || !claim(db, "event_today", it.regID, it.userID, it.dayNo) {
 			continue
 		}
@@ -459,13 +476,20 @@ func registrationClosed(db *sql.DB) error {
 	return nil
 }
 
-// postEventTasks: the event is over but attendance hasn't been confirmed and
-// certificates haven't been opened.
+// postEventTasks gathers what an organizer still has to do after an event
+// into one notification per event — confirm attendance and open the
+// certificates, record the money actually spent (when a budget was set), and
+// upload the news-recap poster (from three days after) — sent when something
+// first shows up and once more a week later if anything is left, instead of a
+// separate pair of reminders for each task.
 func postEventTasks(db *sql.DB) error {
 	rows, err := db.Query(`
-		SELECT e.id, e.organizer_id, e.title, COUNT(r.id), COALESCE(SUM(r.checked_in), 0)
+		SELECT e.id, e.organizer_id, e.title, e.status <> 'done', COUNT(r.id), COALESCE(SUM(r.checked_in), 0),
+		       e.budget_actual IS NULL AND (e.budget_planned IS NOT NULL OR e.budget_other IS NOT NULL),
+		       DATEDIFF(` + todayTH + `, ` + lastDay + `) >= 3 AND NOT EXISTS (
+		         SELECT 1 FROM sar_reports s WHERE s.event_id = e.id AND COALESCE(s.recap_poster_url, '') <> '')
 		FROM events e LEFT JOIN registrations r ON r.event_id = e.id
-		WHERE e.is_listed = 1 AND e.organizer_id IS NOT NULL AND e.status <> 'done'
+		WHERE e.is_listed = 1 AND e.organizer_id IS NOT NULL
 		  AND ` + lastDay + ` < ` + todayTH + ` AND ` + lastDay + ` >= ` + todayTH + ` - INTERVAL 60 DAY
 		GROUP BY e.id`)
 	if err != nil {
@@ -474,11 +498,12 @@ func postEventTasks(db *sql.DB) error {
 	type item struct {
 		id, organizer, regs, in int64
 		title                   string
+		open, budget, poster    bool
 	}
 	var items []item
 	for rows.Next() {
 		var it item
-		if err := rows.Scan(&it.id, &it.organizer, &it.title, &it.regs, &it.in); err != nil {
+		if err := rows.Scan(&it.id, &it.organizer, &it.title, &it.open, &it.regs, &it.in, &it.budget, &it.poster); err != nil {
 			rows.Close()
 			return err
 		}
@@ -489,42 +514,42 @@ func postEventTasks(db *sql.DB) error {
 		return err
 	}
 	for _, it := range items {
+		var tasks []string
+		link := ""
+		if it.open {
+			if it.regs == 0 {
+				tasks = append(tasks, "ไม่มีผู้ลงทะเบียน · เปิดสิทธิ์เกียรติบัตรเพื่อปิดงาน")
+			} else {
+				tasks = append(tasks, fmt.Sprintf("เช็คอินแล้ว %d จาก %d คน · ตรวจรายชื่อแล้วเปิดสิทธิ์เกียรติบัตรเพื่อปิดงาน", it.in, it.regs))
+			}
+			link = fmt.Sprintf("/events?applicants=%d", it.id)
+		}
+		if it.budget {
+			tasks = append(tasks, "กรอกงบประมาณที่ใช้จริง")
+			if link == "" {
+				link = fmt.Sprintf("/events?budget=%d", it.id)
+			}
+		}
+		if it.poster {
+			tasks = append(tasks, "อัปโหลดโปสเตอร์สรุปข่าว")
+			if link == "" {
+				link = "/admin/sar"
+			}
+		}
+		if len(tasks) == 0 {
+			continue
+		}
 		step := due(db, "post_event", it.id, it.organizer)
 		if step == 0 {
 			continue
 		}
-		msg := fmt.Sprintf("%s · เช็คอินแล้ว %d จาก %d คน · ตรวจรายชื่อผู้เข้าร่วมให้ครบ แล้วเปิดสิทธิ์เกียรติบัตรเพื่อปิดงาน", it.title, it.in, it.regs)
-		if it.regs == 0 {
-			msg = it.title + " · ไม่มีผู้ลงทะเบียน · เปิดสิทธิ์เกียรติบัตรเพื่อปิดงาน"
+		title := "งานค้างหลังจบกิจกรรม"
+		if len(tasks) > 1 {
+			title = fmt.Sprintf("งานค้างหลังจบกิจกรรม %d รายการ", len(tasks))
 		}
-		notify.Send(db, it.organizer, "ti-checklist", notify.ToneWarn, "งานค้างหลังจบกิจกรรม"+again(step), msg, fmt.Sprintf("/events?applicants=%d", it.id))
+		notify.Send(db, it.organizer, "ti-checklist", notify.ToneWarn, title+again(step), it.title+" · "+strings.Join(tasks, " · "), link)
 	}
 	return nil
-}
-
-// actualBudget: a budget was set, the event is over, the amount spent is missing.
-func actualBudget(db *sql.DB) error {
-	return stepped(db, "actual_budget", `
-		SELECT e.id, e.organizer_id, e.title, CONCAT('/events?budget=', e.id)
-		FROM events e
-		WHERE e.is_listed = 1 AND e.organizer_id IS NOT NULL AND e.budget_actual IS NULL
-		  AND (e.budget_planned IS NOT NULL OR e.budget_other IS NOT NULL)
-		  AND `+lastDay+` < `+todayTH+` AND `+lastDay+` >= `+todayTH+` - INTERVAL 60 DAY`,
-		func(userID int64, title, link string, step int) {
-			notify.Send(db, userID, "ti-coin", notify.ToneWarn, "ยังไม่ได้กรอกงบประมาณที่ใช้จริง"+again(step), title+" · บันทึกงบประมาณที่ใช้จริงเพื่อให้แดชบอร์ดงบประมาณครบถ้วน", link)
-		})
-}
-
-// recapPoster: three days after the event, the news-recap poster isn't uploaded.
-func recapPoster(db *sql.DB) error {
-	return stepped(db, "recap_poster", `
-		SELECT e.id, e.organizer_id, e.title, '/admin/sar'
-		FROM events e LEFT JOIN sar_reports s ON s.event_id = e.id AND COALESCE(s.recap_poster_url, '') <> ''
-		WHERE e.is_listed = 1 AND e.organizer_id IS NOT NULL AND s.id IS NULL
-		  AND DATEDIFF(`+todayTH+`, `+lastDay+`) >= 3 AND `+lastDay+` >= `+todayTH+` - INTERVAL 60 DAY`,
-		func(userID int64, title, link string, step int) {
-			notify.Send(db, userID, "ti-photo-up", notify.ToneDark, "ยังไม่ได้อัปโหลดโปสเตอร์สรุปข่าว"+again(step), title+" · อัปโหลดได้ที่หน้าคลังโปสเตอร์กิจกรรม", link)
-		})
 }
 
 // ------------------------------------------------------- absences / blacklist
@@ -671,7 +696,8 @@ func Reconsider(db *sql.DB, userID, regID int64) {
 // ------------------------------------------------------------------- admins
 
 // AdminDigest gives an admin one summary of what is waiting across the whole
-// system — at most once a day, and only when there is something to report —
+// system — at most once a day, only when there is something to report, and
+// only when it changed (or a week has passed) —
 // so they don't have to go looking through the activity log.
 func AdminDigest(db *sql.DB, adminID int64) {
 	var openEnded, noActual, slips int
@@ -698,11 +724,20 @@ func AdminDigest(db *sql.DB, adminID int64) {
 	if len(parts) == 0 {
 		return
 	}
+	// The same list as the last digest isn't news: it is repeated only after
+	// a week, so a backlog nobody clears doesn't fill the bell day after day.
+	msg := strings.Join(parts, " · ")
+	var same int
+	_ = db.QueryRow(`SELECT COUNT(*) FROM notifications WHERE user_id = ? AND title LIKE 'สรุปเรื่องค้าง%' AND message = ?
+		AND created_at > NOW() - INTERVAL ? DAY`, adminID, msg, repeatAfterDays).Scan(&same)
+	if same > 0 {
+		return
+	}
 	var day int64
 	if err := db.QueryRow(`SELECT DATE_FORMAT(` + todayTH + `, '%Y%m%d')`).Scan(&day); err != nil {
 		return
 	}
 	if claim(db, "admin_digest", day, adminID, 1) {
-		notify.Send(db, adminID, "ti-list-check", notify.ToneDark, fmt.Sprintf("สรุปเรื่องค้าง %d เรื่อง", openEnded+noActual+slips), strings.Join(parts, " · "), "/events")
+		notify.Send(db, adminID, "ti-list-check", notify.ToneDark, fmt.Sprintf("สรุปเรื่องค้าง %d เรื่อง", openEnded+noActual+slips), msg, "/events")
 	}
 }

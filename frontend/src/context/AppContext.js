@@ -286,7 +286,7 @@ function timeAgo(iso) {
 }
 
 function adaptNotif(n) {
-  return { id: n.id, icon: n.icon || 'ti-bell', tone: n.tone || 'accent', title: n.title, msg: n.message || '', unread: !n.is_read, time: timeAgo(n.created_at), link: n.link || '' };
+  return { id: n.id, icon: n.icon || 'ti-bell', tone: n.tone || 'accent', title: n.title, msg: n.message || '', unread: !n.is_read, time: timeAgo(n.created_at), link: n.link || '', items: Array.isArray(n.items) ? n.items : [] };
 }
 
 // How often the bell re-checks the server while the tab is visible.

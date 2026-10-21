@@ -2,6 +2,7 @@ package notify
 
 import (
 	"database/sql"
+	"encoding/json"
 	"log"
 )
 
@@ -140,6 +141,66 @@ func SendToRegistrantsGrouped(db execer, eventID any, icon, tone, title, message
 	if _, err := db.Exec(`INSERT INTO notifications (user_id, icon, tone, title, message, link)
 		 SELECT r.user_id, ?, ?, ?, ?, ? FROM registrations r WHERE r.event_id = ?`+filter+`
 		   AND NOT EXISTS (SELECT 1 FROM notifications n WHERE n.user_id = r.user_id AND n.title = ? AND n.link <=> ? AND n.is_read = 0)`, ins...); err != nil {
+		log.Printf("notification write failed: %v", err)
+	}
+}
+
+// Item is one line inside a summary notification — one thing still to do —
+// that opens its own place when pressed, so a summary of six things leads to
+// each of the six instead of to one page to search through.
+type Item struct {
+	Label string `json:"label"`
+	Link  string `json:"link"`
+}
+
+// maxItems keeps a summary readable (and within the column); the bell says
+// how many more there are.
+const maxItems = 20
+
+func itemsJSON(items []Item) any {
+	if len(items) == 0 {
+		return nil
+	}
+	if len(items) > maxItems {
+		items = items[:maxItems]
+	}
+	b, err := json.Marshal(items)
+	if err != nil {
+		return nil
+	}
+	return string(b)
+}
+
+// SendWithItems is Send for a summary that lists its parts (see Item).
+func SendWithItems(db execer, userID int64, icon, tone, title, message, link string, items []Item) {
+	_, err := db.Exec(
+		`INSERT INTO notifications (user_id, icon, tone, title, message, link, items) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		userID, icon, tone, title, truncate(message), link0([]string{link}), itemsJSON(items),
+	)
+	if err != nil {
+		log.Printf("notification write failed: %v", err)
+	}
+}
+
+// ReplaceSummary is SendWithItems for a summary that is rewritten each time
+// (e.g. the admin's "what is waiting" digest): the user's unread one whose
+// title starts with titlePrefix is replaced and moved to the top, so they
+// never have yesterday's and today's lists stacked up — only the current one.
+func ReplaceSummary(db querier, userID int64, titlePrefix, icon, tone, title, message, link string, items []Item) {
+	var id int64
+	err := db.QueryRow(
+		`SELECT id FROM notifications WHERE user_id = ? AND title LIKE CONCAT(?, '%') AND is_read = 0 ORDER BY id DESC LIMIT 1`,
+		userID, titlePrefix,
+	).Scan(&id)
+	if err == sql.ErrNoRows {
+		SendWithItems(db, userID, icon, tone, title, message, link, items)
+		return
+	}
+	if err == nil {
+		_, err = db.Exec(`UPDATE notifications SET icon = ?, tone = ?, title = ?, message = ?, link = ?, items = ?, created_at = NOW() WHERE id = ?`,
+			icon, tone, title, truncate(message), link0([]string{link}), itemsJSON(items), id)
+	}
+	if err != nil {
 		log.Printf("notification write failed: %v", err)
 	}
 }

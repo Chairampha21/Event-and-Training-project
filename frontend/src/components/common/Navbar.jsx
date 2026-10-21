@@ -49,11 +49,15 @@ const NAV_TABS = {
 };
 NAV_TABS.teacher = NAV_TABS.student;
 
+// Lines of a summary notification shown before "ดูอีก n รายการ".
+const NOTIF_ITEMS_SHOWN = 4;
+
 export default function Navbar() {
   const { session, notifs, refreshNotifications, markAllRead, markNotifRead, clearAllNotif, logout } = useEvents();
   const [notifOpen, setNotifOpen] = useState(false);
   const [logoutAsk, setLogoutAsk] = useState(false);
   const [clearAsk, setClearAsk] = useState(false);
+  const [expanded, setExpanded] = useState(() => new Set()); // summaries showing all their lines
   const wrapRef = useRef(null);
   const navigate = useNavigate();
 
@@ -76,6 +80,13 @@ export default function Navbar() {
     if (!n.link) return;
     setNotifOpen(false);
     navigate(n.link);
+  }
+
+  // A line of a summary: it opens its own place, and reading one counts as reading the summary.
+  function openItem(n, it) {
+    if (n.unread) markNotifRead(n.id);
+    setNotifOpen(false);
+    navigate(it.link);
   }
 
   function handleLogout() {
@@ -111,17 +122,41 @@ export default function Navbar() {
                     <i className="ti ti-bell-off" style={{ fontSize: 26, display: 'block', marginBottom: 8, opacity: .5 }} />
                     ไม่มีการแจ้งเตือน
                   </div>
-                ) : notifs.map((n) => (
-                  <div key={n.id} className={`notif-item${n.unread ? ' unread' : ''}${n.link ? ' has-link' : ''}`} onClick={() => openNotif(n)}>
-                    <div className={`notif-icon ${n.tone || ''}`}><i className={`ti ${n.icon}`} /></div>
-                    <div className="notif-body">
-                      <div className="notif-title">{n.title}</div>
-                      <div className="notif-msg">{n.msg}</div>
-                      <div className="notif-time"><i className="ti ti-clock" /> {n.time}</div>
+                ) : notifs.map((n) => {
+                  // A summary leads through its lines, not through the whole row.
+                  const sub = n.items.length > 0;
+                  const open = expanded.has(n.id);
+                  const shown = open ? n.items : n.items.slice(0, NOTIF_ITEMS_SHOWN);
+                  return (
+                    <div key={n.id} className={`notif-item${n.unread ? ' unread' : ''}${n.link && !sub ? ' has-link' : ''}`} onClick={sub ? undefined : () => openNotif(n)}>
+                      <div className={`notif-icon ${n.tone || ''}`}><i className={`ti ${n.icon}`} /></div>
+                      <div className="notif-body">
+                        <div className="notif-title">{n.title}</div>
+                        <div className="notif-msg">{n.msg}</div>
+                        {sub && (
+                          <ul className="notif-sub">
+                            {shown.map((it, i) => (
+                              <li key={i}>
+                                <button type="button" title={it.label} onClick={() => openItem(n, it)}>
+                                  <span>{it.label}</span><i className="ti ti-chevron-right" />
+                                </button>
+                              </li>
+                            ))}
+                            {n.items.length > NOTIF_ITEMS_SHOWN && (
+                              <li>
+                                <button type="button" className="notif-sub-more" onClick={() => setExpanded((s) => { const x = new Set(s); if (open) x.delete(n.id); else x.add(n.id); return x; })}>
+                                  {open ? 'แสดงน้อยลง' : `ดูอีก ${n.items.length - NOTIF_ITEMS_SHOWN} รายการ`}
+                                </button>
+                              </li>
+                            )}
+                          </ul>
+                        )}
+                        <div className="notif-time"><i className="ti ti-clock" /> {n.time}</div>
+                      </div>
+                      {n.link && !sub && <i className="ti ti-chevron-right notif-go" />}
                     </div>
-                    {n.link && <i className="ti ti-chevron-right notif-go" />}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
               <div className="notif-foot" onClick={() => setNotifOpen(false)}>ปิด</div>
             </div>

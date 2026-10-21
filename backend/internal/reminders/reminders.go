@@ -516,25 +516,26 @@ func postEventTasks(db *sql.DB) error {
 	for _, it := range items {
 		var tasks []string
 		link := ""
+		var items []notify.Item
+		add := func(label, l string) {
+			tasks = append(tasks, label)
+			items = append(items, notify.Item{Label: label, Link: l})
+			if link == "" {
+				link = l
+			}
+		}
 		if it.open {
 			if it.regs == 0 {
-				tasks = append(tasks, "ไม่มีผู้ลงทะเบียน · เปิดสิทธิ์เกียรติบัตรเพื่อปิดงาน")
+				add("ไม่มีผู้ลงทะเบียน · เปิดสิทธิ์เกียรติบัตรเพื่อปิดงาน", fmt.Sprintf("/events?applicants=%d", it.id))
 			} else {
-				tasks = append(tasks, fmt.Sprintf("เช็คอินแล้ว %d จาก %d คน · ตรวจรายชื่อแล้วเปิดสิทธิ์เกียรติบัตรเพื่อปิดงาน", it.in, it.regs))
+				add(fmt.Sprintf("เช็คอินแล้ว %d จาก %d คน · ตรวจรายชื่อแล้วเปิดสิทธิ์เกียรติบัตร", it.in, it.regs), fmt.Sprintf("/events?applicants=%d", it.id))
 			}
-			link = fmt.Sprintf("/events?applicants=%d", it.id)
 		}
 		if it.budget {
-			tasks = append(tasks, "กรอกงบประมาณที่ใช้จริง")
-			if link == "" {
-				link = fmt.Sprintf("/events?budget=%d", it.id)
-			}
+			add("กรอกงบประมาณที่ใช้จริง", fmt.Sprintf("/events?budget=%d", it.id))
 		}
 		if it.poster {
-			tasks = append(tasks, "อัปโหลดโปสเตอร์สรุปข่าว")
-			if link == "" {
-				link = "/admin/sar"
-			}
+			add("อัปโหลดโปสเตอร์สรุปข่าว", "/admin/sar")
 		}
 		if len(tasks) == 0 {
 			continue
@@ -547,7 +548,12 @@ func postEventTasks(db *sql.DB) error {
 		if len(tasks) > 1 {
 			title = fmt.Sprintf("งานค้างหลังจบกิจกรรม %d รายการ", len(tasks))
 		}
-		notify.Send(db, it.organizer, "ti-checklist", notify.ToneWarn, title+again(step), it.title+" · "+strings.Join(tasks, " · "), link)
+		msg := it.title
+		if len(items) == 1 {
+			msg += " · " + tasks[0] // a single task reads fine in the message itself
+			items = nil
+		}
+		notify.SendWithItems(db, it.organizer, "ti-checklist", notify.ToneWarn, title+again(step), msg, link, items)
 	}
 	return nil
 }
@@ -700,33 +706,62 @@ func Reconsider(db *sql.DB, userID, regID int64) {
 // only when it changed (or a week has passed) —
 // so they don't have to go looking through the activity log.
 func AdminDigest(db *sql.DB, adminID int64) {
-	var openEnded, noActual, slips int
-	err := db.QueryRow(`
-		SELECT
-		  (SELECT COUNT(*) FROM events e WHERE e.is_listed = 1 AND e.status <> 'done' AND `+lastDay+` < `+todayTH+`),
-		  (SELECT COUNT(*) FROM events e WHERE e.is_listed = 1 AND e.budget_actual IS NULL AND (e.budget_planned IS NOT NULL OR e.budget_other IS NOT NULL) AND `+lastDay+` < `+todayTH+`),
-		  (SELECT COUNT(*) FROM registrations r JOIN events e ON e.id = r.event_id WHERE e.is_listed = 1 AND r.payment_status = 'submitted')`,
-	).Scan(&openEnded, &noActual, &slips)
-	if err != nil {
-		log.Printf("reminders: admin digest: %v", err)
-		return
+	// One line per event, each opening the place where that event's task is done.
+	type part struct {
+		query string
+		label func(title string, n int) string
+		link  string
 	}
-	var parts []string
-	if openEnded > 0 {
-		parts = append(parts, fmt.Sprintf("กิจกรรมที่จบแล้วแต่ยังไม่ปิดงาน %d กิจกรรม", openEnded))
+	parts := []part{
+		{`SELECT e.id, e.title, 1 FROM events e WHERE e.is_listed = 1 AND e.status <> 'done' AND ` + lastDay + ` < ` + todayTH + ` ORDER BY ` + lastDay,
+			func(t string, _ int) string { return "ปิดงาน · " + t }, "/events?applicants=%d"},
+		{`SELECT e.id, e.title, 1 FROM events e WHERE e.is_listed = 1 AND e.budget_actual IS NULL AND (e.budget_planned IS NOT NULL OR e.budget_other IS NOT NULL) AND ` + lastDay + ` < ` + todayTH + ` ORDER BY ` + lastDay,
+			func(t string, _ int) string {
+				return "กรอกงบประมาณที่ใช้จริง · " + t
+			}, "/events?budget=%d"},
+		{`SELECT e.id, e.title, COUNT(*) FROM registrations r JOIN events e ON e.id = r.event_id WHERE e.is_listed = 1 AND r.payment_status = 'submitted' GROUP BY e.id ORDER BY MIN(r.updated_at)`,
+			func(t string, n int) string {
+				return fmt.Sprintf("ตรวจสลิป %d รายการ · %s", n, t)
+			}, "/events?slips=%d"},
 	}
-	if noActual > 0 {
-		parts = append(parts, fmt.Sprintf("ยังไม่กรอกงบประมาณที่ใช้จริง %d กิจกรรม", noActual))
+	var counts [3]int
+	var items []notify.Item
+	for i, pt := range parts {
+		rows, err := db.Query(pt.query)
+		if err != nil {
+			log.Printf("reminders: admin digest: %v", err)
+			return
+		}
+		for rows.Next() {
+			var id int64
+			var title string
+			var n int
+			if err := rows.Scan(&id, &title, &n); err != nil {
+				rows.Close()
+				log.Printf("reminders: admin digest: %v", err)
+				return
+			}
+			counts[i] += n
+			items = append(items, notify.Item{Label: pt.label(title, n), Link: fmt.Sprintf(pt.link, id)})
+		}
+		rows.Close()
 	}
-	if slips > 0 {
-		parts = append(parts, fmt.Sprintf("สลิปรอตรวจ %d รายการ", slips))
+	var summary []string
+	if counts[0] > 0 {
+		summary = append(summary, fmt.Sprintf("ยังไม่ปิดงาน %d กิจกรรม", counts[0]))
 	}
-	if len(parts) == 0 {
+	if counts[1] > 0 {
+		summary = append(summary, fmt.Sprintf("ยังไม่กรอกงบประมาณที่ใช้จริง %d กิจกรรม", counts[1]))
+	}
+	if counts[2] > 0 {
+		summary = append(summary, fmt.Sprintf("สลิปรอตรวจ %d รายการ", counts[2]))
+	}
+	if len(summary) == 0 {
 		return
 	}
 	// The same list as the last digest isn't news: it is repeated only after
 	// a week, so a backlog nobody clears doesn't fill the bell day after day.
-	msg := strings.Join(parts, " · ")
+	msg := strings.Join(summary, " · ")
 	var same int
 	_ = db.QueryRow(`SELECT COUNT(*) FROM notifications WHERE user_id = ? AND title LIKE 'สรุปเรื่องค้าง%' AND message = ?
 		AND created_at > NOW() - INTERVAL ? DAY`, adminID, msg, repeatAfterDays).Scan(&same)
@@ -738,6 +773,7 @@ func AdminDigest(db *sql.DB, adminID int64) {
 		return
 	}
 	if claim(db, "admin_digest", day, adminID, 1) {
-		notify.Send(db, adminID, "ti-list-check", notify.ToneDark, fmt.Sprintf("สรุปเรื่องค้าง %d เรื่อง", openEnded+noActual+slips), msg, "/events")
+		notify.ReplaceSummary(db, adminID, "สรุปเรื่องค้าง", "ti-list-check", notify.ToneDark,
+			fmt.Sprintf("สรุปเรื่องค้าง %d เรื่อง", counts[0]+counts[1]+counts[2]), msg, "/events", items)
 	}
 }

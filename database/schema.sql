@@ -407,6 +407,9 @@ CREATE TABLE notifications (
   -- what it talks about can be seen or finished ('/events?applicants=12'). NULL = nowhere.
   -- Existing databases: ALTER TABLE notifications ADD COLUMN link VARCHAR(200) NULL AFTER message;
   link        VARCHAR(200)  NULL,
+  -- a summary's parts, each opening its own place: [{"label": "...", "link": "/events?budget=12"}]
+  -- Existing databases: database/migrations/2026-10-notification-items.sql
+  items       JSON          NULL,
   is_read     TINYINT(1)    NOT NULL DEFAULT 0,
   created_at  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_notif_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE

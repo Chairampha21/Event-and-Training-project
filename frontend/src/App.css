@@ -254,3 +254,9 @@
 .lf-field select:focus{border-color:var(--c2);box-shadow:0 0 0 3px var(--c2-08);background:var(--white)}
 .diet-need a{color:inherit;font-weight:700;text-decoration:underline}
 .sd-custom{margin-top:8px}
+.notif-sub{list-style:none;margin:8px 0 2px;padding:0;display:flex;flex-direction:column;gap:4px}
+.notif-panel .notif-sub button{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 10px;border:1px solid var(--c2-10);border-radius:8px;background:var(--white,#fff);font:inherit;font-size:12.5px;color:var(--c4);text-align:left;cursor:pointer;transition:.12s}
+.notif-panel .notif-sub button span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.notif-panel .notif-sub button i{flex:none;font-size:14px;color:var(--c4-60)}
+.notif-panel .notif-sub button:hover{border-color:var(--c2-30,var(--c2));background:var(--c2-04)}
+.notif-panel .notif-sub .notif-sub-more{justify-content:center;border-style:dashed;color:var(--c2);font-weight:600}

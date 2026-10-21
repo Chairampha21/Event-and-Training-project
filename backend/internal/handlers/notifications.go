@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"database/sql"
+	"encoding/json"
 	"net/http"
 	"time"
 
@@ -25,7 +26,8 @@ type notification struct {
 	Tone      models.NullString `json:"tone"`
 	Title     string            `json:"title"`
 	Message   models.NullString `json:"message"`
-	Link      models.NullString `json:"link"` // in-app path to open when pressed
+	Link      models.NullString `json:"link"`            // in-app path to open when pressed
+	Items     json.RawMessage   `json:"items,omitempty"` // a summary's parts: [{label, link}]
 	IsRead    bool              `json:"is_read"`
 	CreatedAt string            `json:"created_at"`
 }
@@ -33,7 +35,7 @@ type notification struct {
 func (h *NotificationsHandler) List(c *gin.Context) {
 	claims, _ := middleware.CurrentUser(c)
 	rows, err := h.DB.Query(
-		`SELECT id, icon, tone, title, message, link, is_read, UNIX_TIMESTAMP(created_at) FROM notifications
+		`SELECT id, icon, tone, title, message, link, items, is_read, UNIX_TIMESTAMP(created_at) FROM notifications
 		 WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 50`, claims.UserID,
 	)
 	if err != nil {
@@ -47,9 +49,13 @@ func (h *NotificationsHandler) List(c *gin.Context) {
 		var n notification
 		var isRead int
 		var createdUnix int64
-		if err := rows.Scan(&n.ID, &n.Icon, &n.Tone, &n.Title, &n.Message, &n.Link, &isRead, &createdUnix); err != nil {
+		var items sql.NullString
+		if err := rows.Scan(&n.ID, &n.Icon, &n.Tone, &n.Title, &n.Message, &n.Link, &items, &isRead, &createdUnix); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 			return
+		}
+		if items.Valid {
+			n.Items = json.RawMessage(items.String)
 		}
 		n.IsRead = isRead == 1
 		// Sent as an explicit UTC instant (not the DB's zone-less string) so the

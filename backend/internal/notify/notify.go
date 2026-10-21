@@ -182,14 +182,15 @@ func SendWithItems(db execer, userID int64, icon, tone, title, message, link str
 	}
 }
 
-// ReplaceSummary is SendWithItems for a summary that is rewritten each time
-// (e.g. the admin's "what is waiting" digest): the user's unread one whose
-// title starts with titlePrefix is replaced and moved to the top, so they
-// never have yesterday's and today's lists stacked up — only the current one.
+// ReplaceSummary is SendWithItems for a summary that describes how things
+// stand now (e.g. the admin's "what is waiting" digest): the user keeps only
+// the latest one. Their previous one with a title starting with titlePrefix
+// is rewritten, marked unread and moved to the top, and any older ones are
+// removed, so yesterday's and today's lists never stack up.
 func ReplaceSummary(db querier, userID int64, titlePrefix, icon, tone, title, message, link string, items []Item) {
 	var id int64
 	err := db.QueryRow(
-		`SELECT id FROM notifications WHERE user_id = ? AND title LIKE CONCAT(?, '%') AND is_read = 0 ORDER BY id DESC LIMIT 1`,
+		`SELECT id FROM notifications WHERE user_id = ? AND title LIKE CONCAT(?, '%') ORDER BY created_at DESC, id DESC LIMIT 1`,
 		userID, titlePrefix,
 	).Scan(&id)
 	if err == sql.ErrNoRows {
@@ -197,8 +198,11 @@ func ReplaceSummary(db querier, userID int64, titlePrefix, icon, tone, title, me
 		return
 	}
 	if err == nil {
-		_, err = db.Exec(`UPDATE notifications SET icon = ?, tone = ?, title = ?, message = ?, link = ?, items = ?, created_at = NOW() WHERE id = ?`,
+		_, err = db.Exec(`UPDATE notifications SET icon = ?, tone = ?, title = ?, message = ?, link = ?, items = ?, is_read = 0, created_at = NOW() WHERE id = ?`,
 			icon, tone, title, truncate(message), link0([]string{link}), itemsJSON(items), id)
+	}
+	if err == nil {
+		_, err = db.Exec(`DELETE FROM notifications WHERE user_id = ? AND title LIKE CONCAT(?, '%') AND id <> ?`, userID, titlePrefix, id)
 	}
 	if err != nil {
 		log.Printf("notification write failed: %v", err)

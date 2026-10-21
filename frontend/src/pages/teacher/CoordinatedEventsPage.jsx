@@ -10,6 +10,8 @@ import { fiscalYearOf } from '../../utils/dateFormat';
  * Read-only; "ดูรายงาน" opens the event's full report. Teachers who also join
  * events are left out of the counts, as in the organizer's reports.
  */
+const NOWRAP = { whiteSpace: 'nowrap' }; // numbers and their headings stay on one line
+
 export default function CoordinatedEventsPage() {
   const { session, events, rosters, getEvaluationResults } = useEvents();
   const navigate = useNavigate();
@@ -21,7 +23,11 @@ export default function CoordinatedEventsPage() {
 
   const years = useMemo(() => [...new Set(mine.map((e) => fiscalYearOf(e.dateStart)).filter(Boolean))].sort((a, b) => b - a), [mine]);
   const [fy, setFy] = useState('');
-  const shown = fy ? mine.filter((e) => fiscalYearOf(e.dateStart) === Number(fy)) : mine;
+  const [query, setQuery] = useState('');
+  const inYear = fy ? mine.filter((e) => fiscalYearOf(e.dateStart) === Number(fy)) : mine;
+  const q = query.trim().toLowerCase();
+  // The cards sum up the year; the search only narrows the list.
+  const shown = q ? inYear.filter((e) => e.title.toLowerCase().includes(q)) : inYear;
 
   // Evaluation score per finished event: the average of the questions answered.
   const [scores, setScores] = useState({});
@@ -43,7 +49,7 @@ export default function CoordinatedEventsPage() {
     const came = roster.filter((p) => p.in).length;
     return { regs: rosters[e.id] ? roster.length : e.reg, came, loaded: !!rosters[e.id] };
   };
-  const totals = shown.reduce((t, e) => {
+  const totals = inYear.reduce((t, e) => {
     const s = stats(e);
     t.regs += s.regs;
     if (e.status === 'done') { t.doneRegs += s.regs; t.came += s.came; }
@@ -76,7 +82,7 @@ export default function CoordinatedEventsPage() {
               <div className="stat-card">
                 <div className="sc-top"><div className="sc-icon"><i className="ti ti-calendar-event" /></div></div>
                 <div className="sc-label">กิจกรรมที่รับผิดชอบ</div>
-                <div className="sc-value">{shown.length} <small>กิจกรรม</small></div>
+                <div className="sc-value">{inYear.length} <small>กิจกรรม</small></div>
               </div>
               <div className="stat-card">
                 <div className="sc-top"><div className="sc-icon"><i className="ti ti-user-plus" /></div></div>
@@ -99,6 +105,7 @@ export default function CoordinatedEventsPage() {
               <div className="table-toolbar">
                 <h3><i className="ti ti-table" /> รายการกิจกรรม</h3>
                 <div className="tools">
+                  <div className="input-search"><i className="ti ti-search" /><input type="text" placeholder="ค้นหาชื่อกิจกรรม..." value={query} onChange={(e) => setQuery(e.target.value)} aria-label="ค้นหาชื่อกิจกรรม" /></div>
                   <label className="facet-select"><i className="ti ti-calendar" />
                     <select value={fy} onChange={(e) => setFy(e.target.value)} aria-label="ปีงบประมาณ">
                       <option value="">ทุกปีงบประมาณ</option>
@@ -114,15 +121,15 @@ export default function CoordinatedEventsPage() {
                       <th>ชื่อกิจกรรม</th>
                       <th>วันที่</th>
                       <th>สถานะ</th>
-                      <th className="right">ผู้สมัคร</th>
-                      <th className="right">เข้าร่วม</th>
-                      <th className="right">ประเมิน</th>
+                      <th className="right" style={NOWRAP}>ผู้สมัคร</th>
+                      <th className="right" style={NOWRAP}>เข้าร่วม</th>
+                      <th className="right" style={NOWRAP}>ประเมิน</th>
                       <th className="right"> </th>
                     </tr>
                   </thead>
                   <tbody>
                     {shown.length === 0 && (
-                      <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--c4-60)', padding: 24 }}>ไม่มีกิจกรรมในปีงบประมาณนี้</td></tr>
+                      <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--c4-60)', padding: 24 }}>{q ? `ไม่พบกิจกรรมที่ชื่อมี "${query.trim()}"` : 'ไม่มีกิจกรรมในปีงบประมาณนี้'}</td></tr>
                     )}
                     {shown.map((e) => {
                       const sm = STATUS_META[e.status];
@@ -138,9 +145,9 @@ export default function CoordinatedEventsPage() {
                           </td>
                           <td><div className="ev-title" style={{ fontSize: 13.5 }}>{e.date}</div><div className="ev-sub">{e.time}</div></td>
                           <td><span className={`pill-status ${sm.pill}`}><i className="ti ti-circle-filled" /> {sm.label}</span></td>
-                          <td className="right">{s.regs}<span className="ev-sub"> / {e.cap}</span></td>
-                          <td className="right">{done && s.loaded ? <>{s.came} <span className="ev-sub">({s.regs ? Math.round((s.came / s.regs) * 100) : 0}%)</span></> : <span className="ev-sub">–</span>}</td>
-                          <td className="right">{scores[e.id] != null ? <><i className="ti ti-star-filled" style={{ color: '#d6a419' }} /> {scores[e.id].toFixed(1)}</> : <span className="ev-sub">–</span>}</td>
+                          <td className="right" style={NOWRAP}>{s.regs}<span className="ev-sub"> / {e.cap}</span></td>
+                          <td className="right" style={NOWRAP}>{done && s.loaded ? <>{s.came} <span className="ev-sub">({s.regs ? Math.round((s.came / s.regs) * 100) : 0}%)</span></> : <span className="ev-sub">–</span>}</td>
+                          <td className="right" style={NOWRAP}>{scores[e.id] != null ? <><i className="ti ti-star-filled" style={{ color: '#d6a419' }} /> {scores[e.id].toFixed(1)}</> : <span className="ev-sub">–</span>}</td>
                           <td className="right">
                             <button type="button" className="btn btn-outline" onClick={() => navigate(`/report?event=${e.id}`)}>
                               <i className="ti ti-report-analytics" /> ดูรายงาน

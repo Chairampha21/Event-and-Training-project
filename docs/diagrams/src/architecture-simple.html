@@ -6,10 +6,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-  :root{--red:#e53935;--red-bg:#fff4f3;--green:#2e7d32;--green-bg:#f3faf3;--purple:#7b3fbf;--purple-bg:#f7f2fd;--blue:#2f6fd6;--frame:#a9c3ef;--navy:#1d2a6b}
+  :root{--red:#e53935;--red-bg:#fff4f3;--green:#2e7d32;--green-bg:#f3faf3;--purple:#7b3fbf;--purple-bg:#f7f2fd;--orange:#e46a00;--orange-bg:#fff6ee;--blue:#2f6fd6;--frame:#a9c3ef;--navy:#1d2a6b}
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:#fff;font-family:'Noto Sans Thai',Loma,sans-serif;color:#1f2340}
-  #canvas{position:relative;width:1760px;height:990px;background:#fff;overflow:hidden}
+  #canvas{position:relative;width:1760px;height:1260px;background:#fff;overflow:hidden}
   .wires{position:absolute;inset:0;pointer-events:none;overflow:visible}
   .abs{position:absolute}
   .tag{display:inline-block;padding:7px 22px;border-radius:7px;background:var(--navy);color:#fff;font-weight:700;font-size:19px}
@@ -20,6 +20,7 @@
   .actor b{font-size:18px;line-height:1.4;white-space:nowrap}
   .actor.stu{border-color:var(--red)} .actor.stu .ic{background:var(--red)} .actor.stu b{color:var(--red)}
   .actor.org{border-color:var(--green)} .actor.org .ic{background:var(--green)} .actor.org b{color:var(--green)}
+  .actor.tea{border-color:var(--orange)} .actor.tea .ic{background:var(--orange)} .actor.tea b{color:var(--orange)}
   .actor.adm{border-color:var(--purple)} .actor.adm .ic{background:var(--purple)} .actor.adm b{color:var(--purple)}
 
   .lock{border:2px solid var(--frame);border-radius:14px;background:#f4f8ff;display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px 8px;text-align:center}
@@ -41,6 +42,7 @@
   .panel li::before{content:'';position:absolute;left:3px;top:13px;width:7px;height:7px;border-radius:50%;background:#1f2340}
   .panel.stu{border-color:var(--red);background:var(--red-bg)} .panel.stu h3{color:var(--red)}
   .panel.org{border-color:var(--green);background:var(--green-bg)} .panel.org h3{color:var(--green)}
+  .panel.tea{border-color:var(--orange);background:var(--orange-bg)} .panel.tea h3{color:var(--orange)}
   .panel.adm{border-color:var(--purple);background:var(--purple-bg)} .panel.adm h3{color:var(--purple)}
 
   .api{border:2px solid var(--frame);border-radius:12px;background:#fff;display:flex;align-items:center;padding:0 24px;font-size:18px;font-weight:600;color:var(--navy)}
@@ -57,6 +59,10 @@
   <div id="a-stu" class="abs actor stu" style="left:20px;top:105px;width:250px;height:160px">
     <div class="ic"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12 3 1 8l11 5 9-4.1V15h2V8L12 3Zm-6 9.3V16c0 1.7 2.7 3 6 3s6-1.3 6-3v-3.7l-6 2.7-6-2.7Z"/></svg></div>
     <b>นักศึกษา /<br>ผู้เข้าร่วมกิจกรรม</b>
+  </div>
+  <div id="a-tea" class="abs actor tea" style="left:20px;top:0;width:250px;height:140px">
+    <div class="ic"><svg viewBox="0 0 24 24" fill="#fff"><path d="M3 4h18v11H3V4Zm2 2v7h14V6H5Zm4 11h6l1 3H8l1-3Zm1.5-9.5 4.5 2.5-4.5 2.5v-5Z"/></svg></div>
+    <b>อาจารย์</b>
   </div>
   <div id="a-org" class="abs actor org" style="left:20px;top:400px;width:250px;height:150px">
     <div class="ic"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9Zm-2 2-1.2 7h6.4L14 14l-2 2-2-2Zm-1.4-.3C5.4 14.4 3 16.3 3 18.5V21h4.6l1-7.3Zm6.8 0 1 7.3H21v-2.5c0-2.2-2.4-4.1-5.6-4.8Z"/></svg></div>
@@ -83,6 +89,13 @@
     <div class="body">
       <svg class="pic" viewBox="0 0 48 48" fill="none" stroke="#e53935" stroke-width="2.6" stroke-linejoin="round"><rect x="5" y="8" width="38" height="25" rx="2.5"/><path d="M17 41h14M24 33v8"/><circle cx="16" cy="18" r="3.5" fill="#e53935"/><path d="M10.5 28c.8-3.2 3-4.6 5.5-4.6s4.7 1.4 5.5 4.6" /><path d="M26 16h11M26 21h11M26 26h7"/></svg>
       <ul><li>ลงทะเบียนเข้าร่วมกิจกรรม</li><li>ตรวจสอบสถานะการสมัคร</li><li>ดูประวัติการเข้าร่วมกิจกรรม</li><li>ดาวน์โหลดเกียรติบัตร</li></ul>
+    </div>
+  </div>
+  <div id="p-tea" class="abs panel tea" style="left:494px;top:0;width:422px">
+    <h3>สำหรับอาจารย์ผู้ประสานงาน</h3>
+    <div class="body">
+      <svg class="pic" viewBox="0 0 48 48" fill="none" stroke="#e46a00" stroke-width="2.6" stroke-linejoin="round"><rect x="5" y="7" width="38" height="27" rx="2.5"/><path d="M17 41h14M24 34v7"/><path d="M11 28V20M18 28V15M25 28v-9M32 28V13" stroke-linecap="round" stroke-width="3.4"/></svg>
+      <ul><li>เข้าร่วมกิจกรรมเหมือนผู้เข้าร่วม</li><li>ดูกิจกรรมที่รับผิดชอบ</li><li>ดูรายชื่อและการเข้าร่วม</li><li>ดูผลประเมินและงบประมาณ</li></ul>
     </div>
   </div>
   <div id="p-org" class="abs panel org" style="left:494px;top:385px;width:422px">
@@ -126,25 +139,43 @@
     `<div class="abs api" id="api${i}" style="left:1040px;top:${92 + i * 88}px;width:410px;height:64px"><span>API</span>${t}</div>`));
 
   window.drawWires = function () {
+    // Stack the role panels, put each person beside their panel, the gate
+    // between them and the APIs down the backend, then size the frames.
+    const el = (id) => document.getElementById(id);
+    let top = 88;
+    ['p-stu', 'p-tea', 'p-org', 'p-adm'].forEach((id) => { el(id).style.top = top + 'px'; top += el(id).offsetHeight + 24; });
+    const bottom = top - 24;
+    const centre = (id) => el(id).offsetTop + el(id).offsetHeight / 2;
+    [['a-stu', 'p-stu'], ['a-tea', 'p-tea'], ['a-org', 'p-org'], ['a-adm', 'p-adm']].forEach(([a, p]) => {
+      el(a).style.top = (centre(p) - el(a).offsetHeight / 2) + 'px';
+    });
+    el('lock').style.top = ((centre('p-tea') + centre('p-org')) / 2 - el('lock').offsetHeight / 2) + 'px';
+    ['fe', 'be'].forEach((id) => { el(id).style.height = (bottom + 24 - 10) + 'px'; });
+    const step = (bottom - 92 - 70) / 9;
+    APIS.forEach((_, i) => { el('api' + i).style.top = (92 + i * step) + 'px'; el('api' + i).style.height = '70px'; });
+    el('db').style.top = (10 + el('be').offsetHeight / 2 - el('db').offsetHeight / 2) + 'px';
+    document.getElementById('canvas').style.height = (bottom + 40) + 'px';
+
     const R = '#e53935', G = '#2e7d32', P = '#7b3fbf', B = '#2f6fd6';
     // people go through the sign-in gate
-    connect('a-stu', 'lock', { from: 'right', to: 'top', route: 'hv', color: R, width: 2.4, end: 'arrow', toShift: -24 });
-    // the organizer's path runs straight across at the height of its card
-    const mid = (id) => { const r = document.getElementById(id).getBoundingClientRect(); return r.top + r.height / 2; };
-    const y = mid('a-org');
-    connect('a-org', 'lock', { from: 'right', to: 'left', color: G, width: 2.4, end: 'arrow', toShift: y - mid('lock') });
-    connect('a-adm', 'lock', { from: 'right', to: 'bottom', route: 'hv', color: P, width: 2.4, end: 'arrow', toShift: -24 });
+    const O = '#e46a00';
+    connect('a-stu', 'lock', { from: 'right', to: 'top', route: 'hv', color: R, width: 2.4, end: 'arrow', toShift: 8 });
+    connect('a-tea', 'lock', { from: 'right', to: 'top', route: 'hv', color: O, width: 2.4, end: 'arrow', toShift: -22 });
+    connect('a-org', 'lock', { from: 'right', to: 'bottom', route: 'hv', color: G, width: 2.4, end: 'arrow', toShift: -22 });
+    connect('a-adm', 'lock', { from: 'right', to: 'bottom', route: 'hv', color: P, width: 2.4, end: 'arrow', toShift: 8 });
     // then into the part of the site for their role
-    connect('lock', 'p-stu', { from: 'top', to: 'left', route: 'vh', color: B, width: 2, dash: '7 6', end: 'arrow', fromShift: 24 });
-    connect('lock', 'p-org', { from: 'right', to: 'left', color: B, width: 2, dash: '7 6', end: 'arrow', fromShift: y - mid('lock'), toShift: y - mid('p-org') });
-    connect('lock', 'p-adm', { from: 'bottom', to: 'left', route: 'vh', color: B, width: 2, dash: '7 6', end: 'arrow', fromShift: 24 });
+    connect('lock', 'p-stu', { from: 'top', to: 'left', route: 'vh', color: B, width: 2, dash: '7 6', end: 'arrow', fromShift: 44, toShift: 40 });
+    connect('lock', 'p-tea', { from: 'top', to: 'left', route: 'vh', color: B, width: 2, dash: '7 6', end: 'arrow', fromShift: 32, toShift: 40 });
+    connect('lock', 'p-org', { from: 'bottom', to: 'left', route: 'vh', color: B, width: 2, dash: '7 6', end: 'arrow', fromShift: 32, toShift: -40 });
+    connect('lock', 'p-adm', { from: 'bottom', to: 'left', route: 'vh', color: B, width: 2, dash: '7 6', end: 'arrow', fromShift: 44, toShift: -40 });
     // each role's page calls the APIs it needs
     const uses = [
-      ['p-stu', R, 960, [0, 3, 4, 6, 8]],
-      ['p-org', G, 978, [0, 2, 4, 5, 7, 9]],
+      ['p-stu', R, 954, [0, 3, 4, 6, 8]],
+      ['p-tea', O, 968, [0, 3, 4, 6, 8, 9]],
+      ['p-org', G, 982, [0, 2, 4, 5, 7, 9]],
       ['p-adm', P, 996, [0, 1, 2, 9]],
     ];
-    const shift = { 'p-stu': -12, 'p-org': 0, 'p-adm': 12 };
+    const shift = { 'p-stu': -18, 'p-tea': -6, 'p-org': 6, 'p-adm': 18 };
     uses.forEach(([panel, color, midX, apis]) => apis.forEach((i) =>
       // one trunk per role, branching off to each API
       connect(panel, 'api' + i, { from: 'right', to: 'left', route: 'elbow', midX, color, width: 2, end: 'arrow', toShift: shift[panel] })));

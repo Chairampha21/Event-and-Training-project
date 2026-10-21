@@ -8,10 +8,10 @@
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:#fff;font-family:'Noto Sans Thai',Loma,sans-serif;color:#111}
-  #canvas{position:relative;width:1720px;height:1160px;background:#fff;overflow:hidden}
+  #canvas{position:relative;width:1720px;height:1450px;background:#fff;overflow:hidden}
   .wires{position:absolute;inset:0;pointer-events:none;overflow:visible}
   .wire-label{font:500 15px 'Noto Sans Thai',sans-serif}
-  .boundary{position:absolute;left:230px;top:14px;width:1300px;height:1132px;border:2px solid #111}
+  .boundary{position:absolute;left:230px;top:14px;width:1300px;height:1422px;border:2px solid #111}
   .boundary h2{position:absolute;left:0;right:0;top:10px;text-align:center;font-size:31px;font-weight:700}
   .uc{position:absolute;display:flex;align-items:center;justify-content:center;text-align:center;border:1.6px solid #111;border-radius:50%;
       background:#fff;font-size:19.5px;font-weight:600;line-height:1.35;padding:0 14px;color:#000}
@@ -39,6 +39,7 @@
 
   actor('A-org', 20, 250, 'ผู้จัดกิจกรรม');
   actor('A-stu', 20, 830, 'นักศึกษา/ผู้เข้าร่วมกิจกรรม');
+  actor('A-tea', 20, 1230, 'อาจารย์');
   actor('A-adm', 1530, 560, 'ผู้ดูแลระบบ');
 
   const ORG = ['สร้างกิจกรรม', 'จัดการกิจกรรม', 'ตรวจสอบรายชื่อผู้สมัคร', 'เช็คชื่อผู้เข้าร่วมกิจกรรม', 'ออกเกียรติบัตร', 'ดูรายงานสรุปกิจกรรม'];
@@ -50,6 +51,10 @@
 
   const STU = ['ดูรายการกิจกรรม', 'ลงทะเบียนเข้าร่วมกิจกรรม', 'ตรวจสอบสถานะการสมัคร', 'รับการแจ้งเตือน', 'ดาวน์โหลดเกียรติบัตร'];
   STU.forEach((t, i) => uc('s' + i, 470, 756 + i * 88, t));
+  // A teacher takes part like any participant, and follows the events they coordinate.
+  const TEA = ['ดูกิจกรรมที่รับผิดชอบ', 'ดูรายงานกิจกรรม'];
+  TEA.forEach((t, i) => uc('t' + i, 470, 1260 + i * 100, t));
+  uc('t-result', 1010, 1360, 'ดูผลประเมินและงบประมาณ', 320);
   uc('s-detail', 1010, 844, 'ดูรายละเอียดกิจกรรม', 300);
   uc('s-history', 1010, 1108, 'ดูประวัติการเข้าร่วมกิจกรรม', 330);
 
@@ -70,9 +75,12 @@
       if (!document.getElementById(id)) C.insertAdjacentHTML('beforeend', `<i id="${id}" style="position:absolute;left:${pt[0]}px;top:${pt[1]}px;width:0;height:0"></i>`);
       connect(id, target, { ...line, from: 'left', ...o });
     };
-    const oh = hand('A-org', 'right'), sh = hand('A-stu', 'right'), ah = hand('A-adm', 'left');
+    const oh = hand('A-org', 'right'), sh = hand('A-stu', 'right'), ah = hand('A-adm', 'left'), th = hand('A-tea', 'right');
     ORG.forEach((_, i) => fromPoint(oh, 'o' + i, { to: 'left' }));
     STU.forEach((_, i) => fromPoint(sh, 's' + i, { to: 'left' }));
+    TEA.forEach((_, i) => fromPoint(th, 't' + i, { to: 'left' }));
+    // generalization: the teacher is also a participant
+    connect(document.querySelector('#A-tea .fig svg'), 'A-stu', { color: '#111', width: 1.4, from: 'top', to: 'bottom', end: 'hollow' });
     ADM.forEach((_, i) => fromPoint(ah, 'a' + i, { to: 'right' }));
     // every role signs in: the organizer's line passes under its last use case, the participant's over its first
     const o5 = box('o5'), s0 = box('s0'), L = box('login');
@@ -85,6 +93,7 @@
     inc('o1', 'o-open', { labelDx: 34, labelDy: -24 }); // a sloping line: lift the label clear of it
     inc('s1', 's-detail');
     inc('s4', 's-history');
+    inc('t1', 't-result');
   };
 </script>
 </body>

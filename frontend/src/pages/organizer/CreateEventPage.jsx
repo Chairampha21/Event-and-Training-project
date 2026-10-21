@@ -669,14 +669,7 @@ export default function CreateEventPage() {
                   <select value={org} onChange={(e) => setOrg(e.target.value)}>
                     <option value="" disabled hidden>เลือกอาจารย์ผู้ประสานงาน</option>
                     {org && !COORDINATOR_OPTIONS.includes(org) && !teacherNames.includes(org) && <option value={org}>{org}</option>}
-                    {teacherNames.length > 0 && (
-                      <optgroup label="อาจารย์ที่มีบัญชีในระบบ · ดูรายงานกิจกรรมนี้ได้">
-                        {teacherNames.map((name) => <option key={name} value={name}>{name}</option>)}
-                      </optgroup>
-                    )}
-                    <optgroup label={teacherNames.length > 0 ? 'รายชื่ออื่น' : 'อาจารย์ผู้ประสานงาน'}>
-                      {otherCoordinators.map((name) => <option key={name} value={name}>{name}</option>)}
-                    </optgroup>
+                    {[...teacherNames, ...otherCoordinators].map((name) => <option key={name} value={name}>{name}</option>)}
                   </select>
                 </div>
               </div>

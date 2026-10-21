@@ -81,6 +81,7 @@ export default function CertTemplateUpload({ value, onChange, layout, onLayoutCh
   const [error, setError] = useState('');
   const [dims, setDims] = useState(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [fallbackOpen, setFallbackOpen] = useState(false); // the built-in / department template, full screen
   // Only images can sit behind the overlaid text (an older event may still hold a PDF).
   // A stored template arrives as a link to the image; only an old PDF upload can't be drawn on.
   const isImage = !!value?.dataUrl && !value.dataUrl.startsWith('data:application/pdf');
@@ -199,7 +200,11 @@ export default function CertTemplateUpload({ value, onChange, layout, onLayoutCh
             <div className="ctu-empty-opt"><i className="ti ti-info-circle" /> {asDefault ? 'หากไม่อัปโหลด ระบบใช้แม่แบบที่ติดมากับระบบ (ด้านล่าง)' : 'ไม่บังคับ · หากไม่อัปโหลด ระบบใช้แม่แบบหลักของภาควิชา (ด้านล่าง)'}</div>
           </div>
           <div className="ctu-default">
-            <img src={fallbackUrl} alt="แม่แบบเกียรติบัตรหลักของภาควิชา" />
+            <button type="button" className="ctu-default-thumb" onClick={() => setFallbackOpen(true)} aria-label="ดูแม่แบบเต็มจอ">
+              <img src={fallbackUrl} alt="แม่แบบเกียรติบัตรหลักของภาควิชา" />
+              <span className="ctu-default-zoom"><i className="ti ti-zoom-in" /> ดูภาพเต็ม</span>
+            </button>
+            <ImageViewer open={fallbackOpen} src={fallbackUrl} title={asDefault ? 'แม่แบบที่ติดมากับระบบ' : 'แม่แบบหลักของภาควิชา'} onClose={() => setFallbackOpen(false)} />
             <div>
               <strong>{asDefault ? 'แม่แบบที่ติดมากับระบบ' : 'แม่แบบหลักของภาควิชา'}</strong>
               <span>{asDefault

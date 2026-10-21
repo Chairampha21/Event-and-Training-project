@@ -44,7 +44,7 @@ func (h *CertDefaultsHandler) Get(c *gin.Context) {
 	var templateID sql.NullInt64
 	var updated sql.NullInt64
 	err := h.DB.QueryRow(
-		`SELECT d.template_id, t.template_url, t.layout, d.signer_name, d.signer_title, d.signature_url,
+		`SELECT d.template_id, t.template_url, IF(d.template_id IS NULL, d.layout, t.layout), d.signer_name, d.signer_title, d.signature_url,
 		        UNIX_TIMESTAMP(d.updated_at), u.name
 		 FROM cert_defaults d
 		 LEFT JOIN cert_templates t ON t.id = d.template_id
@@ -147,6 +147,12 @@ func (h *CertDefaultsHandler) Update(c *gin.Context) {
 		return
 	}
 	var templateID any // NULL = built-in
+	// The text placement on the built-in template lives on the defaults row
+	// (an uploaded template keeps its own with its version).
+	var builtInLayout any
+	if b.TemplateURL == "" {
+		builtInLayout = nullIfEmpty(b.Layout)
+	}
 	switch {
 	case b.TemplateURL == "":
 	case curID.Valid && curURL.String == b.TemplateURL && curLayout.String == b.Layout:
@@ -163,11 +169,11 @@ func (h *CertDefaultsHandler) Update(c *gin.Context) {
 	}
 
 	if _, err := tx.Exec(
-		`INSERT INTO cert_defaults (id, template_id, signer_name, signer_title, signature_url, updated_by)
-		 VALUES (1, ?, ?, ?, ?, ?)
-		 ON DUPLICATE KEY UPDATE template_id = VALUES(template_id), signer_name = VALUES(signer_name),
+		`INSERT INTO cert_defaults (id, template_id, layout, signer_name, signer_title, signature_url, updated_by)
+		 VALUES (1, ?, ?, ?, ?, ?, ?)
+		 ON DUPLICATE KEY UPDATE template_id = VALUES(template_id), layout = VALUES(layout), signer_name = VALUES(signer_name),
 		   signer_title = VALUES(signer_title), signature_url = VALUES(signature_url), updated_by = VALUES(updated_by)`,
-		templateID, name, title, nullIfEmpty(b.SignatureURL), claims.UserID,
+		templateID, builtInLayout, name, title, nullIfEmpty(b.SignatureURL), claims.UserID,
 	); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 		return

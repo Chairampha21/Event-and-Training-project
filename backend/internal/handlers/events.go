@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"reflect"
 	"regexp"
 	"sort"
 	"strings"
@@ -873,6 +874,12 @@ func (h *EventsHandler) Update(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": msg})
 		return
 	}
+	// The text placement on the certificate is settled once they are opened:
+	// it would move the text on certificates already handed out.
+	if v, present := raw["cert_layout"]; present && existing.CycleStage >= 4 && !sameLayout(v, existing.CertLayout.String) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ปรับข้อความบนเกียรติบัตรไม่ได้ เพราะเปิดสิทธิ์เกียรติบัตรให้ผู้เข้าร่วมไปแล้ว"})
+		return
+	}
 	// Whether the event gives certificates is settled once they are opened (or
 	// any was issued): switching it then would leave some attendees with a
 	// certificate and the rest unable to get one for the same event.
@@ -1232,6 +1239,20 @@ func (h *EventsHandler) notifyCertOpen(ev models.Event) int {
 		return 0
 	}
 	return len(targets)
+}
+
+// sameLayout compares a layout from a request with the stored one by content,
+// so re-saving an unchanged layout is never mistaken for a change.
+func sameLayout(v any, stored string) bool {
+	s, _ := v.(string)
+	if s == "" || stored == "" {
+		return s == stored
+	}
+	var a, b map[string]any
+	if json.Unmarshal([]byte(s), &a) != nil || json.Unmarshal([]byte(stored), &b) != nil {
+		return s == stored
+	}
+	return reflect.DeepEqual(a, b)
 }
 
 // tellCoordinator lets a teacher know they have just been named the

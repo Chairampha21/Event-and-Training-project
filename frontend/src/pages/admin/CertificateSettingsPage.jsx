@@ -25,7 +25,7 @@ export default function CertificateSettingsPage() {
   useEffect(() => {
     if (!certDefaults) return;
     setTemplate(certDefaults.template);
-    setLayout(certDefaults.layout);
+    setLayout(certDefaults.layoutSet ? certDefaults.layout : null);
     setSignerName(certDefaults.signer.name);
     setSignerTitle(certDefaults.signer.title);
     setSignature(certDefaults.signer.signature);

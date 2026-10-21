@@ -296,7 +296,7 @@ export default function CreateEventPage() {
     setSignature(certDefaults.signer.signature);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [certDefaults]);
-  const [certLayout, setCertLayout] = useState(editing?.certLayout || null); // how the text is fitted to the template; null = defaults
+  const [certLayout, setCertLayout] = useState(editing?.certLayoutSet ? editing.certLayout : null); // how the text is fitted to the template; null = defaults
 
   const evalKeyRef = useRef(0);
   const newEvalKey = () => `eq-${evalKeyRef.current++}`;
@@ -485,7 +485,7 @@ export default function CreateEventPage() {
       certTemplate,
       pretest: { enabled: pretestOn, link: pretestLink },
       signer: { name: signerName, title: signerTitle, signature: signatureOn ? signature : null },
-      certLayout: certTemplate ? certLayout : null,
+      certLayout, // also on the main template: null = as the department set it
       dateIso: (dayMode === 'multi' ? eventDates[0] : dateIso) || undefined,
       dateEndIso: dayMode === 'multi' ? eventDates[eventDates.length - 1] : undefined,
       eventDates: dayMode === 'multi' ? eventDates : [],
@@ -992,6 +992,7 @@ export default function CreateEventPage() {
               value={certTemplate}
               onChange={setCertTemplate}
               layout={certLayout}
+              locked={certSettled}
               onLayoutChange={setCertLayout}
               signerName={signerName}
               signerTitle={signerTitle}

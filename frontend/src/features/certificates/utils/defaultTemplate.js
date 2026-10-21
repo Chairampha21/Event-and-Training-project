@@ -18,7 +18,7 @@ export const DEFAULT_TEMPLATE_LAYOUT = { ...DEFAULT_LAYOUT, titleTop: 19, bodyTo
 export function mainTemplate(defaults) {
   return defaults?.template?.dataUrl
     ? { url: defaults.template.dataUrl, layout: defaults.layout, own: false }
-    : { url: DEFAULT_CERT_TEMPLATE_URL, layout: DEFAULT_TEMPLATE_LAYOUT, own: false };
+    : { url: DEFAULT_CERT_TEMPLATE_URL, layout: defaults?.layoutSet ? defaults.layout : DEFAULT_TEMPLATE_LAYOUT, own: false };
 }
 
 /**
@@ -29,9 +29,15 @@ export function mainTemplate(defaults) {
  */
 export function certTemplateFor(ev, defaults, cert, cache) {
   if (ev?.certTemplate?.dataUrl) return { url: ev.certTemplate.dataUrl, layout: ev.certLayout, own: true };
+  const main = mainOnIssue(defaults, cert, cache);
+  // An event on the main template may fit the text its own way.
+  return ev?.certLayoutSet ? { ...main, layout: ev.certLayout } : main;
+}
+
+function mainOnIssue(defaults, cert, cache) {
   if (!cert) return mainTemplate(defaults);
   const id = cert.default_template_id ?? null;
-  if (id === null) return mainTemplate(null); // issued on the built-in template
+  if (id === null) return mainTemplate(defaults?.template ? null : defaults); // issued on the built-in template
   if (cache?.[id]) return { ...cache[id], own: false };
   return mainTemplate(defaults?.templateId === id ? defaults : null); // still loading
 }

@@ -70,14 +70,17 @@ function checkTemplate(dims) {
  */
 // `asDefault`: used on the admin's settings page to set the department's main
 // template itself, so "without an upload" means the template built into the site.
-export default function CertTemplateUpload({ value, onChange, layout, onLayoutChange, signerName, signerTitle, signature, eventTitle, certDate, category, asDefault }) {
+// `layout` null on the main template = the text sits as the department placed
+// it there; adjusting it gives this event (or, on the settings page, the
+// built-in template) its own placement. `locked` hides the adjusting once
+// certificates are out.
+export default function CertTemplateUpload({ value, onChange, layout, onLayoutChange, signerName, signerTitle, signature, eventTitle, certDate, category, asDefault, locked }) {
   const { certDefaults } = useEvents();
   const fallbackUrl = asDefault ? DEFAULT_CERT_TEMPLATE_URL : mainTemplate(certDefaults).url;
   // How the text sits on that template, so its preview matches the real certificate.
   const fallbackLay = normalizeLayout(asDefault ? DEFAULT_TEMPLATE_LAYOUT : mainTemplate(certDefaults).layout);
   const adminSet = !asDefault && !!certDefaults?.template;
-  const lay = normalizeLayout(layout);
-  const setLayout = (patch) => onLayoutChange({ ...lay, ...patch });
+
   const inputRef = useRef(null);
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState('');
@@ -87,17 +90,21 @@ export default function CertTemplateUpload({ value, onChange, layout, onLayoutCh
   // Only images can sit behind the overlaid text (an older event may still hold a PDF).
   // A stored template arrives as a link to the image; only an old PDF upload can't be drawn on.
   const isImage = !!value?.dataUrl && !value.dataUrl.startsWith('data:application/pdf');
+  // On the main template, no layout of its own = the main template's placement.
+  const lay = isImage || layout ? normalizeLayout(layout) : fallbackLay;
+  const setLayout = (patch) => onLayoutChange({ ...lay, ...patch });
+  const customised = isImage ? !isDefaultLayout(layout) : !!layout;
+  const resetLayout = () => onLayoutChange(isImage ? { ...DEFAULT_LAYOUT } : null);
   // The adjust panel starts open only when this event already has a custom layout.
-  const [layoutOpen, setLayoutOpen] = useState(() => !isDefaultLayout(layout));
+  const [layoutOpen, setLayoutOpen] = useState(() => customised);
   // The template's own accent colours, offered as swatches so text can match the design.
   const [palette, setPalette] = useState([]);
   useEffect(() => {
     let alive = true;
-    if (isImage) analyzeTemplate(value.dataUrl).then((r) => { if (alive) setPalette(r.palette); });
-    else setPalette([]);
+    analyzeTemplate(isImage ? value.dataUrl : fallbackUrl).then((r) => { if (alive) setPalette(r.palette); }).catch(() => {});
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value?.dataUrl]);
+  }, [isImage ? value.dataUrl : fallbackUrl]);
   const activePreset = COLOR_PRESETS.find((p) => Object.keys(p.colors).every((k) => p.colors[k] === lay[k]))?.key;
 
   const checks = checkTemplate(dims);
@@ -121,7 +128,7 @@ export default function CertTemplateUpload({ value, onChange, layout, onLayoutCh
   }
 
   const pick = () => inputRef.current?.click();
-  const remove = () => { onChange(null); onLayoutChange({ ...DEFAULT_LAYOUT }); setDims(null); setError(''); };
+  const remove = () => { onChange(null); onLayoutChange(null); setDims(null); setError(''); };
 
   const dropHandlers = {
     onDragOver: (e) => { e.preventDefault(); setDragOver(true); },
@@ -141,9 +148,9 @@ export default function CertTemplateUpload({ value, onChange, layout, onLayoutCh
 
   // The same preview on the main template, for an event that uses it.
   const fallbackCanvas = (
-    <div className="cert-canvas" style={layoutVars(fallbackLay)}>
+    <div className="cert-canvas" style={layoutVars(lay)}>
       <img src={fallbackUrl} alt="แม่แบบเกียรติบัตรหลักของภาควิชา" />
-      {fallbackLay.showOrg && <CertOrgOverlay />}
+      {lay.showOrg && <CertOrgOverlay />}
       <CertBodyOverlay name={SAMPLE_NAME} eventTitle={eventTitle || 'ชื่อกิจกรรม'} certDate={certDate || 'วันที่จัดกิจกรรม'} category={category} />
       <CertSignerOverlay name={signerName} title={signerTitle} signature={signature} />
     </div>
@@ -235,9 +242,12 @@ export default function CertTemplateUpload({ value, onChange, layout, onLayoutCh
 
       {error && <div className="ctu-error" role="alert"><i className="ti ti-alert-circle" /> {error}</div>}
 
-      {isImage && (
+      {locked && (
+        <div className="ctu-tip"><i className="ti ti-lock" /> เปิดสิทธิ์เกียรติบัตรแล้ว · ปรับสี ขนาด และตำแหน่งข้อความไม่ได้</div>
+      )}
+      {!locked && (isImage || !value) && (
         <details className="ctu-layout" open={layoutOpen} onToggle={(e) => setLayoutOpen(e.currentTarget.open)}>
-          <summary><i className="ti ti-adjustments-horizontal" /> ปรับสี ขนาด และตำแหน่งข้อความให้เข้ากับ template <span>ค่าเริ่มต้นอ้างอิงจากเกียรติบัตรของภาควิชา · ดูผลในตัวอย่างด้านบนทันที</span><i className="ti ti-chevron-down ctu-layout-caret" /></summary>
+          <summary><i className="ti ti-adjustments-horizontal" /> {isImage ? 'ปรับสี ขนาด และตำแหน่งข้อความให้เข้ากับ template' : 'ปรับสี ขนาด และตำแหน่งข้อความบนแม่แบบ'} <span>{isImage ? 'ค่าเริ่มต้นอ้างอิงจากเกียรติบัตรของภาควิชา' : asDefault ? 'ใช้กับทุกกิจกรรมที่ใช้แม่แบบนี้' : 'เฉพาะกิจกรรมนี้ · ไม่กระทบกิจกรรมอื่น'} · ดูผลในตัวอย่างด้านบนทันที</span><i className="ti ti-chevron-down ctu-layout-caret" /></summary>
           <div className="ctu-layout-body">
             <div className="ctu-group">
               <div className="ctu-group-title"><i className="ti ti-palette" /> สีตัวอักษร</div>
@@ -297,7 +307,7 @@ export default function CertTemplateUpload({ value, onChange, layout, onLayoutCh
                 ))}
               </div>
             </div>
-            <button type="button" className="btn btn-outline ctu-layout-reset" onClick={() => onLayoutChange({ ...DEFAULT_LAYOUT })} disabled={isDefaultLayout(lay)}><i className="ti ti-restore" /> คืนค่าตามแบบของภาควิชา</button>
+            <button type="button" className="btn btn-outline ctu-layout-reset" onClick={resetLayout} disabled={!customised}><i className="ti ti-restore" /> {isImage || !asDefault ? 'คืนค่าตามแบบของภาควิชา' : 'คืนค่าเริ่มต้นของแม่แบบ'}</button>
           </div>
         </details>
       )}

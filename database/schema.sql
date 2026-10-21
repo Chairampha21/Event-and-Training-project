@@ -466,6 +466,7 @@ CREATE TABLE cert_templates (
 CREATE TABLE cert_defaults (
   id              TINYINT UNSIGNED PRIMARY KEY DEFAULT 1,
   template_id     INT UNSIGNED  NULL,                      -- NULL = the template built into the site
+  layout          TEXT          NULL,                      -- text placement on the built-in template (JSON); an uploaded one keeps its own
   signer_name     VARCHAR(190)  NULL,
   signer_title    VARCHAR(190)  NULL,
   signature_url   MEDIUMTEXT    NULL,

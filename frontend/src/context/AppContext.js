@@ -108,6 +108,7 @@ function adaptEvent(be) {
     certTemplate: be.cert_template_url ? { name: 'template', type: guessMime(be.cert_template_url), dataUrl: assetUrl(be.cert_template_url) } : null,
     signer: { name: be.cert_signer_name || '', title: be.cert_signer_title || '', signature: assetUrl(be.cert_signature_url) },
     certLayout: normalizeLayout(be.cert_layout), // how the text is fitted to this event's template
+    certLayoutSet: !!be.cert_layout, // false = the main template's own placement
     pretest: { enabled: !!be.pretest_enabled, link: be.pretest_link || '' },
     dayMode: be.day_mode,
     attendMode: be.attend_mode,
@@ -251,6 +252,7 @@ function adaptCertDefaults(d) {
     templateId: d?.template_id ?? null, // version of the main template; null = built-in
     template: d?.template_url ? { name: 'template', type: guessMime(d.template_url), dataUrl: d.template_url } : null, // null = built-in
     layout: normalizeLayout(d?.layout),
+    layoutSet: !!d?.layout, // false on the built-in template = its own placement
     signer: { name: d?.signer_name || FALLBACK_SIGNER.name, title: d?.signer_title || FALLBACK_SIGNER.title, signature: d?.signature_url || null },
     updatedAt: d?.updated_at || '',
     updatedBy: d?.updated_by || '',

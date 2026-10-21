@@ -9,7 +9,7 @@
   :root{--ink:#1f2340;--muted:#5b6078}
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:#fff;font-family:'Noto Sans Thai',Loma,sans-serif;color:var(--ink)}
-  #canvas{position:relative;width:2240px;height:1400px;background:#fff;overflow:hidden}
+  #canvas{position:relative;width:2060px;height:1400px;background:#fff;overflow:hidden}
   .wires{position:absolute;inset:0;pointer-events:none;overflow:visible}
   h1{position:absolute;left:30px;top:20px;font-size:26px;font-weight:800;display:flex;align-items:center;gap:12px}
   h1 img{width:46px;height:46px}
@@ -34,7 +34,6 @@
 </head>
 <body>
 <div id="canvas">
-  <h1><img src="logos/mysql.svg" alt="">ER Diagram · CPSU ETMS <small>MySQL 8.0 · ฐานข้อมูล cpsu_etms · 18 ตาราง</small></h1>
 </div>
 <script src="connect.js"></script>
 <script>
@@ -43,24 +42,24 @@
   // Every column of every table, as the database has them. UK marks a column that is
   // unique on its own (pairs such as registrations' event_id + user_id are not marked).
   const T = [
-    ["users", "user", 900, 110, "ผู้ใช้งาน", ["PK id", "name", "title_th", "name_en", "title_en", "UK email", "password_hash", "role", "student_id", "dept", "active", "email_verified_at", "created_at", "updated_at"]],
-    ["email_codes", "user", 560, 110, "รหัส OTP", ["PK id", "FK user_id", "purpose", "code_hash", "attempts", "expires_at", "used_at", "created_at"]],
-    ["activity_logs", "sys", 560, 370, "บันทึกการใช้งาน", ["PK id", "FK user_id", "action", "detail", "created_at"]],
-    ["notifications", "sys", 220, 110, "การแจ้งเตือน", ["PK id", "FK user_id", "icon", "tone", "title", "message", "link", "items", "is_read", "created_at"]],
-    ["reminder_log", "sys", 220, 420, "กันการเตือนซ้ำ", ["PK kind", "PK ref_id", "PK user_id", "PK step", "sent_at"]],
-    ["blacklist_entries", "user", 1260, 110, "รายชื่อระงับสิทธิ์", ["PK id", "FK user_id", "name", "email", "student_id", "reason", "FK created_by", "created_at", "restored_at"]],
-    ["cert_templates", "cert", 1620, 110, "แม่แบบเกียรติบัตร", ["PK id", "template_url", "layout", "FK created_by", "created_at"]],
-    ["cert_defaults", "cert", 1940, 110, "ค่าตั้งต้นกลาง", ["PK id", "FK template_id", "signer_name", "signer_title", "signature_url", "FK updated_by", "updated_at"]],
-    ["events", "event", 900, 560, "กิจกรรม", ["PK id", "title", "description", "category", "subcategory", "poster_url", "FK organizer_id", "organizer_name", "FK coordinator_id", "day_mode", "date_start", "date_end", "event_dates", "event_times", "time_range", "reg_start", "reg_end", "attend_mode", "place", "online_link", "capacity", "capacity_onsite", "capacity_online", "budget_planned", "budget_other", "budget_actual", "attendee_note", "loan_laptop_qty", "ask_dietary", "issue_certificate", "fee", "payment_info", "refund_method", "refund_note", "status", "cycle_stage", "pretest_enabled", "pretest_link", "pretest_pass_pct", "pretest_time_limit_min", "cert_template_url", "cert_signer_name", "cert_signer_title", "cert_signature_url", "cert_layout", "email_on_register", "email_before_event", "email_after_event", "is_listed", "created_at", "updated_at"]],
-    ["sar_reports", "event", 560, 600, "สรุปข่าว / SAR", ["PK id", "FK UK event_id", "UK report_code", "recap_poster_url", "purpose", "outcome", "gaps", "improvement", "status", "FK created_by", "created_at", "updated_at"]],
-    ["event_evaluation_questions", "eval", 560, 960, "คำถามเพิ่มของกิจกรรม", ["PK id", "FK event_id", "label", "sort_order", "question_type", "options", "required"]],
-    ["event_evaluation_answers", "eval", 560, 1230, "คำตอบคำถามเพิ่ม", ["PK id", "FK evaluation_id", "FK question_id", "score", "answer_text"]],
-    ["registrations", "reg", 1260, 560, "การลงทะเบียน", ["PK id", "FK event_id", "FK user_id", "status", "attend_via", "checked_in", "checked_in_at", "cert_notified_at", "wants_laptop", "food_allergy", "dietary_pref", "payment_status", "paid_at", "slip_url", "slip_transferred_at", "slip_amount", "slip_submitted_at", "payment_reject_reason", "refunded_at", "refund_promptpay", "registered_at", "updated_at"]],
-    ["registration_checkins", "reg", 1620, 560, "เช็คชื่อรายวัน", ["PK FK registration_id", "PK event_date", "checked_in_at"]],
-    ["certificates", "cert", 1620, 720, "เกียรติบัตรที่ออก", ["PK id", "FK UK registration_id", "UK cert_code", "default_template_id", "issued_at", "pdf_url"]],
-    ["evaluations", "eval", 1260, 1130, "แบบประเมินที่ส่ง", ["PK id", "FK UK registration_id", "submitted_at"]],
-    ["evaluation_answers", "eval", 1620, 1130, "คำตอบมาตรฐาน", ["PK id", "FK evaluation_id", "FK question_id", "score"]],
-    ["evaluation_questions", "eval", 1940, 1130, "คำถามมาตรฐาน", ["PK id", "UK q_key", "label", "sort_order"]]
+    ["users", "user", 720, 80, "ผู้ใช้งาน", ["PK id", "name", "title_th", "name_en", "title_en", "UK email", "password_hash", "role", "student_id", "dept", "active", "email_verified_at", "created_at", "updated_at"]],
+    ["email_codes", "user", 380, 80, "รหัส OTP", ["PK id", "FK user_id", "purpose", "code_hash", "attempts", "expires_at", "used_at", "created_at"]],
+    ["activity_logs", "sys", 380, 370, "บันทึกการใช้งาน", ["PK id", "FK user_id", "action", "detail", "created_at"]],
+    ["notifications", "sys", 40, 80, "การแจ้งเตือน", ["PK id", "FK user_id", "icon", "tone", "title", "message", "link", "items", "is_read", "created_at"]],
+    ["reminder_log", "sys", 40, 420, "กันการเตือนซ้ำ", ["PK kind", "PK ref_id", "PK user_id", "PK step", "sent_at"]],
+    ["blacklist_entries", "user", 1080, 80, "รายชื่อระงับสิทธิ์", ["PK id", "FK user_id", "name", "email", "student_id", "reason", "FK created_by", "created_at", "restored_at"]],
+    ["cert_templates", "cert", 1440, 80, "แม่แบบเกียรติบัตร", ["PK id", "template_url", "layout", "FK created_by", "created_at"]],
+    ["cert_defaults", "cert", 1760, 80, "ค่าตั้งต้นกลาง", ["PK id", "FK template_id", "signer_name", "signer_title", "signature_url", "FK updated_by", "updated_at"]],
+    ["events", "event", 720, 560, "กิจกรรม", ["PK id", "title", "description", "category", "subcategory", "poster_url", "FK organizer_id", "organizer_name", "FK coordinator_id", "day_mode", "date_start", "date_end", "event_dates", "event_times", "time_range", "reg_start", "reg_end", "attend_mode", "place", "online_link", "capacity", "capacity_onsite", "capacity_online", "budget_planned", "budget_other", "budget_actual", "attendee_note", "loan_laptop_qty", "ask_dietary", "issue_certificate", "fee", "payment_info", "refund_method", "refund_note", "status", "cycle_stage", "pretest_enabled", "pretest_link", "pretest_pass_pct", "pretest_time_limit_min", "cert_template_url", "cert_signer_name", "cert_signer_title", "cert_signature_url", "cert_layout", "email_on_register", "email_before_event", "email_after_event", "is_listed", "created_at", "updated_at"]],
+    ["sar_reports", "event", 380, 600, "สรุปข่าว / SAR", ["PK id", "FK UK event_id", "UK report_code", "recap_poster_url", "purpose", "outcome", "gaps", "improvement", "status", "FK created_by", "created_at", "updated_at"]],
+    ["event_evaluation_questions", "eval", 380, 960, "คำถามเพิ่มของกิจกรรม", ["PK id", "FK event_id", "label", "sort_order", "question_type", "options", "required"]],
+    ["event_evaluation_answers", "eval", 380, 1230, "คำตอบคำถามเพิ่ม", ["PK id", "FK evaluation_id", "FK question_id", "score", "answer_text"]],
+    ["registrations", "reg", 1080, 560, "การลงทะเบียน", ["PK id", "FK event_id", "FK user_id", "status", "attend_via", "checked_in", "checked_in_at", "cert_notified_at", "wants_laptop", "food_allergy", "dietary_pref", "payment_status", "paid_at", "slip_url", "slip_transferred_at", "slip_amount", "slip_submitted_at", "payment_reject_reason", "refunded_at", "refund_promptpay", "registered_at", "updated_at"]],
+    ["registration_checkins", "reg", 1440, 560, "เช็คชื่อรายวัน", ["PK FK registration_id", "PK event_date", "checked_in_at"]],
+    ["certificates", "cert", 1440, 720, "เกียรติบัตรที่ออก", ["PK id", "FK UK registration_id", "UK cert_code", "default_template_id", "issued_at", "pdf_url"]],
+    ["evaluations", "eval", 1080, 1130, "แบบประเมินที่ส่ง", ["PK id", "FK UK registration_id", "submitted_at"]],
+    ["evaluation_answers", "eval", 1440, 1130, "คำตอบมาตรฐาน", ["PK id", "FK evaluation_id", "FK question_id", "score"]],
+    ["evaluation_questions", "eval", 1760, 1130, "คำถามมาตรฐาน", ["PK id", "UK q_key", "label", "sort_order"]]
   ];
   const badge = (k) => `<b class="k ${k.toLowerCase()}">${k}</b>`;
   T.forEach(([id, g, x, y, note, cols]) => {
@@ -89,27 +88,27 @@
     const U = box('users');
 
     rel('email_codes', 'users', { from: 'right', to: 'left', route: 'elbow', fromShift: at('email_codes', 'user_id'), toShift: -100 });
-    rel('activity_logs', 'users', { from: 'right', to: 'left', route: 'elbow', fromShift: at('activity_logs', 'user_id'), toShift: 30, midX: 860 });
+    rel('activity_logs', 'users', { from: 'right', to: 'left', route: 'elbow', fromShift: at('activity_logs', 'user_id'), toShift: 30, midX: 680 });
     const N = box('notifications');
-    rel('notifications', 'users', { from: 'top', to: 'top', toShift: -70, via: [[N.l + N.w / 2, 80], [U.l + U.w / 2 - 70, 80]] });
+    rel('notifications', 'users', { from: 'top', to: 'top', toShift: -70, via: [[N.l + N.w / 2, 50], [U.l + U.w / 2 - 70, 50]] });
     rel('events', 'users', { from: 'top', to: 'bottom', fromShift: -60, toShift: -60 }); // organizer_id
     rel('events', 'users', { from: 'top', to: 'bottom', fromShift: 40, toShift: 40 }); // coordinator_id
-    rel('blacklist_entries', 'users', { from: 'left', to: 'right', route: 'elbow', fromShift: at('blacklist_entries', 'user_id'), toShift: -100, midX: 1210 });
-    rel('blacklist_entries', 'users', { from: 'left', to: 'right', route: 'elbow', fromShift: at('blacklist_entries', 'created_by'), toShift: -20, midX: 1230 });
+    rel('blacklist_entries', 'users', { from: 'left', to: 'right', route: 'elbow', fromShift: at('blacklist_entries', 'user_id'), toShift: -100, midX: 1030 });
+    rel('blacklist_entries', 'users', { from: 'left', to: 'right', route: 'elbow', fromShift: at('blacklist_entries', 'created_by'), toShift: -20, midX: 1050 });
     const CT = box('cert_templates'), CD = box('cert_defaults');
-    rel('cert_templates', 'users', { from: 'top', to: 'top', toShift: 60, via: [[CT.l + CT.w / 2, 80], [U.l + U.w / 2 + 60, 80]] });
-    rel('cert_defaults', 'users', { from: 'top', to: 'top', toShift: 100, via: [[CD.l + CD.w / 2, 64], [U.l + U.w / 2 + 100, 64]] });
+    rel('cert_templates', 'users', { from: 'top', to: 'top', toShift: 60, via: [[CT.l + CT.w / 2, 50], [U.l + U.w / 2 + 60, 50]] });
+    rel('cert_defaults', 'users', { from: 'top', to: 'top', toShift: 100, via: [[CD.l + CD.w / 2, 34], [U.l + U.w / 2 + 100, 34]] });
     rel('cert_defaults', 'cert_templates', { from: 'left', to: 'right', route: 'elbow', fromShift: at('cert_defaults', 'template_id') });
 
     const S = box('sar_reports'), R = box('registrations');
     rel('sar_reports', 'events', { from: 'right', to: 'left', route: 'elbow', uniq: true, fromShift: at('sar_reports', 'event_id'), toShift: -440 });
     const sy = row('sar_reports', 'created_by');
-    rel('sar_reports', 'users', { from: 'right', to: 'left', toShift: 120, fromShift: sy - (S.t + S.h / 2), via: [[S.r + 26, sy], [S.r + 26, 520], [860, 520], [860, U.t + U.h / 2 + 120]] });
-    rel('event_evaluation_questions', 'events', { from: 'right', to: 'left', route: 'elbow', fromShift: at('event_evaluation_questions', 'event_id'), toShift: 0, midX: 860 });
+    rel('sar_reports', 'users', { from: 'right', to: 'left', toShift: 120, fromShift: sy - (S.t + S.h / 2), via: [[S.r + 26, sy], [S.r + 26, 520], [680, 520], [680, U.t + U.h / 2 + 120]] });
+    rel('event_evaluation_questions', 'events', { from: 'right', to: 'left', route: 'elbow', fromShift: at('event_evaluation_questions', 'event_id'), toShift: 0, midX: 680 });
     rel('event_evaluation_answers', 'event_evaluation_questions', { from: 'top', to: 'bottom' });
     rel('registrations', 'events', { from: 'left', to: 'right', route: 'elbow', fromShift: at('registrations', 'event_id'), toShift: -440 });
     const ry = row('registrations', 'user_id');
-    rel('registrations', 'users', { from: 'left', to: 'right', toShift: 110, fromShift: ry - (R.t + R.h / 2), via: [[R.l - 30, ry], [R.l - 30, 500], [1200, 500], [1200, U.t + U.h / 2 + 110]] });
+    rel('registrations', 'users', { from: 'left', to: 'right', toShift: 110, fromShift: ry - (R.t + R.h / 2), via: [[R.l - 30, ry], [R.l - 30, 500], [1020, 500], [1020, U.t + U.h / 2 + 110]] });
     rel('registration_checkins', 'registrations', { from: 'left', to: 'right', route: 'elbow', fromShift: at('registration_checkins', 'registration_id'), toShift: -180 });
     rel('certificates', 'registrations', { from: 'left', to: 'right', route: 'elbow', uniq: true, fromShift: at('certificates', 'registration_id'), toShift: -80 });
     rel('evaluations', 'registrations', { from: 'top', to: 'bottom', uniq: true });

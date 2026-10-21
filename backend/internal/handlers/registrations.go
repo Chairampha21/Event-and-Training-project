@@ -72,6 +72,19 @@ func (h *RegistrationsHandler) RegisterForEvent(c *gin.Context) {
 		AttendVia    string `json:"attend_via"` // 'onsite' | 'online' — asked only when the event offers both
 	}
 	_ = c.ShouldBindJSON(&body) // no body at all is fine
+
+	// The certificate prints the title and Thai name, so registering needs them
+	// (the page asks for them first; this keeps a direct API call honest too).
+	var myTitle, myName string
+	if err := h.DB.QueryRow(`SELECT COALESCE(title_th, ''), name FROM users WHERE id = ?`, claims.UserID).Scan(&myTitle, &myName); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
+		return
+	}
+	if strings.TrimSpace(myTitle) == "" || !hasThai(myName) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "กรอกคำนำหน้าและชื่อภาษาไทยในโปรไฟล์ก่อนสมัคร · ใช้พิมพ์บนเกียรติบัตร"})
+		return
+	}
+
 	err := h.DB.QueryRow(
 		`SELECT title, status, attend_mode, capacity, capacity_onsite, capacity_online, organizer_id,
 		        reg_start, reg_end,

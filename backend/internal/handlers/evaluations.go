@@ -241,6 +241,12 @@ func (h *EvaluationsHandler) Submit(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "ไม่มีสิทธิ์ทำแบบประเมินนี้"})
 		return
 	}
+	// Only someone who attended the whole event evaluates it ('certified' has
+	// evaluated already and is turned away below as a repeat).
+	if regStatus != "attended" && regStatus != "certified" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ทำแบบประเมินได้เฉพาะผู้ที่เข้าร่วมกิจกรรมครบแล้ว"})
+		return
+	}
 
 	// Look up the event's own extra questions to validate each custom answer
 	// against its declared type/options and to enforce required questions —

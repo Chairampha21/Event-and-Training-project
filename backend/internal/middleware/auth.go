@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"database/sql"
 	"net/http"
 	"strings"
 
@@ -35,12 +36,30 @@ func extractClaims(c *gin.Context, secret string) (*Claims, bool) {
 	return claims, true
 }
 
-// RequireAuth rejects the request unless a valid JWT is present.
-func RequireAuth(secret string) gin.HandlerFunc {
+// refresh brings a token's claims up to date with the account as it is now.
+// A token lives for days, so without this a suspended or deleted account kept
+// working, and a changed role kept its old rights, until the token ran out.
+// Reports false when the account no longer exists or is suspended.
+func refresh(db *sql.DB, claims *Claims) bool {
+	var role, name string
+	var active bool
+	if err := db.QueryRow(`SELECT role, name, active FROM users WHERE id = ?`, claims.UserID).Scan(&role, &name, &active); err != nil || !active {
+		return false
+	}
+	claims.Role, claims.Name = role, name
+	return true
+}
+
+// RequireAuth rejects the request unless a valid JWT for an active account is present.
+func RequireAuth(secret string, db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		claims, ok := extractClaims(c, secret)
 		if !ok {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "ไม่ได้เข้าสู่ระบบ หรือเซสชันหมดอายุ"})
+			return
+		}
+		if !refresh(db, claims) {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "บัญชีนี้ถูกระงับหรือไม่มีอยู่แล้ว · ติดต่อผู้ดูแลระบบ"})
 			return
 		}
 		c.Set(userClaimsKey, claims)
@@ -50,9 +69,9 @@ func RequireAuth(secret string) gin.HandlerFunc {
 
 // OptionalAuth decodes the token if present but never rejects the request,
 // so public handlers can personalize their response for logged-in users.
-func OptionalAuth(secret string) gin.HandlerFunc {
+func OptionalAuth(secret string, db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if claims, ok := extractClaims(c, secret); ok {
+		if claims, ok := extractClaims(c, secret); ok && refresh(db, claims) {
 			c.Set(userClaimsKey, claims)
 		}
 		c.Next()

@@ -55,8 +55,8 @@ func main() {
 		AllowHeaders: []string{"Origin", "Content-Type", "Authorization"},
 	}))
 
-	requireAuth := middleware.RequireAuth(cfg.JWTSecret)
-	optionalAuth := middleware.OptionalAuth(cfg.JWTSecret)
+	requireAuth := middleware.RequireAuth(cfg.JWTSecret, conn)
+	optionalAuth := middleware.OptionalAuth(cfg.JWTSecret, conn)
 
 	r.GET("/", func(c *gin.Context) {
 		c.JSON(200, gin.H{"service": "CPSU ETMS API", "health": "/api/health"})

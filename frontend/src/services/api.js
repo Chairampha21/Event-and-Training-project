@@ -31,6 +31,14 @@ export function setAuthToken(token) {
   authToken = token;
 }
 
+// Called once when a signed-in request comes back 401 — the session ran out,
+// or the account was suspended or removed — so the app can sign out cleanly
+// instead of leaving every page failing to load.
+let onUnauthorized = null;
+export function setUnauthorizedHandler(fn) {
+  onUnauthorized = fn;
+}
+
 export class ApiError extends Error {
   constructor(message, status, data) {
     super(message);
@@ -65,6 +73,9 @@ async function request(path, { method = 'GET', body, auth = true } = {}) {
     // no body (shouldn't normally happen outside 204, but don't crash on it)
   }
 
+  if (res.status === 401 && auth && authToken && onUnauthorized) {
+    onUnauthorized((data && data.error) || '');
+  }
   if (!res.ok) {
     throw new ApiError((data && data.error) || `เกิดข้อผิดพลาด (HTTP ${res.status})`, res.status, data);
   }

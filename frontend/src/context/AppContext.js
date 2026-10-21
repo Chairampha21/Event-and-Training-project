@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import useLocalStorage from '../hooks/useLocalStorage';
 import { showResult } from '../utils/alert';
-import { api, apiUrl, setAuthToken } from '../services/api';
+import { api, apiUrl, setAuthToken, setUnauthorizedHandler } from '../services/api';
 import { formatThaiDate, formatThaiDateRange, formatThaiDateList, formatDayTime, formatRegPeriod, todayIso } from '../utils/dateFormat';
 import { formatBaht } from '../utils/money';
 import { normalizeLayout, serializeLayout } from '../features/certificates/utils/certLayout';
@@ -316,7 +316,11 @@ export function AppProvider({ children }) {
   // middle of the screen. A new bell notification ('notif') is a card under
   // the bell instead: it stays for `duration` ms, and the Toast component runs
   // the countdown (so it can pause on hover) and calls dismissToast at the end.
+  // Right after a forced sign-out, the other requests that failed with it
+  // would each pop up their own "couldn't load …": only the sign-out message shows.
+  const quietUntil = useRef(0);
   const pushToast = useCallback((title, msg, type = 'ok', extra = {}) => {
+    if (type === 'warn' && Date.now() < quietUntil.current) return;
     if (type !== 'notif') { showResult(title, msg, type); return; }
     const id = ++toastId.current;
     setToasts((t) => [...t, { id, title, msg, type, duration: 5000, ...extra }]);
@@ -613,6 +617,22 @@ export function AppProvider({ children }) {
     setAuthToken(null);
     setSession(null);
   }, [setSession]);
+
+  // A signed-in request refused with 401: sign out (the pages then send the
+  // person to /login) and say why, once — several requests may fail together.
+  const signedIn = useRef(false);
+  signedIn.current = !!session;
+  useEffect(() => {
+    setUnauthorizedHandler((message) => {
+      if (!signedIn.current) return;
+      signedIn.current = false;
+      setAuthToken(null);
+      setSession(null);
+      pushToast('กรุณาเข้าสู่ระบบอีกครั้ง', message || 'เซสชันหมดอายุ', 'warn');
+      quietUntil.current = Date.now() + 5000;
+    });
+    return () => setUnauthorizedHandler(null);
+  }, [setSession, pushToast]);
 
   /* ---------- events / registration ---------- */
   const evById = useCallback((id) => events.find((e) => e.id === Number(id)), [events]);

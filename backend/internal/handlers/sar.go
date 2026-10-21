@@ -64,7 +64,9 @@ func (h *SARHandler) Get(c *gin.Context) {
 		 FROM sar_reports WHERE event_id = ?`, c.Param("id"),
 	).Scan(&r.ID, &r.EventID, &r.ReportCode, &r.RecapPosterURL, &r.CreatedAt, &r.UpdatedAt)
 	if err == sql.ErrNoRows {
-		c.JSON(http.StatusNotFound, gin.H{"error": "ยังไม่มี SAR สำหรับกิจกรรมนี้"})
+		// Nothing written yet is a normal state (the recap list asks for every
+		// finished event), not an error.
+		c.JSON(http.StatusOK, gin.H{"sar": nil})
 		return
 	}
 	if err != nil {

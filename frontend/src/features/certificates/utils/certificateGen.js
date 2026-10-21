@@ -23,6 +23,8 @@ export function printCertificates(list) {
 
   win.document.write(`<!doctype html><html lang="th"><head><meta charset="utf-8" />
   <title>${title}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <style>
     body{font-family:'Noto Sans Thai',system-ui,sans-serif;background:#f1f1f8;margin:0}
     .cert-page{position:relative;min-height:100vh;display:flex;align-items:center;justify-content:center;break-after:page;page-break-after:always}
@@ -40,7 +42,7 @@ export function printCertificates(list) {
     }
   </style></head><body>
   ${pages}
-  <script>window.onload = () => setTimeout(() => window.print(), 300);</script>
+  <script>window.onload = () => (document.fonts ? document.fonts.ready : Promise.resolve()).then(() => setTimeout(() => window.print(), 300));</script>
   </body></html>`);
   win.document.close();
 }

@@ -1150,9 +1150,14 @@ func (h *EventsHandler) Update(c *gin.Context) {
 	}
 
 	claims, _ := middleware.CurrentUser(c)
-	if _, ok := raw["budget_actual"]; ok && len(raw) == 1 {
+	_, budgetOnly := raw["budget_actual"]
+	switch {
+	case budgetOnly && len(raw) == 1:
 		activitylog.Log(h.DB, &claims.UserID, "UPDATE", "บันทึกงบประมาณที่ใช้จริง: "+existing.Title)
-	} else {
+	case event.CycleStage >= 4 && existing.CycleStage < 4:
+		// Opening the certificates is what closes an event: say so, not "edited".
+		activitylog.Log(h.DB, &claims.UserID, "ISSUE", "เปิดสิทธิ์เกียรติบัตร: "+existing.Title)
+	default:
 		activitylog.Log(h.DB, &claims.UserID, "UPDATE", "แก้ไขกิจกรรม: "+existing.Title)
 	}
 	h.notifyEventChanges(existing, event)

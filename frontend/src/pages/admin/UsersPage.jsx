@@ -22,6 +22,10 @@ export default function UsersPage() {
   const [activeAsk, setActiveAsk] = useState(null); // the user to suspend or reactivate
   const [confirmOpen, setConfirmOpen] = useState(false);
 
+  // Find a person by name (Thai or English), email or student ID.
+  const [query, setQuery] = useState('');
+  const q = query.trim().toLowerCase();
+  const shown = q ? users.filter((u) => [fullNameTh(u), u.name_en, u.email, u.student_id].some((v) => (v || '').toLowerCase().includes(q))) : users;
   const admins = users.filter((u) => u.role === 'admin').length;
   const organizers = users.filter((u) => u.role === 'organizer').length;
   const students = users.filter((u) => u.role === 'student').length;
@@ -86,13 +90,19 @@ export default function UsersPage() {
         <div className="table-card">
           <div className="table-toolbar">
             <h3><i className="ti ti-users-group" /> รายชื่อผู้ใช้งาน <span className="count">{users.length}</span></h3>
-            <div className="tools"><button className="btn btn-primary" style={{ padding: '7px 12px' }} onClick={openNew}><i className="ti ti-plus" /> เพิ่ม</button></div>
+            <div className="tools">
+              <div className="input-search"><i className="ti ti-search" /><input type="text" placeholder="ค้นหาชื่อ อีเมล หรือรหัสนักศึกษา..." value={query} onChange={(e) => setQuery(e.target.value)} aria-label="ค้นหาผู้ใช้งาน" /></div>
+              <button className="btn btn-primary" style={{ padding: '7px 12px' }} onClick={openNew}><i className="ti ti-plus" /> เพิ่ม</button>
+            </div>
           </div>
           <div style={{ overflowX: 'auto' }}>
             <table>
               <thead><tr><th>ผู้ใช้งาน</th><th>สังกัด / ตำแหน่ง</th><th>บทบาท</th><th className="center">สถานะ</th><th className="right">การจัดการ</th></tr></thead>
               <tbody>
-                {users.map((u) => (
+                {shown.length === 0 && (
+                  <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--c4-60)', padding: 24 }}>ไม่พบผู้ใช้งานที่ตรงกับ "{query.trim()}"</td></tr>
+                )}
+                {shown.map((u) => (
                   <tr key={u.id}>
                     <td>
                       <div className="ev-cell">

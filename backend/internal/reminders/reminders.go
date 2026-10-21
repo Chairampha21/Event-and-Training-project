@@ -515,17 +515,20 @@ func postEventTasks(db *sql.DB) error {
 	if err := rows.Err(); err != nil {
 		return err
 	}
+	// One summary per organizer: their events with work left, each folding
+	// its tasks. It goes out when an event's task first shows up, and once more
+	// a week later if it is still there (the due() steps per event), and each
+	// time replaces the previous summary instead of adding another.
+	type pending struct {
+		items []notify.Item
+		events int
+		send   bool
+	}
+	byOrganizer := map[int64]*pending{}
+	var order []int64
 	for _, it := range items {
-		var tasks []string
-		link := ""
-		var items []notify.Item
-		add := func(label, l string) {
-			tasks = append(tasks, label)
-			items = append(items, notify.Item{Label: label, Link: l})
-			if link == "" {
-				link = l
-			}
-		}
+		var tasks []notify.Item
+		add := func(label, l string) { tasks = append(tasks, notify.Item{Group: it.title, Label: label, Link: l}) }
 		if it.open {
 			if it.regs == 0 {
 				add("ไม่มีผู้ลงทะเบียน · เปิดสิทธิ์เกียรติบัตรเพื่อปิดงาน", fmt.Sprintf("/events?applicants=%d", it.id))
@@ -542,20 +545,25 @@ func postEventTasks(db *sql.DB) error {
 		if len(tasks) == 0 {
 			continue
 		}
-		step := due(db, "post_event", it.id, it.organizer)
-		if step == 0 {
+		p := byOrganizer[it.organizer]
+		if p == nil {
+			p = &pending{}
+			byOrganizer[it.organizer] = p
+			order = append(order, it.organizer)
+		}
+		p.items = append(p.items, tasks...)
+		p.events++
+		if due(db, "post_event", it.id, it.organizer) > 0 {
+			p.send = true
+		}
+	}
+	for _, organizer := range order {
+		p := byOrganizer[organizer]
+		if !p.send {
 			continue
 		}
-		title := "งานค้างหลังจบกิจกรรม"
-		if len(tasks) > 1 {
-			title = fmt.Sprintf("งานค้างหลังจบกิจกรรม %d รายการ", len(tasks))
-		}
-		msg := it.title
-		if len(items) == 1 {
-			msg += " · " + tasks[0] // a single task reads fine in the message itself
-			items = nil
-		}
-		notify.SendWithItems(db, it.organizer, "ti-checklist", notify.ToneWarn, title+again(step), msg, link, items)
+		notify.ReplaceSummary(db, organizer, "งานค้างหลังจบกิจกรรม", "ti-checklist", notify.ToneWarn,
+			fmt.Sprintf("งานค้างหลังจบกิจกรรม %d กิจกรรม", p.events), fmt.Sprintf("%d งานที่ยังต้องทำ · กดที่งานเพื่อไปทำต่อ", len(p.items)), "/events", p.items)
 	}
 	return nil
 }

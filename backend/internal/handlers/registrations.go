@@ -976,6 +976,9 @@ func (h *RegistrationsHandler) SubmitSlip(c *gin.Context) {
 		return
 	}
 	activitylog.Log(h.DB, &claims.UserID, "UPDATE", "แจ้งชำระเงิน: "+title)
+	// Sending the slip settles "ยังไม่ได้ส่งหลักฐานการชำระเงิน" for this event.
+	notify.Resolve(h.DB, claims.UserID, "ยังไม่ได้ส่งหลักฐานการชำระเงิน", "", title+" · ")
+	notify.Resolve(h.DB, claims.UserID, "หลักฐานการชำระเงินไม่ผ่าน", "", title+" · ")
 	if organizerID.Valid {
 		// One line per event in the organizer's bell, however many slips come in.
 		var waiting int

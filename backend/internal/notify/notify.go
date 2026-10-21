@@ -210,6 +210,19 @@ func ReplaceSummary(db querier, userID int64, titlePrefix, icon, tone, title, me
 	}
 }
 
+// Resolve marks as read the user's unread notifications about something
+// they have just done — the reminder to evaluate once the evaluation is in,
+// the one about a missing slip once the slip is sent — so a finished task
+// doesn't keep its badge. Matched by title prefix, link ("" for any) and
+// message prefix (usually the event title).
+func Resolve(db execer, userID int64, titlePrefix, link, messagePrefix string) {
+	if _, err := db.Exec(`UPDATE notifications SET is_read = 1
+		 WHERE user_id = ? AND is_read = 0 AND title LIKE CONCAT(?, '%') AND (? = '' OR link = ?) AND message LIKE CONCAT(?, '%')`,
+		userID, titlePrefix, link, link, messagePrefix); err != nil {
+		log.Printf("notification write failed: %v", err)
+	}
+}
+
 // payerSQL matches registrations whose money the organizer holds: a slip was
 // sent or the payment confirmed, and it has not been given back yet.
 const payerSQL = `payment_status IN ('submitted', 'paid')`

@@ -374,10 +374,11 @@ func (h *EvaluationsHandler) Submit(c *gin.Context) {
 	}
 	if certCode != "" {
 		activitylog.Log(h.DB, &claims.UserID, "ISSUE", "ออกเกียรติบัตร: "+certCode)
-		var title string
-		_ = h.DB.QueryRow(`SELECT title FROM events WHERE id = ?`, eventID).Scan(&title)
-		notify.Send(h.DB, claims.UserID, "ti-certificate", notify.ToneAccent, "เกียรติบัตรพร้อมแล้ว", title+" · ขอบคุณที่ทำแบบประเมิน", "/certificates")
 	}
+	// The student sees the certificate unlock on screen as they submit, so no
+	// new notification — the reminders to evaluate this event are just done.
+	notify.Resolve(h.DB, claims.UserID, "ทำแบบประเมิน", fmt.Sprintf("/evaluate/%d", eventID), "")
+	notify.Resolve(h.DB, claims.UserID, "ยังไม่ได้ทำแบบประเมิน", fmt.Sprintf("/evaluate/%d", eventID), "")
 	c.JSON(http.StatusCreated, gin.H{"cert_code": certCode})
 }
 

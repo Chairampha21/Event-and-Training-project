@@ -828,6 +828,7 @@ func (h *EventsHandler) Create(c *gin.Context) {
 
 	event.HasOnlineLink = event.OnlineLink.Valid && event.OnlineLink.String != ""
 	activitylog.Log(h.DB, &claims.UserID, "CREATE", "สร้างกิจกรรม: "+b.Title)
+	tellCoordinator(h.DB, models.NullInt{}, event)
 	// event.Status is already narrowed by the registration window. An event
 	// that opens later is announced once, on its opening day (reminders), not
 	// now as well.
@@ -1161,6 +1162,7 @@ func (h *EventsHandler) Update(c *gin.Context) {
 		activitylog.Log(h.DB, &claims.UserID, "UPDATE", "แก้ไขกิจกรรม: "+existing.Title)
 	}
 	h.notifyEventChanges(existing, event)
+	tellCoordinator(h.DB, existing.CoordinatorID, event)
 	// Someone other than the organizer (an admin) changed the event: its organizer should know.
 	if existing.OrganizerID.Valid && existing.OrganizerID.Int64 != claims.UserID {
 		notify.SendGrouped(h.DB, existing.OrganizerID.Int64, "ti-edit", notify.ToneWarn, "ผู้ดูแลระบบแก้ไขกิจกรรมของคุณ",
@@ -1217,6 +1219,18 @@ func (h *EventsHandler) notifyCertOpen(ev models.Event) int {
 		return 0
 	}
 	return len(targets)
+}
+
+// tellCoordinator lets a teacher know they have just been named the
+// coordinator of an event (on creation, or when the coordinator changes), and
+// where to follow it.
+func tellCoordinator(db *sql.DB, before models.NullInt, ev models.Event) {
+	if !ev.IsListed || !ev.CoordinatorID.Valid || (before.Valid && before.Int64 == ev.CoordinatorID.Int64) {
+		return
+	}
+	notify.Send(db, ev.CoordinatorID.Int64, "ti-briefcase", notify.ToneAccent, "คุณเป็นอาจารย์ผู้ประสานงานกิจกรรม",
+		ev.Title+" · "+thaiDate(ev.DateStart)+" · ติดตามผู้สมัครและผลกิจกรรมได้ที่เมนูกิจกรรมที่รับผิดชอบ",
+		fmt.Sprintf("/report?event=%d", ev.ID))
 }
 
 // notifyEventChanges turns the meaningful differences of an edit into bell

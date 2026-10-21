@@ -228,7 +228,7 @@ export default function Navbar() {
           <button type="button" className="user-pill" title="ดู/แก้ไขโปรไฟล์" onClick={() => navigate('/profile')}>
             <div className={`up-av ${session.role}`}>{initials(session.name)}</div>
             <div className="up-info">
-              <span className="up-name">{fullNameTh(session)}</span>
+              <span className="up-name" title={fullNameTh(session)}>{session.name}</span>
               <span className="up-role"><span className={`role-tag ${session.role}`}>{ROLE_LABEL[session.role]}</span></span>
             </div>
           </button>

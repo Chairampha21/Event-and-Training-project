@@ -42,6 +42,7 @@ const NAV_TABS = {
     { to: '/admin/blacklist', icon: 'ti-user-off', label: 'Blacklist' },
   ],
   student: [
+    { section: 'เข้าร่วมกิจกรรม' },
     { to: '/home', icon: 'ti-grid-dots', label: 'กิจกรรมทั้งหมด' },
     { to: '/my-registrations', icon: 'ti-history', label: 'ประวัติของฉัน' },
     { to: '/certificates', icon: 'ti-certificate', label: 'เกียรติบัตร' },
@@ -49,7 +50,6 @@ const NAV_TABS = {
 };
 // A teacher takes part like a student, and also follows the events they coordinate.
 NAV_TABS.teacher = [
-  { section: 'เข้าร่วมกิจกรรม' },
   ...NAV_TABS.student,
   { section: 'ผู้ประสานงาน' },
   { to: '/coordinated', icon: 'ti-briefcase', label: 'กิจกรรมที่รับผิดชอบ' },

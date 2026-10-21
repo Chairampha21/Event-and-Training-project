@@ -179,7 +179,7 @@ export default function EventsTablePage() {
                       </td>
                       <td><div className="ev-title" style={{ fontSize: 13.5 }}>{ev.date}</div><div className="ev-sub">{ev.time}</div></td>
                       <td><span className={`pill-status ${sm.pill}`}><i className="ti ti-circle-filled" /> {sm.label}</span></td>
-                      <td><CycleProgress stage={ev.stage} compact /></td>
+                      <td><CycleProgress stage={ev.stage} status={ev.status} compact /></td>
                       <td className="right">
                         {/* Everything (edit, applicants, check-in, slips, budget,
                             certificates, delete) is in the same "จัดการ" menu as on the event card. */}

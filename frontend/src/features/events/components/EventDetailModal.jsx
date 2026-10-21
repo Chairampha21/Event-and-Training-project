@@ -201,7 +201,7 @@ export default function EventDetailModal({ eventId, open, onClose, preview }) {
         )}
         <div className="md-section"><h4>รายละเอียด</h4><p>{ev.desc || 'ไม่มีรายละเอียดเพิ่มเติม'}</p></div>
         {!studentView && (
-          <div className="md-section"><h4>ขั้นตอนของกิจกรรม</h4><CycleProgress stage={ev.stage} /></div>
+          <div className="md-section"><h4>ขั้นตอนของกิจกรรม</h4><CycleProgress stage={ev.stage} status={ev.status} /></div>
         )}
         <div className="info-grid">
           <div className="ig"><div className="igl">สถานะรับสมัคร</div><div className="igv">{sm.label}</div></div>

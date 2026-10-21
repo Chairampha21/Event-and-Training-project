@@ -1,11 +1,10 @@
 import React from 'react';
-import { TITLES, STUDENT_TITLES, englishTitleFor, joinThai, joinEnglish, hasThai } from '../../utils/personName';
+import { TITLES, STUDENT_TITLES, englishTitleFor, hasThai } from '../../utils/personName';
 
 const OTHER = '__other';
 
 /**
- * Title + Thai name (required) and English title + name (optional), with a
- * preview of how they print on certificates. Picking a Thai title fills in the
+ * Title + Thai name (required) and English title + name (optional). Picking a Thai title fills in the
  * matching English one unless that was typed by hand. `student` offers the
  * student titles first (นาย, นางสาว ...); staff get the academic ones too.
  */
@@ -27,8 +26,6 @@ export default function NameFields({ idPrefix, student, titleTh, setTitleTh, nam
 
   const thaiBad = name.trim() !== '' && !hasThai(name);
   const enBad = nameEn.trim() !== '' && hasThai(nameEn);
-  const previewTh = joinThai(titleTh, name);
-  const previewEn = nameEn.trim() ? joinEnglish(titleEn, nameEn) : '';
 
   return (
     <div className="name-fields">
@@ -66,13 +63,6 @@ export default function NameFields({ idPrefix, student, titleTh, setTitleTh, nam
             : <span className="helper">ไม่บังคับ · ใช้กับเกียรติบัตรภาษาอังกฤษ</span>}
         </div>
       </div>
-      {(previewTh || previewEn) && (
-        <div className="nf-preview">
-          <span className="nf-preview-label"><i className="ti ti-certificate" /> ชื่อบนเกียรติบัตร</span>
-          {previewTh && <strong>{previewTh}</strong>}
-          {previewEn && <span className="nf-preview-en">{previewEn}</span>}
-        </div>
-      )}
     </div>
   );
 }

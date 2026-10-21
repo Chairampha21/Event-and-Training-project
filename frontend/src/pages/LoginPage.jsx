@@ -3,7 +3,7 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { useEvents } from '../hooks/useEvents';
 import { ROLE_LANDING } from '../utils/constants';
 import Toast from '../components/ui/Toast';
-import { STUDENT_TITLES, englishTitleFor, hasThai, joinThai } from '../utils/personName';
+import { STUDENT_TITLES, englishTitleFor, hasThai } from '../utils/personName';
 
 const GOOGLE_CLIENT_ID = process.env.REACT_APP_GOOGLE_CLIENT_ID || '';
 
@@ -308,7 +308,6 @@ function Register({ go }) {
         <Field id="rg-name-en" label="ชื่อ-นามสกุล (อังกฤษ) · ไม่บังคับ" labelIcon="ti-language" icon="ti-user" error={errors.nameEn}>
           <input id="rg-name-en" value={f.nameEn} onChange={set('nameEn')} placeholder="e.g. Somchai Jaidee" autoComplete="off" aria-invalid={!!errors.nameEn} />
         </Field>
-        {f.title && hasThai(f.name) && <p className="lf-name-preview"><i className="ti ti-certificate" /> ชื่อบนเกียรติบัตร: <strong>{joinThai(f.title, f.name)}</strong></p>}
         <Field id="rg-email" label="อีเมลมหาวิทยาลัย" labelIcon="ti-at" icon="ti-mail"
           error={errors.email || emailProblem(f.email, emailLeft).error} warn={emailProblem(f.email, emailLeft).warn}>
           <EmailInput id="rg-email" value={f.email} onChange={(v) => set('email')({ target: { value: v } })} onBlur={() => setEmailLeft(true)} autoComplete="email" invalid={!!errors.email} />

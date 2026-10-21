@@ -34,7 +34,7 @@ INSERT INTO users (title_th, name, title_en, name_en, email, password_hash, role
 ON DUPLICATE KEY UPDATE title_th = VALUES(title_th), name = VALUES(name), title_en = VALUES(title_en), name_en = VALUES(name_en);
 
 -- Staff who are not teachers: their English names only.
-UPDATE users SET title_en = 'Miss', name_en = 'Waranthorn Sonsa-nguan' WHERE email = 'warunthorn_s@silpakorn.edu';
+UPDATE users SET title_en = 'Miss', name_en = 'Waranthorn Sonsa-nguan' WHERE email = 'sonsanguan_w@silpakorn.edu';
 
 -- Link events already naming one of them as coordinator.
 UPDATE events e

@@ -33,7 +33,7 @@ SET FOREIGN_KEY_CHECKS = 1;
 -- ---------------------------------------------------------------------
 INSERT INTO users (id, name, email, password_hash, role, student_id, dept, active) VALUES
   (1, 'ผศ.ดร. ปิยะ จันทรัศมี', 'piya_c@silpakorn.edu', '$2a$10$Cynp0lxKUuHSODqnhQgKM.3/uWI8ka9kxYW5Cg9m5GWbfur9GaK9y', 'admin', NULL, 'หัวหน้าภาควิชาคอมพิวเตอร์', 1),
-  (2, 'วรันธร สอนสงวน', 'warunthorn_s@silpakorn.edu', '$2a$10$Cynp0lxKUuHSODqnhQgKM.3/uWI8ka9kxYW5Cg9m5GWbfur9GaK9y', 'organizer', NULL, 'นักวิชาการอุดมศึกษาปฏิบัติการ', 1),
+  (2, 'วรันธร สอนสงวน', 'sonsanguan_w@silpakorn.edu', '$2a$10$Cynp0lxKUuHSODqnhQgKM.3/uWI8ka9kxYW5Cg9m5GWbfur9GaK9y', 'organizer', NULL, 'นักวิชาการอุดมศึกษาปฏิบัติการ', 1),
   (3, 'ภัทร ยะคำวุฒิ', 'phat_y@silpakorn.edu', '$2a$10$Cynp0lxKUuHSODqnhQgKM.3/uWI8ka9kxYW5Cg9m5GWbfur9GaK9y', 'student', '670710001', 'นักศึกษาชั้นปีที่ 3 · วิทยาการคอมพิวเตอร์', 1),
   (5, 'ณัฐวุฒิ ศรีสุข', 'natthawut_s@silpakorn.edu', '$2a$10$Cynp0lxKUuHSODqnhQgKM.3/uWI8ka9kxYW5Cg9m5GWbfur9GaK9y', 'student', '670710002', 'นักศึกษาชั้นปีที่ 3 · วิทยาการคอมพิวเตอร์', 1),
   (6, 'พิมพ์ชนก แก้วมณี', 'pimchanok_k@silpakorn.edu', '$2a$10$Cynp0lxKUuHSODqnhQgKM.3/uWI8ka9kxYW5Cg9m5GWbfur9GaK9y', 'student', '670710003', 'นักศึกษาชั้นปีที่ 3 · เทคโนโลยีสารสนเทศ', 1),

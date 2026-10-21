@@ -554,5 +554,5 @@ INSERT INTO evaluation_questions (q_key, label, sort_order) VALUES
 -- =====================================================================
 -- INSERT INTO users (name, email, password_hash, role, dept) VALUES
 --   ('ผศ.ดร. ปิยะ จันทรัศมี',  'piya_c@silpakorn.edu',    '$2y$10$REPLACE_WITH_REAL_HASH', 'admin',     'หัวหน้าภาควิชาคอมพิวเตอร์'),
---   ('วรันธร สอนสงวน',         'warunthorn_s@silpakorn.edu', '$2y$10$REPLACE_WITH_REAL_HASH', 'organizer', 'นักวิชาการอุดมศึกษาปฏิบัติการ'),
+--   ('วรันธร สอนสงวน',         'sonsanguan_w@silpakorn.edu', '$2y$10$REPLACE_WITH_REAL_HASH', 'organizer', 'นักวิชาการอุดมศึกษาปฏิบัติการ'),
 --   ('ภัทร ยะคำวุฒิ',          'phat_y@silpakorn.edu',    '$2y$10$REPLACE_WITH_REAL_HASH', 'student',   'นักศึกษาชั้นปีที่ 3 · วิทยาการคอมพิวเตอร์');

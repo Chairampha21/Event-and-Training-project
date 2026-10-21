@@ -24,7 +24,6 @@
 | Database | MySQL 8.0 (`database/`) |
 | ติดตั้งจริง | Docker Compose + Caddy (HTTPS อัตโนมัติ) (`deploy/`) |
 
-แผนภาพสถาปัตยกรรม, Use Case และ ER Diagram อยู่ที่ [`docs/diagrams/`](docs/diagrams/)
 
 ## รันบนเครื่อง (สำหรับพัฒนา)
 

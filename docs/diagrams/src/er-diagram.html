@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>CPSU ETMS · ER Diagram</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{--ink:#1f2340;--muted:#5b6078}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#fff;font-family:'Noto Sans Thai',Loma,sans-serif;color:var(--ink)}
+  #canvas{position:relative;width:2240px;height:1400px;background:#fff;overflow:hidden}
+  .wires{position:absolute;inset:0;pointer-events:none;overflow:visible}
+  h1{position:absolute;left:30px;top:20px;font-size:26px;font-weight:800;display:flex;align-items:center;gap:12px}
+  h1 img{width:46px;height:46px}
+  h1 small{font-size:14px;font-weight:500;color:var(--muted)}
+  .t{position:absolute;width:250px;border:1.6px solid #9aa3bd;border-radius:9px;background:#fff;overflow:hidden;box-shadow:0 1px 0 rgba(0,0,0,.03)}
+  .t h3{font:700 14px ui-monospace,Menlo,Consolas,monospace;color:#fff;padding:6px 10px 5px;display:flex;flex-direction:column;line-height:1.3}
+  .t h3 small{font:500 11.5px 'Noto Sans Thai',sans-serif;opacity:.88}
+  .t ul{list-style:none;padding:3px 0}
+  .t li{display:flex;align-items:center;gap:6px;padding:1.5px 10px;font:500 12.2px ui-monospace,Menlo,Consolas,monospace;line-height:1.45}
+  .t li.more{font:italic 500 11.5px 'Noto Sans Thai',sans-serif;color:var(--muted);padding-top:3px}
+  .k{display:inline-block;min-width:26px;text-align:center;font:700 9.5px 'Noto Sans Thai',sans-serif;border-radius:4px;padding:0 3px;line-height:15px}
+  .k.pk{background:#fde9b8;color:#7a5600}
+  .k.fk{background:#d9e8ff;color:#1f4f9c}
+  .k.uk{background:#d9f2e3;color:#1e6b3c}
+  .k.no{background:transparent}
+  .g-user h3{background:#3b4a8a} .g-event h3{background:#2f8a4b} .g-reg h3{background:#d8443a}
+  .g-eval h3{background:#c46a1a} .g-cert h3{background:#7a4fc0} .g-sys h3{background:#5b6078}
+  .legend{position:absolute;left:30px;display:flex;flex-wrap:wrap;gap:8px 20px;font-size:13px;color:var(--muted)}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .sw{width:14px;height:14px;border-radius:4px;display:inline-block}
+  .note{position:absolute;font-size:12px;color:var(--muted);line-height:1.5}
+</style>
+</head>
+<body>
+<div id="canvas">
+  <h1><img src="logos/mysql.svg" alt="">ER Diagram · CPSU ETMS <small>MySQL 8.0 · ฐานข้อมูล cpsu_etms · 18 ตาราง</small></h1>
+  <div class="legend foot">
+    <span><i class="sw" style="background:#3b4a8a"></i>ผู้ใช้และสิทธิ์</span>
+    <span><i class="sw" style="background:#2f8a4b"></i>กิจกรรม</span>
+    <span><i class="sw" style="background:#d8443a"></i>การลงทะเบียน</span>
+    <span><i class="sw" style="background:#c46a1a"></i>แบบประเมิน</span>
+    <span><i class="sw" style="background:#7a4fc0"></i>เกียรติบัตร</span>
+    <span><i class="sw" style="background:#5b6078"></i>ระบบ</span>
+    <span><b class="k pk">PK</b> Primary key</span><span><b class="k fk">FK</b> Foreign key</span><span><b class="k uk">UK</b> Unique</span>
+    <span>┼── หนึ่ง · ──&lt; หลาย · ○┼ ศูนย์หรือหนึ่ง</span>
+  </div>
+</div>
+<script src="connect.js"></script>
+<script>
+  const C = document.getElementById('canvas');
+  // [id, group, x, y, title note, columns ('PK id', 'FK user_id', 'UK email', plain), more text]
+  const T = [
+    ['users', 'user', 900, 110, 'ผู้ใช้งาน', ['PK id', 'UK email', 'name', 'title_th', 'name_en', 'title_en', 'password_hash', 'role', 'student_id', 'dept', 'active', 'email_verified_at', 'created_at · updated_at']],
+    ['email_codes', 'user', 560, 110, 'รหัส OTP', ['PK id', 'FK user_id', 'purpose', 'code_hash', 'attempts', 'expires_at', 'used_at', 'created_at']],
+    ['activity_logs', 'sys', 560, 350, 'บันทึกการใช้งาน', ['PK id', 'FK user_id', 'action', 'detail', 'created_at']],
+    ['notifications', 'sys', 220, 110, 'การแจ้งเตือน', ['PK id', 'FK user_id', 'icon · tone', 'title', 'message', 'link', 'items (JSON)', 'is_read', 'created_at']],
+    ['reminder_log', 'sys', 220, 420, 'กันการเตือนซ้ำ', ['PK kind', 'PK ref_id', 'PK user_id', 'PK step', 'sent_at']],
+    ['blacklist_entries', 'user', 1260, 110, 'รายชื่อระงับสิทธิ์', ['PK id', 'FK user_id', 'name', 'email', 'student_id', 'reason', 'FK created_by', 'created_at', 'restored_at']],
+    ['cert_templates', 'cert', 1620, 110, 'แม่แบบเกียรติบัตร', ['PK id', 'template_url', 'layout', 'FK created_by', 'created_at']],
+    ['cert_defaults', 'cert', 1940, 110, 'ค่าตั้งต้นกลาง', ['PK id', 'FK template_id', 'signer_name', 'signer_title', 'signature_url', 'FK updated_by', 'updated_at']],
+    ['events', 'event', 900, 560, 'กิจกรรม', ['PK id', 'FK organizer_id', 'title', 'category', 'day_mode', 'date_start · date_end', 'event_dates', 'reg_start · reg_end', 'attend_mode', 'capacity', 'fee · refund_method', 'issue_certificate', 'status', 'cycle_stage', 'is_listed'], '+ อีก 34 คอลัมน์: สถานที่ ลิงก์ งบประมาณ โปสเตอร์ ผู้ลงนาม ฯลฯ'],
+    ['sar_reports', 'event', 560, 600, 'สรุปข่าว / SAR', ['PK id', 'FK UK event_id', 'UK report_code', 'recap_poster_url', 'purpose · outcome', 'gaps · improvement', 'status', 'FK created_by', 'created_at · updated_at']],
+    ['event_evaluation_questions', 'eval', 900, 1090, 'คำถามเพิ่มของกิจกรรม', ['PK id', 'FK event_id', 'label', 'question_type', 'options', 'required', 'sort_order']],
+    ['registrations', 'reg', 1260, 560, 'การลงทะเบียน', ['PK id', 'FK event_id', 'FK user_id', 'status', 'attend_via', 'checked_in · checked_in_at', 'cert_notified_at', 'wants_laptop', 'food_allergy · dietary_pref', 'payment_status · paid_at', 'slip_url · slip_amount', 'refunded_at', 'registered_at'], '+ อีก 6 คอลัมน์รายละเอียดสลิปและคืนเงิน'],
+    ['registration_checkins', 'reg', 1620, 560, 'เช็คชื่อรายวัน', ['PK FK registration_id', 'PK event_date', 'checked_in_at']],
+    ['certificates', 'cert', 1620, 720, 'เกียรติบัตรที่ออก', ['PK id', 'FK UK registration_id', 'UK cert_code', 'default_template_id', 'issued_at', 'pdf_url']],
+    ['evaluations', 'eval', 1260, 1000, 'แบบประเมินที่ส่ง', ['PK id', 'FK UK registration_id', 'submitted_at']],
+    ['evaluation_answers', 'eval', 1620, 1000, 'คำตอบมาตรฐาน', ['PK id', 'FK evaluation_id', 'FK question_id', 'score']],
+    ['evaluation_questions', 'eval', 1940, 1000, 'คำถามมาตรฐาน', ['PK id', 'UK q_key', 'label', 'sort_order']],
+    ['event_evaluation_answers', 'eval', 1260, 1180, 'คำตอบคำถามเพิ่ม', ['PK id', 'FK evaluation_id', 'FK question_id', 'score', 'answer_text']],
+  ];
+  const badge = (k) => `<b class="k ${k.toLowerCase()}">${k}</b>`;
+  T.forEach(([id, g, x, y, note, cols, more]) => {
+    const rows = cols.map((c) => {
+      const parts = c.split(' ');
+      const keys = [];
+      while (['PK', 'FK', 'UK'].includes(parts[0])) keys.push(parts.shift());
+      return `<li>${keys.length ? keys.map(badge).join('') : '<b class="k no"></b>'}<span>${parts.join(' ')}</span></li>`;
+    }).join('');
+    C.insertAdjacentHTML('beforeend', `<div class="t g-${g}" id="${id}" style="left:${x}px;top:${y}px"><h3>${id}<small>${note}</small></h3><ul>${rows}${more ? `<li class="more">${more}</li>` : ''}</ul></div>`);
+  });
+  C.insertAdjacentHTML('beforeend', `<div class="note" style="left:220px;top:600px;width:250px">reminder_log ไม่มี FK — เป็นตัวกันไม่ให้ระบบส่งการแจ้งเตือนเรื่องเดิมซ้ำ (kind + ref_id + user_id + step)</div>
+    <div class="note foot" data-gap="36" style="left:30px;width:2100px;font-size:13px">มี View สำหรับรายงานอีก 2 ตัว: <b>v_dashboard_yearly</b> (สรุปรายปีงบประมาณตามประเภทกิจกรรม) และ <b>v_event_stats</b> (สถิติผู้ลงทะเบียน เช็คอิน และได้เกียรติบัตรต่อกิจกรรม) · ไฟล์รูป (โปสเตอร์ สลิป แม่แบบ ลายเซ็น) เก็บเป็นข้อมูลในตาราง และให้บริการผ่าน API</div>`);
+
+  window.drawWires = function () {
+    const bottom = Math.max(...[...document.querySelectorAll('.t')].map((e) => e.offsetTop + e.offsetHeight));
+    document.querySelectorAll('.foot').forEach((e) => { e.style.top = (bottom + 30 + Number(e.dataset.gap || 0)) + 'px'; });
+    C.style.height = (bottom + 30 + 36 + 60) + 'px';
+    const rc = C.getBoundingClientRect();
+    const box = (id) => { const r = document.getElementById(id).getBoundingClientRect(); return { l: r.left - rc.left, r: r.right - rc.left, t: r.top - rc.top, b: r.bottom - rc.top, w: r.width, h: r.height }; };
+    const row = (id, name) => { // y of a column row, to aim a line at it
+      const li = [...document.querySelectorAll(`#${id} li`)].find((e) => e.textContent.includes(name));
+      const r = li.getBoundingClientRect(); return r.top - rc.top + r.height / 2;
+    };
+    const col = '#5b6a8f';
+    // child (many / zero-or-one) -> parent (one)
+    const rel = (child, parent, o) => connect(child, parent, { color: col, width: 1.5, start: o.uniq ? 'zeroOne' : 'many', end: 'one', ...o });
+    const U = box('users');
+
+    rel('email_codes', 'users', { from: 'right', to: 'left', route: 'elbow', fromShift: row('email_codes', 'user_id') - (box('email_codes').t + box('email_codes').h / 2), toShift: -90 });
+    rel('activity_logs', 'users', { from: 'right', to: 'left', route: 'elbow', fromShift: row('activity_logs', 'user_id') - (box('activity_logs').t + box('activity_logs').h / 2), toShift: 40, midX: 860 });
+    const N = box('notifications');
+    rel('notifications', 'users', { from: 'top', to: 'top', toShift: -70, via: [[N.l + N.w / 2, 80], [U.l + U.w / 2 - 70, 80]] });
+    rel('events', 'users', { from: 'top', to: 'bottom', fromShift: -60, toShift: -60 });
+    const B = box('blacklist_entries');
+    rel('blacklist_entries', 'users', { from: 'left', to: 'right', route: 'elbow', fromShift: row('blacklist_entries', 'user_id') - (B.t + B.h / 2), toShift: -100, midX: 1210 });
+    rel('blacklist_entries', 'users', { from: 'left', to: 'right', route: 'elbow', fromShift: row('blacklist_entries', 'created_by') - (B.t + B.h / 2), toShift: -10, midX: 1230 });
+    const CT = box('cert_templates'), CD = box('cert_defaults');
+    rel('cert_templates', 'users', { from: 'top', to: 'top', toShift: 60, via: [[CT.l + CT.w / 2, 80], [U.l + U.w / 2 + 60, 80]] });
+    rel('cert_defaults', 'users', { from: 'top', to: 'top', toShift: 100, via: [[CD.l + CD.w / 2, 64], [U.l + U.w / 2 + 100, 64]] });
+    rel('cert_defaults', 'cert_templates', { from: 'left', to: 'right', route: 'elbow', fromShift: row('cert_defaults', 'template_id') - (CD.t + CD.h / 2) });
+
+    const E = box('events'), S = box('sar_reports'), R = box('registrations');
+    rel('sar_reports', 'events', { from: 'right', to: 'left', route: 'elbow', uniq: true, fromShift: row('sar_reports', 'event_id') - (S.t + S.h / 2), toShift: -120 });
+    const sy = row('sar_reports', 'created_by');
+    rel('sar_reports', 'users', { from: 'right', to: 'left', toShift: 120, fromShift: sy - (S.t + S.h / 2), via: [[S.r + 26, sy], [S.r + 26, 520], [860, 520], [860, U.t + U.h / 2 + 120]] });
+    rel('registrations', 'events', { from: 'left', to: 'right', route: 'elbow', fromShift: row('registrations', 'event_id') - (R.t + R.h / 2), toShift: -120 });
+    const ry = row('registrations', 'user_id');
+    rel('registrations', 'users', { from: 'left', to: 'right', toShift: 110, fromShift: ry - (R.t + R.h / 2), via: [[R.l - 30, ry], [R.l - 30, 500], [1200, 500], [1200, U.t + U.h / 2 + 110]] });
+    const RC = box('registration_checkins'), CE = box('certificates');
+    rel('registration_checkins', 'registrations', { from: 'left', to: 'right', route: 'elbow', fromShift: row('registration_checkins', 'registration_id') - (RC.t + RC.h / 2), toShift: -110 });
+    rel('certificates', 'registrations', { from: 'left', to: 'right', route: 'elbow', uniq: true, fromShift: row('certificates', 'registration_id') - (CE.t + CE.h / 2), toShift: -40 });
+    rel('evaluations', 'registrations', { from: 'top', to: 'bottom', uniq: true });
+    const EA = box('evaluation_answers'), EQ = box('evaluation_questions');
+    rel('evaluation_answers', 'evaluations', { from: 'left', to: 'right', route: 'elbow', fromShift: row('evaluation_answers', 'evaluation_id') - (EA.t + EA.h / 2) });
+    connect('evaluation_questions', 'evaluation_answers', { color: col, width: 1.5, start: 'one', end: 'many', from: 'left', to: 'right', route: 'elbow', toShift: row('evaluation_answers', 'question_id') - (EA.t + EA.h / 2) });
+    rel('event_evaluation_answers', 'evaluations', { from: 'top', to: 'bottom' });
+    const EEA = box('event_evaluation_answers'), EEQ = box('event_evaluation_questions');
+    rel('event_evaluation_answers', 'event_evaluation_questions', { from: 'left', to: 'right', route: 'elbow', fromShift: row('event_evaluation_answers', 'question_id') - (EEA.t + EEA.h / 2), toShift: 40 });
+    rel('event_evaluation_questions', 'events', { from: 'top', to: 'bottom' });
+  };
+</script>
+</body>
+</html>

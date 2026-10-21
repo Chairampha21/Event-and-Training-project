@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>CPSU ETMS · Use Case Diagram</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{--ink:#1f2340;--muted:#5b6078;--org:#2f8a4b;--stu:#d8443a;--adm:#7a4fc0;--sys:#8a6d1d;--usr:#3b4a8a}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#fff;font-family:'Noto Sans Thai',Loma,sans-serif;color:var(--ink)}
+  #canvas{position:relative;width:1800px;height:1600px;background:#fff;overflow:hidden}
+  .wires{position:absolute;inset:0;pointer-events:none;overflow:visible}
+  .wire-label{font:italic 600 12px 'Noto Sans Thai',sans-serif}
+  .boundary{position:absolute;left:230px;top:86px;width:1290px;height:1480px;border:2px solid var(--ink);border-radius:6px}
+  .boundary h2{position:absolute;left:0;right:0;top:12px;text-align:center;font-size:21px;font-weight:800}
+  .boundary h2 small{display:block;font-size:13px;font-weight:500;color:var(--muted)}
+  h1{position:absolute;left:30px;top:22px;font-size:26px;font-weight:800}
+  .uc{position:absolute;display:flex;align-items:center;justify-content:center;text-align:center;border:1.8px solid;border-radius:50%;
+      background:#fff;font-size:13.5px;font-weight:600;line-height:1.3;padding:0 18px}
+  .uc.org{border-color:var(--org);background:#f3faf5}
+  .uc.stu{border-color:var(--stu);background:#fdf4f3}
+  .uc.adm{border-color:var(--adm);background:#f7f3fd}
+  .uc.usr{border-color:var(--usr);background:#f2f4ff}
+  .uc.sys{border-color:var(--sys);background:#fffaf0}
+  .uc.sub{border-style:solid;font-weight:500;background:#fff}
+  .actor{position:absolute;width:150px;text-align:center}
+  .actor svg{display:block;margin:0 auto}
+  .actor b{display:block;font-size:15px;margin-top:4px;line-height:1.3}
+  .actor span{display:block;font-size:11.5px;color:var(--muted);line-height:1.35}
+  .zone{position:absolute;left:250px;font-size:12px;font-weight:700;letter-spacing:.3px}
+  .legend{position:absolute;right:30px;top:30px;font-size:12.5px;color:var(--muted);display:flex;gap:18px}
+</style>
+</head>
+<body>
+<div id="canvas">
+  <h1>Use Case Diagram · CPSU ETMS</h1>
+  <div class="legend">
+    <span>──▷ สืบทอดบทบาท (generalization)</span>
+    <span>- - -&gt; «include» ต้องทำร่วมกันเสมอ · «extend» ทำเพิ่มเมื่อเข้าเงื่อนไข</span>
+  </div>
+  <div class="boundary"><h2>ระบบจัดการกิจกรรมและอบรมแบบครบวงจร<small>CPSU ETMS · ภาควิชาคอมพิวเตอร์ คณะวิทยาศาสตร์ มหาวิทยาลัยศิลปากร</small></h2></div>
+  <div class="zone" style="top:150px;color:var(--org)">ผู้จัดกิจกรรม</div>
+  <div class="zone" style="top:790px;color:var(--usr)">ทุกบทบาท</div>
+  <div class="zone" style="top:1032px;color:var(--stu)">นักศึกษา / ผู้เข้าร่วมกิจกรรม</div>
+  <div class="zone" style="top:150px;left:1150px;color:var(--adm)">ผู้ดูแลระบบ</div>
+  <div class="zone" style="top:1124px;left:1150px;color:var(--sys)">งานอัตโนมัติของระบบ</div>
+</div>
+<script src="connect.js"></script>
+<script>
+  const C = document.getElementById('canvas');
+  const STICK = (color) => `<svg width="56" height="92" viewBox="0 0 56 92" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round">
+    <circle cx="28" cy="13" r="11" fill="#fff"/><path d="M28 24v34M8 38h40M28 58 12 88M28 58l16 30"/></svg>`;
+  const CLOCK = `<svg width="64" height="64" viewBox="0 0 64 64" fill="none" stroke="#8a6d1d" stroke-width="3"><rect x="3" y="3" width="58" height="58" rx="10" fill="#fffaf0"/><circle cx="32" cy="32" r="18"/><path d="M32 20v12l8 6" stroke-linecap="round"/></svg>`;
+  function actor(id, x, y, color, name, note, icon) {
+    C.insertAdjacentHTML('beforeend', `<div class="actor" id="${id}" style="left:${x}px;top:${y}px"><div class="fig">${icon || STICK(color)}</div><b style="color:${color}">${name}</b><span>${note || ''}</span></div>`);
+  }
+  function uc(id, cls, x, y, text, w = 250, h = 52) {
+    C.insertAdjacentHTML('beforeend', `<div class="uc ${cls}" id="${id}" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px">${text}</div>`);
+  }
+
+  // ---- actors
+  actor('A-org', 40, 400, '#2f8a4b', 'ผู้จัดกิจกรรม', 'บุคลากร / อาจารย์ผู้รับผิดชอบ');
+  actor('A-usr', 40, 820, '#3b4a8a', 'ผู้ใช้งาน', 'ทุกบทบาทที่เข้าสู่ระบบ');
+  actor('A-stu', 40, 1210, '#d8443a', 'นักศึกษา / อาจารย์', 'ผู้เข้าร่วมกิจกรรม');
+  actor('A-adm', 1600, 340, '#7a4fc0', 'ผู้ดูแลระบบ', 'สืบทอดทุกอย่างของผู้จัด');
+  actor('A-sys', 1600, 1196, '#8a6d1d', 'ตัวตั้งเวลาของระบบ', 'ทำงานทุก 15 นาที', CLOCK);
+
+  // ---- organizer
+  const ORG = ['สร้างกิจกรรม', 'จัดการกิจกรรม', 'ตรวจสอบรายชื่อผู้สมัคร', 'เช็คชื่อผู้เข้าร่วมกิจกรรม', 'ตรวจสอบสลิปการชำระเงิน',
+    'ออกเกียรติบัตร', 'ดูผลแบบประเมิน', 'ดูแดชบอร์ด รายงาน และงบประมาณ', 'จัดการคลังโปสเตอร์สรุปข่าว', 'จัดการ Blacklist'];
+  ORG.forEach((t, i) => uc('o' + i, 'org', 290, 176 + i * 60, t));
+  uc('o-detail', 'org sub', 640, 150, 'กำหนดรายละเอียดกิจกรรม', 250);
+  uc('o-open', 'org sub', 640, 228, 'เปิด / ปิดรับสมัคร', 230);
+  uc('o-evalset', 'org sub', 640, 300, 'ตั้งแบบประเมินและแม่แบบเกียรติบัตร', 280);
+  uc('o-refund', 'org sub', 640, 420, 'บันทึกการคืนเงิน', 210);
+
+  // ---- every role
+  uc('u-login', 'usr', 290, 816, 'เข้าสู่ระบบด้วยอีเมล<br>@silpakorn.edu / Google', 270, 62);
+  uc('u-forgot', 'usr sub', 640, 822, 'ลืมรหัสผ่าน · รีเซ็ตด้วยรหัสทางอีเมล', 290);
+  uc('u-profile', 'usr', 290, 896, 'จัดการโปรไฟล์', 250);
+  uc('u-notif', 'usr', 290, 964, 'รับการแจ้งเตือน', 250);
+
+  // ---- participants
+  const STU = ['สมัครสมาชิก', 'ดูรายการกิจกรรม', 'ลงทะเบียนเข้าร่วมกิจกรรม', 'ยกเลิกการลงทะเบียน', 'เช็คอินออนไลน์ด้วยลิงก์',
+    'ตรวจสอบสถานะและประวัติการเข้าร่วม', 'ทำแบบประเมินกิจกรรม', 'ดาวน์โหลดเกียรติบัตร'];
+  STU.forEach((t, i) => uc('s' + i, 'stu', 290, 1060 + i * 60, t));
+  uc('s-otp', 'stu sub', 640, 1050, 'ยืนยันอีเมลด้วยรหัส OTP 6 หลัก', 270);
+  uc('s-detail', 'stu sub', 640, 1120, 'ดูรายละเอียดกิจกรรม', 230);
+  uc('s-pay', 'stu sub', 640, 1196, 'ชำระค่าลงทะเบียน / แนบสลิป', 260);
+  uc('s-extra', 'stu sub', 640, 1270, 'เลือก Onsite/Online · ยืมโน้ตบุ๊ก · แจ้งอาหาร', 320);
+
+  // ---- admin
+  const ADM = ['จัดการข้อมูลผู้ใช้งาน', 'กำหนดบทบาทและสิทธิ์', 'ระงับ / คืนสิทธิ์บัญชี', 'จัดการกิจกรรมทั้งหมดในระบบ',
+    'ตั้งค่าเกียรติบัตรกลาง', 'ตรวจสอบบันทึกการใช้งานระบบ', 'ตรวจสอบภาพรวมและสรุปเรื่องค้าง'];
+  ADM.forEach((t, i) => uc('a' + i, 'adm', 1150, 176 + i * 64, t, 280));
+
+  // ---- scheduler
+  const SYS = ['เตือนก่อนวันกิจกรรม · ประกาศเปิดรับสมัคร', 'เตือนแบบประเมิน / สลิป / งานค้าง', 'บันทึกผู้ขาด · ขึ้น Blacklist อัตโนมัติ (ขาด 3 ครั้ง)'];
+  SYS.forEach((t, i) => uc('y' + i, 'sys', 1130, 1150 + i * 72, t, 320, 56));
+
+  window.drawWires = function () {
+    const O = '#2f8a4b', S = '#d8443a', A = '#7a4fc0', U = '#3b4a8a', Y = '#8a6d1d', G = '#1f2340';
+    const fig = (id) => document.querySelector(`#${id} .fig`);
+    ORG.forEach((_, i) => connect(fig('A-org'), 'o' + i, { from: 'right', to: 'left', color: O, width: 1.3 }));
+    STU.forEach((_, i) => connect(fig('A-stu'), 's' + i, { from: 'right', to: 'left', color: S, width: 1.3 }));
+    ADM.forEach((_, i) => connect(fig('A-adm'), 'a' + i, { from: 'left', to: 'right', color: A, width: 1.3 }));
+    SYS.forEach((_, i) => connect(fig('A-sys'), 'y' + i, { from: 'left', to: 'right', color: Y, width: 1.3 }));
+    ['u-login', 'u-profile', 'u-notif'].forEach((id) => connect(fig('A-usr'), id, { from: 'right', to: 'left', color: U, width: 1.3 }));
+
+    // generalisation: organizer and participant are users; admin is an organizer
+    connect('A-org', fig('A-usr'), { from: 'bottom', to: 'top', color: G, end: 'hollow' });
+    connect('A-stu', 'A-usr', { from: 'top', to: 'bottom', color: G, end: 'hollow' });
+    const adm = fig('A-adm'), org = fig('A-org');
+    const ra = adm.getBoundingClientRect(), ro = org.getBoundingClientRect(), rc = C.getBoundingClientRect();
+    const ax = ra.left - rc.left + ra.width / 2, ox = ro.left - rc.left + ro.width / 2;
+    connect(adm, org, { from: 'top', to: 'top', color: G, end: 'hollow', via: [[ax, 64], [ox, 64]] });
+
+    const inc = (a, b, label = '«include»', extra = {}) => connect(a, b, { from: 'edge', to: 'edge', color: '#55607a', dash: '6 4', end: 'open', label, ...extra });
+    inc('o0', 'o-detail');
+    inc('o1', 'o-detail', '«include»', { labelAt: 0.55 });
+    inc('o1', 'o-open');
+    inc('o1', 'o-evalset', '«include»', { labelAt: 0.6 });
+    inc('o-refund', 'o4', '«extend»');
+    inc('u-forgot', 'u-login', '«extend»');
+    inc('s0', 's-otp');
+    inc('s2', 's-detail');
+    inc('s-pay', 's2', '«extend»');
+    inc('s-extra', 's2', '«extend»', { labelAt: 0.4 });
+    // the certificate needs the evaluation first
+    const r7 = document.getElementById('s7').getBoundingClientRect(), r6 = document.getElementById('s6').getBoundingClientRect();
+    const right = Math.max(r7.right, r6.right) - rc.left;
+    connect('s7', 's6', { from: 'right', to: 'right', color: '#55607a', dash: '6 4', end: 'open', label: '«include»', labelDx: 34,
+      via: [[right + 40, r7.top - rc.top + r7.height / 2], [right + 40, r6.top - rc.top + r6.height / 2]] });
+  };
+</script>
+</body>
+</html>

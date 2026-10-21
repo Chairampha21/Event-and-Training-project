@@ -6,7 +6,7 @@
 | `architecture.png` | สถาปัตยกรรมระบบ: ผู้ใช้ → การยืนยันตัวตน → Frontend (React) → Caddy → Backend (Go + Gin) → MySQL, บริการภายนอก และการติดตั้งด้วย Docker Compose |
 | `use-case-simple.png` | Use Case Diagram แบบขาวดำตามรูปแบบเดิมของรายงาน (3 บทบาท + เข้าสู่ระบบ) |
 | `use-case.png` | Use Case Diagram แบบละเอียด: ทุกบทบาท include/extend และงานอัตโนมัติของระบบ |
-| `er-diagram.png` | ER Diagram ของฐานข้อมูล `cpsu_etms` ครบ 18 ตาราง (crow's foot) |
+| `er-diagram.png` | ER Diagram ของฐานข้อมูล `cpsu_etms` ครบ 18 ตาราง ทุกคอลัมน์ตามฐานข้อมูลจริง (crow's foot) |
 
 ต้นฉบับอยู่ใน `src/` (HTML + CSS วาดเส้นด้วย `connect.js`) โลโก้มาจาก [Simple Icons](https://simpleicons.org) (CC0)
 

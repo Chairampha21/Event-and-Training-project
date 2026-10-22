@@ -100,7 +100,7 @@ function initialDayTimes(editing, dates, parsedTime) {
 }
 
 export default function CreateEventPage() {
-  const { session, evById, createEvent, updateEvent, pushToast, getEventEvalSetup, saveEventEvalQuestions, certDefaults } = useEvents();
+  const { session, events, evById, createEvent, updateEvent, pushToast, getEventEvalSetup, saveEventEvalQuestions, certDefaults } = useEvents();
   const navigate = useNavigate();
   const location = useLocation();
   const editId = location.state?.editId;
@@ -110,12 +110,14 @@ export default function CreateEventPage() {
   const [title, setTitle] = useState(editing?.title || '');
   const [desc, setDesc] = useState(editing?.desc || '');
   const [cat, setCat] = useState(editing?.cat || '');
-  const [customCats, setCustomCats] = useState(
-    editing?.cat && !EVENT_CATEGORIES.includes(editing.cat) ? [editing.cat] : []
-  );
+  const [customCats, setCustomCats] = useState(editing?.cat ? [editing.cat] : []);
   const [addingCat, setAddingCat] = useState(false);
   const [newCatName, setNewCatName] = useState('');
-  const catOptions = useMemo(() => [...EVENT_CATEGORIES, ...customCats], [customCats]);
+  // Categories added earlier (on any event) stay in the list for the next event.
+  const catOptions = useMemo(
+    () => [...new Set([...EVENT_CATEGORIES, ...events.map((e) => e.cat).filter(Boolean), ...customCats])],
+    [events, customCats],
+  );
   const [org, setOrg] = useState(editing?.org || '');
   // Teachers with an account come first: choosing one lets them follow the event's report.
   const [teacherNames, setTeacherNames] = useState([]);

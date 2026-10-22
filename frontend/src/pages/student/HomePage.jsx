@@ -17,13 +17,15 @@ function matchFilter(e, f) {
   return topCat(e).toLowerCase() === f;
 }
 
-// Filter pills are fixed to the current base categories only — an event tagged
-// with something else (e.g. a one-off custom category from the create-event form)
-// still shows up under "ทั้งหมด" but never spawns its own stray pill here.
-const CATEGORY_PILLS = [
-  { key: 'all', label: 'ทั้งหมด', icon: 'ti-grid-dots' },
-  ...BASE_CATEGORIES.map((c) => ({ key: c.toLowerCase(), label: c, icon: CATEGORY_ICONS[c] })),
-];
+// The base categories always have a pill; a category added in the create-event
+// form ("+ เพิ่มประเภทใหม่...") gets one too once an event the viewer can see uses it.
+function categoryPills(events) {
+  const extra = [...new Set(events.map(topCat).filter((c) => c && !BASE_CATEGORIES.includes(c)))].sort((a, b) => a.localeCompare(b, 'th'));
+  return [
+    { key: 'all', label: 'ทั้งหมด', icon: 'ti-grid-dots' },
+    ...[...BASE_CATEGORIES, ...extra].map((c) => ({ key: c.toLowerCase(), label: c, icon: CATEGORY_ICONS[c] || 'ti-sparkles' })),
+  ];
+}
 
 export default function HomePage() {
   const { events, regs, session, myStatus, getDashboardSummary } = useEvents();
@@ -63,6 +65,15 @@ export default function HomePage() {
   }, [events, currentFy]);
 
   const statusRank = { open: 0, soon: 1, full: 2, closed: 3, done: 4 };
+
+  const pills = useMemo(
+    () => categoryPills(events.filter((e) => e.listed && (isStudent ? e.status === 'open' : fy === 'all' || fiscalYearOf(e.dateStart) === fy))),
+    [events, isStudent, fy],
+  );
+  // A custom category's pill goes away when the year changes to one without it.
+  useEffect(() => {
+    if (!pills.some((p) => p.key === pillFilter)) setPillFilter('all');
+  }, [pills, pillFilter]);
 
   const list = useMemo(() => {
     let l = events.filter((e) => {
@@ -110,7 +121,7 @@ export default function HomePage() {
       </div>
 
       <SearchBar
-        pills={CATEGORY_PILLS}
+        pills={pills}
         pillFilter={pillFilter} onPillChange={setPillFilter}
         statusFilter={statusFilter} onStatusChange={setStatusFilter} hideStatus={isStudent}
       />

@@ -40,6 +40,15 @@ CREATE TABLE users (
   role            ENUM('admin','organizer','teacher','student') NOT NULL DEFAULT 'student',
   student_id      VARCHAR(20)       NULL,                 -- รหัสนักศึกษา เช่น 64xxxxx21 (students only)
   dept            VARCHAR(190)      NULL,                 -- สังกัด/ตำแหน่ง (staff) หรือ ชั้นปี · สาขา (students)
+  -- Personal details the user may add on their profile (all optional).
+  -- Existing databases: run database/migrations/2026-11-personal-info.sql
+  nickname          VARCHAR(50)     NULL,                 -- ชื่อเล่น
+  gender            ENUM('male','female','unspecified') NULL, -- เพศ (ใช้เติมคำตอบแบบประเมิน)
+  phone             VARCHAR(20)     NULL,
+  blood_type        ENUM('A','B','AB','O') NULL,          -- กรุ๊ปเลือด
+  food_allergy      VARCHAR(255)    NULL,                 -- อาหารที่แพ้ / ข้อจำกัดด้านอาหาร
+  medical_note      VARCHAR(255)    NULL,                 -- โรคประจำตัว / ยาที่แพ้
+  emergency_contact VARCHAR(150)    NULL,                 -- ชื่อและเบอร์ผู้ติดต่อกรณีฉุกเฉิน
   active          TINYINT(1)        NOT NULL DEFAULT 1,
   -- When the owner proved the address is theirs (a code sent to it, Google
   -- Sign-In, or an admin creating the account). A self sign-up can't log in
@@ -123,6 +132,11 @@ CREATE TABLE events (
   -- Existing databases: ALTER TABLE events ADD COLUMN ask_dietary TINYINT(1) NOT NULL DEFAULT 0 AFTER loan_laptop_qty;
   --                     ALTER TABLE registrations ADD COLUMN food_allergy VARCHAR(300) NULL AFTER wants_laptop, ADD COLUMN dietary_pref VARCHAR(100) NULL AFTER food_allergy;
   ask_dietary           TINYINT(1)    NOT NULL DEFAULT 0,
+  -- meals: which meals the event serves, comma-separated in the order of the
+  -- day: breakfast (อาหารเช้า), break_am (อาหารว่างช่วงเช้า), lunch (อาหารกลางวัน),
+  -- break_pm (อาหารว่างช่วงบ่าย), dinner (อาหารเย็น), snack_night (อาหารว่างช่วงค่ำ).
+  -- Existing databases: run database/migrations/2026-11-event-meals.sql
+  meals                 VARCHAR(60)   NULL,
   -- issue_certificate: the event gives certificates. When off, the sign-in
   -- sheet has one signature box per day instead of morning/afternoon, and
   -- certificates cannot be issued.

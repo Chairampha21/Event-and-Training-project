@@ -86,6 +86,7 @@ export default function CertificateSettingsPage() {
             <div className="setup-head-text">
               <h2><span className="fc-num">2</span> ผู้ลงนามเริ่มต้น</h2>
               <p className="fc-sub">กิจกรรมใหม่เริ่มต้นด้วยผู้ลงนามนี้ ผู้จัดเปลี่ยนเฉพาะกิจกรรมของตัวเองได้ · กิจกรรมที่สร้างไว้แล้วไม่เปลี่ยนตาม</p>
+              <p className="fc-sub"><i className="ti ti-history" /> เปลี่ยนผู้ลงนามเมื่อขึ้นปีการศึกษาใหม่ได้เลย · เกียรติบัตรที่ออกไปแล้วยังคงใช้ชื่อและลายเซ็นของผู้ลงนามเดิม</p>
             </div>
           </div>
           <div className="form-row">

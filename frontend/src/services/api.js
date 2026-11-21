@@ -60,6 +60,9 @@ async function request(path, { method = 'GET', body, auth = true } = {}) {
       headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
+  } catch {
+    // The request never got an answer: server down, or no network (status 0).
+    throw new ApiError('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ · ตรวจสอบว่าเซิร์ฟเวอร์ทำงานอยู่ หรือการเชื่อมต่ออินเทอร์เน็ต', 0, null);
   } finally {
     done();
   }

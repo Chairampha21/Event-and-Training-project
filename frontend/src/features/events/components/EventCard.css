@@ -8,3 +8,14 @@
 .card-open:focus-visible::after{outline:3px solid var(--c1);outline-offset:-3px}
 .card-clickable:hover .card-title{color:var(--c2)}
 .card-clickable .card-footer button{position:relative;z-index:2}
+
+/* Closed / finished events: muted, not hidden. */
+.card.is-past{background:#f7f7fa;border-color:#e7e7ef}
+.card.is-past .card-poster img{filter:grayscale(.85);opacity:.8;transition:filter .25s ease,opacity .25s ease}
+.card.is-past .card-poster img.cp-fill{filter:blur(18px) grayscale(.85);opacity:.6}
+.card.is-past .icon-box{filter:grayscale(1);opacity:.75}
+.card.is-past .card-title{color:var(--c4-70)}
+.card.is-past:hover .card-poster img,.card.is-past:focus-within .card-poster img{filter:none;opacity:1}
+.card.is-past:hover .card-poster img.cp-fill,.card.is-past:focus-within .card-poster img.cp-fill{filter:blur(18px) saturate(1.1);opacity:.85}
+.card.is-past:hover .icon-box,.card.is-past:focus-within .icon-box{filter:none;opacity:1}
+.card.is-past .seats-fill{background:#a3a3b5}

@@ -6,6 +6,7 @@ import { COLOR_PRESETS, DEFAULT_LAYOUT, LAYOUT_LIMITS, analyzeTemplate, isDefaul
 import './CertTemplateUpload.css';
 import { DEFAULT_CERT_TEMPLATE_URL, DEFAULT_TEMPLATE_LAYOUT, mainTemplate } from '../utils/defaultTemplate';
 import { useEvents } from '../../../hooks/useEvents';
+import { showResult } from '../../../utils/alert';
 
 const MAX_BYTES = 5 * 1024 * 1024;
 const ACCEPT = ['image/jpeg', 'image/png'];
@@ -13,6 +14,34 @@ const A4_RATIO = 297 / 210; // landscape
 // A4 landscape in pixels: 3508 x 2480 at 300 dpi (sharp print), 1754 x 1240 at 150 dpi (acceptable).
 const PRINT_SHARP_W = 3508;
 const PRINT_OK_W = 1754;
+// Below this the template is refused outright: the smallest A4 size design
+// tools export (Canva's A4 at 96 dpi is 1123 x 794). Text on anything smaller
+// prints badly blurred.
+const MIN_W = 1123;
+// Further off A4 than this, the text can't be placed on it sensibly.
+const MAX_RATIO_OFF = 0.10;
+
+function imageSize(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+    img.onerror = reject;
+    img.src = dataUrl;
+  });
+}
+
+const fmt = (n) => n.toLocaleString('en-US');
+// The standard a certificate template must meet, as told to the user.
+const TEMPLATE_STANDARD = `มาตรฐานเกียรติบัตร: A4 แนวนอน (297 × 210 มม.) กว้างอย่างน้อย ${fmt(MIN_W)} px · แนะนำ ${fmt(PRINT_SHARP_W)} × ${fmt(2480)} px เพื่อให้คมชัดเมื่อพิมพ์`;
+
+// Why a file can't be a certificate template, or '' when it can.
+function refuseTemplate({ w, h }) {
+  const size = `${fmt(w)} × ${fmt(h)} px`;
+  if (h > w) return `ไฟล์นี้เป็นภาพแนวตั้ง (${size})`;
+  if (Math.abs(w / h - A4_RATIO) / A4_RATIO > MAX_RATIO_OFF) return `สัดส่วนภาพ (${size}) ไม่ใช่ A4 แนวนอน`;
+  if (w < MIN_W) return `ภาพมีขนาดเล็กกว่ามาตรฐาน (${size})`;
+  return '';
+}
 const SAMPLE_NAME = 'ชื่อ-นามสกุล ผู้เข้าร่วม';
 // Controls of the "fit text to template" panel.
 const POSITION_SLIDERS = [
@@ -115,6 +144,12 @@ export default function CertTemplateUpload({ value, onChange, layout, onLayoutCh
     if (file.size > MAX_BYTES) { setError(`ไฟล์มีขนาด ${formatBytes(file.size)} · เกินขนาดสูงสุด 5 MB`); return; }
     try {
       const dataUrl = await fileToDataUrl(file);
+      const why = refuseTemplate(await imageSize(dataUrl));
+      if (why) {
+        setError(`ไม่สามารถใช้ไฟล์ "${file.name}" ได้ · ${why} · ${TEMPLATE_STANDARD}`);
+        showResult('ขนาดไฟล์ไม่ตรงตามมาตรฐานเกียรติบัตร', `"${file.name}" ${why} · ${TEMPLATE_STANDARD}`, 'warn');
+        return;
+      }
       setError('');
       setDims(null);
       onChange({ name: file.name, type: file.type, dataUrl });
@@ -215,7 +250,7 @@ export default function CertTemplateUpload({ value, onChange, layout, onLayoutCh
             <div className="ctu-empty-ic"><i className={`ti ${dragOver ? 'ti-download' : 'ti-certificate'}`} /></div>
             <div className="ctu-empty-title">{dragOver ? 'วางไฟล์ที่นี่เพื่ออัปโหลด' : 'ลากไฟล์ template เกียรติบัตรมาวางที่นี่'}</div>
             {!dragOver && <div className="ctu-empty-or">หรือ <span className="ctu-browse">เลือกไฟล์จากเครื่อง</span></div>}
-            <div className="ctu-empty-hint">JPG หรือ PNG · สูงสุด 5 MB · A4 แนวนอน แนะนำ {PRINT_SHARP_W} × 2480 px</div>
+            <div className="ctu-empty-hint">JPG หรือ PNG · สูงสุด 5 MB · A4 แนวนอน กว้างอย่างน้อย {MIN_W} px · แนะนำ {PRINT_SHARP_W} × 2480 px</div>
             <div className="ctu-empty-opt"><i className="ti ti-info-circle" /> {asDefault ? 'หากไม่อัปโหลด ระบบใช้แม่แบบที่ติดมากับระบบ (ด้านล่าง)' : 'ไม่บังคับ · หากไม่อัปโหลด ระบบใช้แม่แบบหลักของภาควิชา (ด้านล่าง)'}</div>
           </div>
           <div className="ctu-filled ctu-main">

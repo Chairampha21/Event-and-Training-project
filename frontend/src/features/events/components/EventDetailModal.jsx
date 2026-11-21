@@ -6,12 +6,13 @@ import Modal, { ModalHead } from '../../../components/ui/Modal';
 import ImageViewer from '../../../components/ui/ImageViewer';
 import CycleProgress from './CycleProgress';
 import OnlineJoinLink from './OnlineJoinLink';
-import PaymentBox from './PaymentBox';
+import PaymentBox, { SlipFields, emptySlip, slipProblem, slipPayload } from './PaymentBox';
 import CancelRegistrationButton, { cancelInfo } from './CancelRegistrationButton';
 import { formatBaht } from '../../../utils/money';
 import { formatThaiDate } from '../../../utils/dateFormat';
 import { needsNames } from '../../../utils/personName';
-import DietaryQuestions, { EMPTY_DIETARY, dietaryComplete, dietaryPayload } from './DietaryQuestions';
+import DietaryQuestions, { dietaryFromProfile, dietaryComplete, dietaryPayload } from './DietaryQuestions';
+import { mealsText } from '../../../utils/meals';
 
 // Event details for whoever opened it; students register from here (with the
 // confirmation step and the optional notebook-loan request).
@@ -25,14 +26,21 @@ export default function EventDetailModal({ eventId, open, onClose, preview }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [borrowLaptop, setBorrowLaptop] = useState(false);
   const [attendVia, setAttendVia] = useState(''); // hybrid events: 'onsite' | 'online', chosen while registering
-  const [dietary, setDietary] = useState(EMPTY_DIETARY);
+  // Starts from the food allergy on the person's profile, if they keep one.
+  const [dietary, setDietary] = useState(() => dietaryFromProfile(session?.food_allergy));
   const [posterOpen, setPosterOpen] = useState(false);
+  // Paid events: the slip is sent with the registration, so paying is done in one go.
+  const [slip, setSlip] = useState(null);
+  const [slipError, setSlipError] = useState('');
 
   useEffect(() => {
     if (!open) { setConfirmOpen(false); setPosterOpen(false); }
     setBorrowLaptop(false);
     setAttendVia('');
-    setDietary(EMPTY_DIETARY);
+    setDietary(dietaryFromProfile(session?.food_allergy));
+    setSlip(null);
+    setSlipError('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, eventId]);
 
   if (!open || (!preview && !eventId)) return null;
@@ -72,6 +80,11 @@ export default function EventDetailModal({ eventId, open, onClose, preview }) {
   };
   const inRoom = hybrid ? attendVia === 'onsite' : ev.attendMode !== 'online';
   const askFood = ev.askDietary && inRoom;
+  // A paid event (teachers don't pay): the slip comes with the registration.
+  const payNow = !preview && ev.fee > 0 && !isTeacher;
+  const payAskPromptPay = ev.refundMethod === 'transfer';
+  const slipForm = slip || emptySlip(ev.fee);
+  const payMissing = payNow ? slipProblem(slipForm, payAskPromptPay) : '';
   const viaMissing = hybrid && !attendVia;
 
   function closeAll() {
@@ -81,7 +94,9 @@ export default function EventDetailModal({ eventId, open, onClose, preview }) {
 
   if (confirmOpen) {
     return (
-      <Modal open={open} onClose={closeAll} size="sm">
+      // Wider when there is something to fill in (slip, food, laptop, how to attend),
+      // so the slip's date, time and amount sit side by side and the buttons on one line.
+      <Modal open={open} onClose={closeAll} size={payNow || askFood || hybrid || (ev.loanQty > 0 && inRoom) ? 'md' : 'sm'}>
         <ModalHead eyebrow={preview ? 'ตัวอย่าง · ขั้นยืนยันการสมัคร' : 'ยืนยันการสมัคร'} icon="ti-user-plus" title="สมัครกิจกรรมนี้เลยหรือไม่?" onClose={closeAll} />
         <div className="modal-body">
           <p style={{ fontSize: 14, color: 'var(--c4-70)', lineHeight: 1.6 }}>
@@ -120,7 +135,19 @@ export default function EventDetailModal({ eventId, open, onClose, preview }) {
             </label>
           )}
           {askFood && <DietaryQuestions value={dietary} onChange={setDietary} />}
-          {ev.fee > 0 && (isTeacher ? teacherFree : <PaymentBox fee={ev.fee} info={ev.paymentInfo} refundMethod={ev.refundMethod} refundNote={ev.refundNote} />)}
+          {ev.fee > 0 && (isTeacher ? teacherFree : (
+            <PaymentBox fee={ev.fee} info={ev.paymentInfo} refundMethod={ev.refundMethod} refundNote={ev.refundNote}>
+              {payNow && (
+                <div className="slip-form pay-now">
+                  <div className="slip-form-title">ชำระเงินและแนบสลิป <span className="req">*</span></div>
+                  <p className="pay-now-hint">โอนเงินตามวิธีชำระด้านบน แล้วแนบสลิปที่นี่ · ระบบส่งสลิปให้ผู้จัดตรวจพร้อมการสมัคร</p>
+                  <SlipFields value={slipForm} onChange={setSlip} askPromptPay={payAskPromptPay} onError={setSlipError} />
+                  {slipError && <div className="slip-error" role="alert"><i className="ti ti-alert-circle" /> {slipError}</div>}
+                  <p className="slip-privacy"><i className="ti ti-lock" /> สลิปเห็นเฉพาะคุณและผู้จัดกิจกรรมนี้ · กรอกวันเวลาและยอดเงินให้ตรงกับสลิป</p>
+                </div>
+              )}
+            </PaymentBox>
+          ))}
         </div>
         <div className="modal-foot">
           {!preview && namesMissing && (
@@ -132,15 +159,24 @@ export default function EventDetailModal({ eventId, open, onClose, preview }) {
           {!preview && !namesMissing && !viaMissing && askFood && !dietaryComplete(dietary) && (
             <span className="diet-need" role="status"><i className="ti ti-info-circle" /> {dietary.hasAllergy ? 'ระบุอาหารที่แพ้ก่อนยืนยัน' : 'ตอบคำถามเรื่องแพ้อาหารก่อนยืนยัน'}</span>
           )}
+          {!preview && !namesMissing && !viaMissing && !(askFood && !dietaryComplete(dietary)) && payMissing && (
+            <span className="diet-need" role="status"><i className="ti ti-info-circle" /> {payMissing}</span>
+          )}
           <button className="btn btn-outline" onClick={() => setConfirmOpen(false)}>ย้อนกลับ</button>
           {preview ? (
             <button className="btn btn-primary" disabled title="นี่คือตัวอย่าง ยังไม่มีการสมัครจริง"><i className="ti ti-eye" /> ตัวอย่าง · ยังไม่ส่งจริง</button>
           ) : (
             <button
               className="btn btn-primary"
-              disabled={namesMissing || viaMissing || (askFood && !dietaryComplete(dietary))}
-              onClick={() => { registerForEvent(ev.id, { attendVia, borrowLaptop: inRoom && borrowLaptop, ...(askFood ? dietaryPayload(dietary) : {}) }); closeAll(); }}
-            ><i className="ti ti-user-plus" /> ยืนยันสมัคร</button>
+              disabled={namesMissing || viaMissing || (askFood && !dietaryComplete(dietary)) || !!payMissing}
+              onClick={() => {
+                registerForEvent(ev.id, {
+                  attendVia, borrowLaptop: inRoom && borrowLaptop, ...(askFood ? dietaryPayload(dietary) : {}),
+                  ...(payNow ? { payment: slipPayload(slipForm, payAskPromptPay) } : {}),
+                });
+                closeAll();
+              }}
+            ><i className="ti ti-user-plus" /> {payNow ? 'ยืนยันสมัครและส่งสลิป' : 'ยืนยันสมัคร'}</button>
           )}
         </div>
       </Modal>
@@ -154,6 +190,8 @@ export default function EventDetailModal({ eventId, open, onClose, preview }) {
         <div className={`md-top${ev.poster ? ' has-poster' : ''}`}>
           {ev.poster && (
             <button type="button" className="md-poster" onClick={() => setPosterOpen(true)} aria-label="ดูโปสเตอร์เต็มและซูม">
+              {/* The whole poster (1:1, 3:4 or 9:16), a blurred copy filling the frame around it. */}
+              <img className="cp-fill" src={ev.poster} alt="" aria-hidden="true" />
               <img src={ev.poster} alt={`โปสเตอร์ ${ev.title}`} />
               <span className="md-poster-zoom"><i className="ti ti-zoom-in" /> ดูภาพเต็ม</span>
             </button>
@@ -165,6 +203,7 @@ export default function EventDetailModal({ eventId, open, onClose, preview }) {
               <li><i className="ti ti-calendar-event" /> {ev.date}</li>
               <li><i className="ti ti-clock" /> {ev.time}</li>
               <li><i className="ti ti-map-pin" /> {ev.place}</li>
+              {ev.askDietary && ev.meals?.length > 0 && <li><i className="ti ti-tools-kitchen-2" /> มี{mealsText(ev.meals)}</li>}
               {ev.regPeriod && <li><i className="ti ti-user-plus" /> รับสมัคร {ev.regPeriod}</li>}
             </ul>
           </div>

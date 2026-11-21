@@ -373,6 +373,8 @@ func (h *EvaluationsHandler) Submit(c *gin.Context) {
 		return
 	}
 	if certCode != "" {
+		freezeSigner(h.DB, eventID) // this event's certificates keep today's signer
+
 		activitylog.Log(h.DB, &claims.UserID, "ISSUE", "ออกเกียรติบัตร: "+certCode)
 	}
 	// The student sees the certificate unlock on screen as they submit, so no

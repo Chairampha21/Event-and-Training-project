@@ -2,11 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useEvents } from '../../hooks/useEvents';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import { profileAnswer } from '../../utils/profileAnswers';
 
 export default function EvaluationFormPage() {
   const { eventId } = useParams();
   const navigate = useNavigate();
-  const { evById, submitEvaluation, getEventEvalQuestions } = useEvents();
+  const { session, evById, submitEvaluation, getEventEvalQuestions } = useEvents();
   const ev = evById(eventId);
   const noCert = ev?.issueCert === false; // the evaluation unlocks no certificate
   const [customValues, setCustomValues] = useState({});
@@ -20,7 +21,12 @@ export default function EvaluationFormPage() {
     if (!ev) return;
     let cancelled = false;
     getEventEvalQuestions(ev.id).then((qs) => {
-      if (!cancelled) { setCustomQuestions(qs); setLoadingCustom(false); }
+      if (cancelled) return;
+      // Questions the profile already answers (gender, year, major) start answered.
+      const filled = Object.fromEntries(qs.map((q) => [q.id, profileAnswer(q, session)]).filter(([, a]) => a));
+      setCustomValues((v) => ({ ...filled, ...v }));
+      setCustomQuestions(qs);
+      setLoadingCustom(false);
     });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps

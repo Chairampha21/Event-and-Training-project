@@ -189,3 +189,41 @@ func (h *CertDefaultsHandler) Update(c *gin.Context) {
 // currentTemplateSQL is the main template version at this moment, recorded on
 // each certificate as it is issued (NULL = the built-in one).
 const currentTemplateSQL = `(SELECT template_id FROM cert_defaults WHERE id = 1)`
+
+// freezeSigner copies the department's default signer into an event that has
+// none of its own, once its certificates are opened or one is issued. From
+// then on the event keeps that signer: when a new academic year brings a new
+// head of department and the default changes, certificates already handed
+// out still show the person who signed them.
+//
+// The signature image is only taken along when the event had no signer at
+// all, so an organizer who named a signer but chose no image keeps it that way.
+func freezeSigner(db *sql.DB, eventID int64) {
+	_, _ = db.Exec(`UPDATE events e JOIN cert_defaults d ON d.id = 1
+		SET e.cert_signature_url = d.signature_url
+		WHERE e.id = ? AND COALESCE(e.cert_signer_name, '') = '' AND COALESCE(e.cert_signature_url, '') = ''`, eventID)
+	_, _ = db.Exec(`UPDATE events e JOIN cert_defaults d ON d.id = 1
+		SET e.cert_signer_name = COALESCE(NULLIF(e.cert_signer_name, ''), d.signer_name),
+		    e.cert_signer_title = COALESCE(NULLIF(e.cert_signer_title, ''), d.signer_title)
+		WHERE e.id = ? AND (COALESCE(e.cert_signer_name, '') = '' OR COALESCE(e.cert_signer_title, '') = '')`, eventID)
+}
+
+// signerChanged tells whether an event edit would change who signs its
+// certificates (name, title or signature image).
+func signerChanged(raw map[string]any, ev models.Event) bool {
+	for field, cur := range map[string]string{"cert_signer_name": ev.CertSignerName.String, "cert_signer_title": ev.CertSignerTitle.String} {
+		if v, present := raw[field]; present {
+			s, _ := v.(string)
+			if strings.TrimSpace(s) != strings.TrimSpace(cur) {
+				return true
+			}
+		}
+	}
+	if v, present := raw["cert_signature_url"]; present {
+		s, _ := v.(string) // nil (removing it) reads as ""
+		if s != ev.CertSignatureURL.String {
+			return true
+		}
+	}
+	return false
+}

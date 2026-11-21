@@ -1,4 +1,5 @@
 import React from 'react';
+import { studentYearFromId } from '../../utils/studentYear';
 
 export const MAJORS = ['วิทยาการคอมพิวเตอร์', 'เทคโนโลยีสารสนเทศ'];
 const YEARS = ['1', '2', '3', '4'];
@@ -20,11 +21,25 @@ export function formatStudentDept(year, major) {
 /**
  * Year (1–4, or "ปีอื่นๆ" with the number typed in) and major (one of the
  * department's two) for a student, read from and written back to `value`,
- * the user's dept text.
+ * the user's dept text. With `studentId`, the year follows from it (the ID
+ * starts with the year the student was admitted): it is filled in when empty
+ * or when the ID is changed, and a different choice is pointed out.
  */
-export default function StudentDeptFields({ idPrefix, value, onChange }) {
+export default function StudentDeptFields({ idPrefix, value, onChange, studentId }) {
   const { year, major } = parseStudentDept(value);
   const [picked, setPicked] = React.useState(false);
+  const fromId = studentYearFromId(studentId);
+  const lastId = React.useRef(studentId);
+  React.useEffect(() => {
+    // Loading the saved ID (from nothing) isn't a change; typing a new one is.
+    const idChanged = !!lastId.current && lastId.current !== studentId;
+    lastId.current = studentId;
+    if (fromId && fromId !== year && (!year || idChanged)) {
+      setPicked(false);
+      onChange(formatStudentDept(fromId, major));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromId, studentId]);
   // A year above 4 (e.g. loaded after the first render) always shows as "other".
   const custom = picked || (!!year && !YEARS.includes(year));
   const set = (y, m) => onChange(formatStudentDept(y, m));
@@ -50,6 +65,14 @@ export default function StudentDeptFields({ idPrefix, value, onChange }) {
             onChange={(e) => set(e.target.value.replace(/\D/g, '').slice(0, 1), major)} aria-label="ระบุชั้นปี"
           />
         )}
+        {fromId && (fromId === year
+          ? <span className="helper sd-from-id"><i className="ti ti-id" /> ตามรหัสนักศึกษา (เข้าศึกษาปี 25{String(studentId).trim().slice(0, 2)})</span>
+          : (
+            <span className="helper sd-from-id warn">
+              <i className="ti ti-alert-triangle" /> ตามรหัสนักศึกษาควรเป็นชั้นปีที่ {fromId}
+              <button type="button" className="sd-use" onClick={() => { setPicked(false); onChange(formatStudentDept(fromId, major)); }}>ใช้ชั้นปีนี้</button>
+            </span>
+          ))}
       </div>
       <div className="field">
         <label htmlFor={`${idPrefix}-major`}>สาขา</label>

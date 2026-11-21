@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -45,12 +46,14 @@ func (h *AuthHandler) signToken(u models.User) (string, error) {
 	return token.SignedString([]byte(h.JWTSecret))
 }
 
-const userPublicFields = `id, name, title_th, name_en, title_en, email, role, student_id, dept, active, created_at`
+const userPublicFields = `id, name, title_th, name_en, title_en, email, role, student_id, dept, active, created_at, ` +
+	`nickname, gender, phone, blood_type, food_allergy, medical_note, emergency_contact`
 
 func scanUser(row interface{ Scan(dest ...any) error }) (models.User, error) {
 	var u models.User
 	var active int
-	err := row.Scan(&u.ID, &u.Name, &u.TitleTH, &u.NameEN, &u.TitleEN, &u.Email, &u.Role, &u.StudentID, &u.Dept, &active, &u.CreatedAt)
+	err := row.Scan(&u.ID, &u.Name, &u.TitleTH, &u.NameEN, &u.TitleEN, &u.Email, &u.Role, &u.StudentID, &u.Dept, &active, &u.CreatedAt,
+		&u.Nickname, &u.Gender, &u.Phone, &u.BloodType, &u.FoodAllergy, &u.MedicalNote, &u.EmergencyContact)
 	u.Active = active == 1
 	return u, err
 }
@@ -163,6 +166,10 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 	email := strings.ToLower(strings.TrimSpace(body.Email))
+	// Just the name ("somchai_j") means the university address.
+	if email != "" && !strings.Contains(email, "@") {
+		email += "@silpakorn.edu"
+	}
 	if email == "" || body.Password == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "กรอกอีเมลและรหัสผ่าน"})
 		return
@@ -174,11 +181,12 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		active       int
 	)
 	row := h.DB.QueryRow(
-		`SELECT id, name, title_th, name_en, title_en, email, role, student_id, dept, active, created_at, password_hash, email_verified_at IS NOT NULL FROM users WHERE email = ?`,
+		`SELECT `+userPublicFields+`, password_hash, email_verified_at IS NOT NULL FROM users WHERE email = ?`,
 		email,
 	)
 	var verified bool
-	err := row.Scan(&u.ID, &u.Name, &u.TitleTH, &u.NameEN, &u.TitleEN, &u.Email, &u.Role, &u.StudentID, &u.Dept, &active, &u.CreatedAt, &passwordHash, &verified)
+	err := row.Scan(&u.ID, &u.Name, &u.TitleTH, &u.NameEN, &u.TitleEN, &u.Email, &u.Role, &u.StudentID, &u.Dept, &active, &u.CreatedAt,
+		&u.Nickname, &u.Gender, &u.Phone, &u.BloodType, &u.FoodAllergy, &u.MedicalNote, &u.EmergencyContact, &passwordHash, &verified)
 	if err == sql.ErrNoRows || active != 1 {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "อีเมลหรือรหัสผ่านไม่ถูกต้อง"})
 		return
@@ -358,6 +366,47 @@ type updateMeBody struct {
 	TitleEN   string `json:"title_en"`
 	Dept      string `json:"dept"`
 	StudentID string `json:"student_id"`
+	// Personal details for event day (all optional).
+	Nickname         string `json:"nickname"`
+	Gender           string `json:"gender"`
+	Phone            string `json:"phone"`
+	BloodType        string `json:"blood_type"`
+	FoodAllergy      string `json:"food_allergy"`
+	MedicalNote      string `json:"medical_note"`
+	EmergencyContact string `json:"emergency_contact"`
+}
+
+var bloodTypes = map[string]bool{"A": true, "B": true, "AB": true, "O": true}
+var genders = map[string]bool{"male": true, "female": true, "unspecified": true}
+
+// checkPersonal tidies the optional personal details and checks their sizes.
+func checkPersonal(b *updateMeBody) string {
+	for _, f := range []struct {
+		v     *string
+		max   int
+		label string
+	}{
+		{&b.Nickname, 50, "ชื่อเล่น"}, {&b.Phone, 20, "เบอร์โทรศัพท์"},
+		{&b.FoodAllergy, 255, "อาหารที่แพ้"}, {&b.MedicalNote, 255, "โรคประจำตัว/ยาที่แพ้"},
+		{&b.EmergencyContact, 150, "ผู้ติดต่อกรณีฉุกเฉิน"},
+	} {
+		*f.v = strings.TrimSpace(*f.v)
+		if utf8.RuneCountInString(*f.v) > f.max {
+			return f.label + "ยาวเกินไป"
+		}
+	}
+	b.BloodType = strings.ToUpper(strings.TrimSpace(b.BloodType))
+	if b.BloodType != "" && !bloodTypes[b.BloodType] {
+		return "กรุ๊ปเลือดไม่ถูกต้อง"
+	}
+	b.Gender = strings.ToLower(strings.TrimSpace(b.Gender))
+	if b.Gender == "" {
+		return "กรุณาเลือกเพศ (เลือก \"ไม่ประสงค์ระบุ\" ได้)"
+	}
+	if !genders[b.Gender] {
+		return "เพศไม่ถูกต้อง"
+	}
+	return ""
 }
 
 // UpdateMe lets a logged-in user edit their own display name/dept/student ID
@@ -376,9 +425,17 @@ func (h *AuthHandler) UpdateMe(c *gin.Context) {
 		return
 	}
 
+	if msg := checkPersonal(&b); msg != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": msg})
+		return
+	}
+
 	_, err := h.DB.Exec(
-		`UPDATE users SET name = ?, title_th = ?, name_en = ?, title_en = ?, dept = ?, student_id = ? WHERE id = ?`,
-		name, titleTH, nullIfEmpty(nameEN), nullIfEmpty(titleEN), nullIfEmpty(b.Dept), nullIfEmpty(b.StudentID), claims.UserID,
+		`UPDATE users SET name = ?, title_th = ?, name_en = ?, title_en = ?, dept = ?, student_id = ?,
+		   nickname = ?, gender = ?, phone = ?, blood_type = ?, food_allergy = ?, medical_note = ?, emergency_contact = ? WHERE id = ?`,
+		name, titleTH, nullIfEmpty(nameEN), nullIfEmpty(titleEN), nullIfEmpty(b.Dept), nullIfEmpty(b.StudentID),
+		nullIfEmpty(b.Nickname), nullIfEmpty(b.Gender), nullIfEmpty(b.Phone), nullIfEmpty(b.BloodType), nullIfEmpty(b.FoodAllergy), nullIfEmpty(b.MedicalNote), nullIfEmpty(b.EmergencyContact),
+		claims.UserID,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})

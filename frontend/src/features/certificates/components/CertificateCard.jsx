@@ -7,6 +7,7 @@ import { formatCertDate, formatCertDateList } from '../../../utils/dateFormat';
 import { layoutVars, normalizeLayout } from '../utils/certLayout';
 import { certTemplateFor } from '../utils/defaultTemplate';
 import { fullNameTh } from '../../../utils/personName';
+import { apiUrl } from '../../../services/api';
 
 // Everything needed to draw and download the signed-in student's certificate
 // for one event — shared by the card in the list and the full preview, so the
@@ -17,6 +18,14 @@ import { fullNameTh } from '../../../utils/personName';
 // certificate itself carries (from /api/me/certificates). The template and
 // signer are only on the event, so an archived event's certificate is drawn on
 // the department's main template.
+function certSigner(ev, cert, certDefaults) {
+  if (ev?.signer?.name) return { signerName: ev.signer.name, signerTitle: ev.signer.title || '', signature: ev.signer.signature || null };
+  if (cert?.signer_name) {
+    return { signerName: cert.signer_name, signerTitle: cert.signer_title || '', signature: cert.signature_url ? apiUrl(cert.signature_url) : null };
+  }
+  return { signerName: certDefaults?.signer.name || '', signerTitle: certDefaults?.signer.title || '', signature: certDefaults?.signer.signature || null };
+}
+
 export function buildCertificate({ evById, session, myCertificates, certDefaults, certTemplateCache }, eventId) {
   if (!eventId) return null;
   const ev = evById(eventId);
@@ -31,10 +40,11 @@ export function buildCertificate({ evById, session, myCertificates, certDefaults
     title,
     // Multi-day events held on hand-picked days list each day; otherwise start–end.
     certDate: ev?.dates?.length > 1 ? formatCertDateList(ev.dates) : formatCertDate(dateStart, dateEnd),
-    signerName: ev?.signer?.name || certDefaults?.signer.name || '',
-    signerTitle: ev?.signer?.title || (ev ? '' : certDefaults?.signer.title || ''),
+    // Who signs: the event's own signer, kept from when its certificates were
+    // opened. Today's department default is only for an event that has none
+    // yet, so a new head of department never appears on older certificates.
+    ...certSigner(ev, cert, certDefaults),
     category: ev?.cat || cert?.category || '',
-    signature: ev ? ev.signer?.signature || null : certDefaults?.signer.signature || null,
     certId: cert?.cert_code || `SU-CS-${String(eventId).padStart(3, '0')}`,
     studentName: fullNameTh(session),
     // The event's own template, or the department's main one when it has none.

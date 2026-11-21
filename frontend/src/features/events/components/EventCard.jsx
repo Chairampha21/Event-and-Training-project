@@ -38,9 +38,13 @@ export default function EventCard({ event, isStudent, myStatus, myPayment, onApp
   const pct = Math.round((event.reg / event.cap) * 100);
 
   return (
-    <article className="card card-clickable">
+    // Registration over (closed or finished): shown muted, so what is still open stands out;
+    // it comes back to full colour on hover, and stays readable and openable.
+    <article className={`card card-clickable${event.status === 'closed' || event.status === 'done' ? ' is-past' : ''}`}>
       {event.poster ? (
         <div className="card-poster">
+          {/* The whole poster, never cropped; a blurred copy fills the frame around it. */}
+          <img className="cp-fill" src={event.poster} alt="" aria-hidden="true" />
           <img src={event.poster} alt="" />
           <span className={`badge ${sm.badge}`}><i className={`ti ${sm.ico}`} /> {sm.label}</span>
         </div>

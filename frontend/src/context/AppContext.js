@@ -130,6 +130,7 @@ function adaptEvent(be) {
     refundNote: be.refund_note || '', // when / where, in the organizer's words
     payerCount: be.payer_count || 0, // money held (slip sent or confirmed) and not refunded yet
     askDietary: !!be.ask_dietary, // food is served: registrants are asked about allergies / dietary needs
+    meals: (be.meals || '').split(',').filter(Boolean), // which meals: see utils/meals.js
     issueCert: be.issue_certificate !== false, // gives certificates; off = one signature box per day on the sign-in sheet
     budgetPlanned: be.budget_planned ?? null, // baht from department income (เงินรายได้); null = not set
     budgetOther: be.budget_other ?? null, // baht from other sources (แหล่งอื่น); null = not set
@@ -173,6 +174,7 @@ function toEventBody(payload) {
   if (payload.attendeeNote !== undefined) body.attendee_note = payload.attendeeNote.trim() || null;
   if (payload.loanQty !== undefined) body.loan_laptop_qty = payload.loanQty || null;
   if (payload.askDietary !== undefined) body.ask_dietary = !!payload.askDietary;
+  if (payload.meals !== undefined) body.meals = payload.meals.join(',');
   if (payload.issueCert !== undefined) body.issue_certificate = !!payload.issueCert;
   if (payload.fee !== undefined) {
     body.fee = payload.fee > 0 ? payload.fee : null;
@@ -266,6 +268,8 @@ function sessionFields(user) {
   return {
     id: user.id, role: user.role, email: user.email, student_id: user.student_id, dept: user.dept,
     name: user.name, title_th: user.title_th || '', name_en: user.name_en || '', title_en: user.title_en || '',
+    nickname: user.nickname || '', gender: user.gender || '', phone: user.phone || '', blood_type: user.blood_type || '',
+    food_allergy: user.food_allergy || '', medical_note: user.medical_note || '', emergency_contact: user.emergency_contact || '',
   };
 }
 
@@ -649,22 +653,41 @@ export function AppProvider({ children }) {
 
   // opts.borrowLaptop: ask for one of the event's loan notebooks.
   // opts.foodAllergy / opts.dietaryPref: answers to the food questions (events that ask).
+  // opts.payment: a slip given while registering for a paid event (see
+  // PaymentBox's slipPayload) — sent straight after, so paying is part of
+  // registering. If only the slip fails, the seat is kept and the slip can be
+  // sent again from "ประวัติของฉัน".
   const registerForEvent = useCallback(async (id, opts) => {
     const ev = evById(id);
     if (!ev || myStatus(id)) return;
+    let reg;
     try {
-      await api.post(`/events/${id}/register`, {
+      ({ registration: reg } = await api.post(`/events/${id}/register`, {
         borrow_laptop: !!opts?.borrowLaptop,
         food_allergy: opts?.foodAllergy || '',
         dietary_pref: opts?.dietaryPref || '',
         attend_via: opts?.attendVia || '',
-      });
-      await Promise.all([refreshEvents(), refreshMyRegistrations(), refreshNotifications({ silent: true })]);
-      pushToast('ลงทะเบียนสำเร็จ', ev.title.slice(0, 32) + '…');
+      }));
     } catch (err) {
       pushToast('ลงทะเบียนไม่สำเร็จ', err.message, 'warn');
       refreshEvents(); // e.g. the last loan notebook was just taken — show the real count
+      return;
     }
+    let paid = false;
+    let payError = '';
+    if (opts?.payment && reg?.id) {
+      const p = opts.payment;
+      try {
+        await api.post(`/registrations/${reg.id}/slip`, { slip: p.slip, transferred_at: p.transferredAt, amount: p.amount, refund_promptpay: p.refundPromptPay || '' });
+        paid = true;
+      } catch (err) {
+        payError = err.message || '';
+      }
+    }
+    await Promise.all([refreshEvents(), refreshMyRegistrations(), refreshNotifications({ silent: true })]);
+    if (payError) pushToast('ลงทะเบียนแล้ว แต่ส่งสลิปไม่สำเร็จ', `${payError} · ส่งสลิปใหม่ได้ที่หน้าประวัติของฉัน`, 'warn');
+    else if (paid) pushToast('ลงทะเบียนและส่งหลักฐานการชำระเงินแล้ว', `${ev.title.slice(0, 32)}… · รอผู้จัดตรวจสอบสลิป`);
+    else pushToast('ลงทะเบียนสำเร็จ', ev.title.slice(0, 32) + '…');
   }, [evById, myStatus, refreshEvents, refreshMyRegistrations, refreshNotifications, pushToast]);
 
   // An online attendee checking themselves in from the day's link. Resolves

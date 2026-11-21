@@ -53,6 +53,14 @@ type User struct {
 	Dept      NullString `json:"dept"`
 	Active    bool       `json:"active"`
 	CreatedAt string     `json:"created_at"`
+	// Personal details the user may fill in on their profile (all optional).
+	Nickname         NullString `json:"nickname"`
+	Gender           NullString `json:"gender"` // male, female, unspecified
+	Phone            NullString `json:"phone"`
+	BloodType        NullString `json:"blood_type"` // A, B, AB, O
+	FoodAllergy      NullString `json:"food_allergy"`
+	MedicalNote      NullString `json:"medical_note"` // โรคประจำตัว / ยาที่แพ้
+	EmergencyContact NullString `json:"emergency_contact"`
 }
 
 type Event struct {
@@ -89,6 +97,7 @@ type Event struct {
 	LoanLaptopTaken     int        `json:"loan_laptop_taken"` // how many registrants asked to borrow one
 	RegisteredOnline    int        `json:"registered_online"` // registrants attending online (the rest attend on site)
 	AskDietary          bool       `json:"ask_dietary"`       // registrants are asked about food allergies / dietary needs
+	Meals               NullString `json:"meals"`             // meals served, e.g. "break_am,lunch" (breakfast, break_am, lunch, break_pm, dinner, snack_night)
 	IssueCertificate    bool       `json:"issue_certificate"` // the event gives certificates (off = one signature box per day)
 	Fee                 NullFloat  `json:"fee"`               // registration fee in baht; null or 0 = free
 	PaymentInfo         NullString `json:"payment_info"`      // how to pay, shown to people registering

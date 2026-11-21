@@ -39,7 +39,9 @@ export default function SearchBar({ pills, pillFilter, onPillChange, statusFilte
               <select value={statusFilter} onChange={(e) => onStatusChange(e.target.value)}>
                 <option value="all">ทุกสถานะ</option>
                 <option value="open">เปิดรับสมัคร</option>
+                <option value="soon">รอเปิดรับสมัคร</option>
                 <option value="full">เต็มแล้ว</option>
+                <option value="closed">ปิดรับสมัคร</option>
                 <option value="done">สิ้นสุดแล้ว</option>
               </select>
             </label>

@@ -48,7 +48,7 @@ const eventFields = `
   day_mode, date_start, date_end, event_dates, event_times, time_range, reg_start, reg_end,
   attend_mode, place, online_link, capacity, capacity_onsite, capacity_online,
   budget_planned, budget_other, budget_actual,
-  attendee_note, loan_laptop_qty, ask_dietary, issue_certificate, fee, payment_info, refund_method, refund_note,
+  attendee_note, loan_laptop_qty, ask_dietary, meals, issue_certificate, fee, payment_info, refund_method, refund_note,
   ` + effectiveStatusSQL + ` AS status, cycle_stage,
   pretest_enabled, pretest_link, pretest_pass_pct, pretest_time_limit_min,
   cert_template_url, cert_signer_name, cert_signer_title, cert_signature_url, cert_layout,
@@ -91,7 +91,7 @@ func scanEvent(row interface{ Scan(dest ...any) error }) (models.Event, error) {
 		&e.DayMode, &e.DateStart, &e.DateEnd, &eventDates, &eventTimes, &e.TimeRange, &e.RegStart, &e.RegEnd,
 		&e.AttendMode, &e.Place, &e.OnlineLink, &e.Capacity, &e.CapacityOnsite, &e.CapacityOnline,
 		&e.BudgetPlanned, &e.BudgetOther, &e.BudgetActual,
-		&e.AttendeeNote, &e.LoanLaptopQty, &e.AskDietary, &e.IssueCertificate, &e.Fee, &e.PaymentInfo, &e.RefundMethod, &e.RefundNote,
+		&e.AttendeeNote, &e.LoanLaptopQty, &e.AskDietary, &e.Meals, &e.IssueCertificate, &e.Fee, &e.PaymentInfo, &e.RefundMethod, &e.RefundNote,
 		&e.Status, &e.CycleStage,
 		&pretestEnabled, &e.PretestLink, &e.PretestPassPct, &e.PretestTimeLimitMin,
 		&e.CertTemplateURL, &e.CertSignerName, &e.CertSignerTitle, &e.CertSignatureURL, &e.CertLayout,
@@ -306,6 +306,7 @@ type eventBody struct {
 	AttendeeNote        *string  `json:"attendee_note"`
 	LoanLaptopQty       *int     `json:"loan_laptop_qty"`
 	AskDietary          *bool    `json:"ask_dietary"`
+	Meals               *string  `json:"meals"`
 	IssueCertificate    *bool    `json:"issue_certificate"`
 	Fee                 *float64 `json:"fee"`
 	PaymentInfo         *string  `json:"payment_info"`
@@ -751,6 +752,14 @@ func (h *EventsHandler) Create(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "ข้อความถึงผู้เข้าร่วมยาวเกิน 500 ตัวอักษร"})
 		return
 	}
+	meals, ok := normalizeMeals(strOrEmpty(b.Meals))
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "มื้ออาหารไม่ถูกต้อง"})
+		return
+	}
+	if b.AskDietary == nil || !*b.AskDietary {
+		meals = ""
+	}
 	var loanQty any // NULL unless the organizer has notebooks to lend
 	if b.LoanLaptopQty != nil && *b.LoanLaptopQty != 0 {
 		if *b.LoanLaptopQty < 0 || *b.LoanLaptopQty > maxLoanLaptops {
@@ -797,18 +806,18 @@ func (h *EventsHandler) Create(c *gin.Context) {
 		day_mode, date_start, date_end, event_dates, event_times, time_range, reg_start, reg_end,
 		attend_mode, place, online_link, capacity, capacity_onsite, capacity_online,
 		budget_planned, budget_other,
-		attendee_note, loan_laptop_qty, ask_dietary, issue_certificate, fee, payment_info, refund_method, refund_note,
+		attendee_note, loan_laptop_qty, ask_dietary, meals, issue_certificate, fee, payment_info, refund_method, refund_note,
 		status, cycle_stage,
 		pretest_enabled, pretest_link, pretest_pass_pct, pretest_time_limit_min,
 		cert_template_url, cert_signer_name, cert_signer_title, cert_signature_url, cert_layout,
 		email_on_register, email_before_event, email_after_event
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		strings.TrimSpace(b.Title), b.Description, strings.TrimSpace(b.Category), b.Subcategory, b.PosterURL,
 		organizerID, b.OrganizerName, coordinatorFor(h.DB, b.OrganizerName),
 		b.DayMode, b.DateStart, b.DateEnd, eventDates, eventTimes, b.TimeRange, nullIfEmpty(regStart), nullIfEmpty(regEnd),
 		b.AttendMode, b.Place, b.OnlineLink, capacity, b.CapacityOnsite, b.CapacityOnline,
 		b.BudgetPlanned, b.BudgetOther,
-		nullIfEmpty(note), loanQty, b.AskDietary != nil && *b.AskDietary, b.IssueCertificate == nil || *b.IssueCertificate, fee, nullIfEmpty(payInfo), refundMethod, nullIfEmpty(refundNote),
+		nullIfEmpty(note), loanQty, b.AskDietary != nil && *b.AskDietary, nullIfEmpty(meals), b.IssueCertificate == nil || *b.IssueCertificate, fee, nullIfEmpty(payInfo), refundMethod, nullIfEmpty(refundNote),
 		status, cycleStage,
 		pretestEnabled, b.PretestLink, b.PretestPassPct, b.PretestTimeLimitMin,
 		b.CertTemplateURL, b.CertSignerName, b.CertSignerTitle, b.CertSignatureURL, b.CertLayout,
@@ -880,6 +889,17 @@ func (h *EventsHandler) Update(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "ปรับข้อความบนเกียรติบัตรไม่ได้ เพราะเปิดสิทธิ์เกียรติบัตรให้ผู้เข้าร่วมไปแล้ว"})
 		return
 	}
+	// So is who signs them: certificates already handed out keep their signer.
+	if existing.CycleStage >= 4 {
+		// An event opened before signers were kept: keep today's now, then compare.
+		freezeSigner(h.DB, existing.ID)
+		_ = h.DB.QueryRow(`SELECT cert_signer_name, cert_signer_title, cert_signature_url FROM events WHERE id = ?`, existing.ID).
+			Scan(&existing.CertSignerName, &existing.CertSignerTitle, &existing.CertSignatureURL)
+	}
+	if existing.CycleStage >= 4 && signerChanged(raw, existing) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "เปลี่ยนผู้ลงนามเกียรติบัตรไม่ได้ เพราะเปิดสิทธิ์เกียรติบัตรให้ผู้เข้าร่วมไปแล้ว · เกียรติบัตรที่ออกไปแล้วต้องใช้ผู้ลงนามเดิม"})
+		return
+	}
 	// Whether the event gives certificates is settled once they are opened (or
 	// any was issued): switching it then would leave some attendees with a
 	// certificate and the rest unable to get one for the same event.
@@ -900,7 +920,7 @@ func (h *EventsHandler) Update(c *gin.Context) {
 		"reg_start": true, "reg_end": true, "event_dates": true, "event_times": true,
 		"attend_mode": true, "place": true, "online_link": true, "capacity": true, "capacity_onsite": true, "capacity_online": true,
 		"status": true, "cycle_stage": true, "budget_planned": true, "budget_other": true, "budget_actual": true,
-		"attendee_note": true, "loan_laptop_qty": true, "ask_dietary": true, "issue_certificate": true, "fee": true, "payment_info": true,
+		"attendee_note": true, "loan_laptop_qty": true, "ask_dietary": true, "meals": true, "issue_certificate": true, "fee": true, "payment_info": true,
 		"refund_method": true, "refund_note": true,
 		"pretest_enabled": true, "pretest_link": true, "pretest_pass_pct": true, "pretest_time_limit_min": true,
 		"cert_template_url": true, "cert_signer_name": true, "cert_signer_title": true, "cert_signature_url": true, "cert_layout": true,
@@ -984,6 +1004,16 @@ func (h *EventsHandler) Update(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลไม่ถูกต้อง"})
 			return
 		}
+	}
+
+	if v, present := raw["meals"]; present && v != nil {
+		str, ok := v.(string)
+		meals, valid := normalizeMeals(str)
+		if !ok || !valid {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "มื้ออาหารไม่ถูกต้อง"})
+			return
+		}
+		raw["meals"] = nullIfEmpty(meals)
 	}
 
 	// Message to attendees: trimmed, capped, and "" stored as NULL.
@@ -1161,6 +1191,11 @@ func (h *EventsHandler) Update(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 		return
+	}
+
+	// Certificates opened: from now on this event keeps its signer (see freezeSigner).
+	if st, ok := raw["cycle_stage"].(float64); existing.CycleStage >= 4 || (ok && st >= 4) {
+		freezeSigner(h.DB, existing.ID)
 	}
 
 	row := h.DB.QueryRow(`SELECT `+eventFields+` FROM events WHERE id = ?`, c.Param("id"))
@@ -1369,4 +1404,26 @@ func (h *EventsHandler) Remove(c *gin.Context) {
 		}
 	}
 	c.Status(http.StatusNoContent)
+}
+
+// Meals an event serves, in the order of the day. Stored as "break_am,lunch".
+var mealOrder = []string{"breakfast", "break_am", "lunch", "break_pm", "dinner", "snack_night"}
+
+// normalizeMeals checks a comma list of meal keys and returns it de-duplicated
+// in mealOrder; ok is false when it names a meal that isn't known.
+func normalizeMeals(s string) (string, bool) {
+	picked := map[string]bool{}
+	for _, m := range strings.Split(s, ",") {
+		if m = strings.TrimSpace(m); m != "" {
+			picked[m] = true
+		}
+	}
+	out := []string{}
+	for _, m := range mealOrder {
+		if picked[m] {
+			out = append(out, m)
+			delete(picked, m)
+		}
+	}
+	return strings.Join(out, ","), len(picked) == 0
 }

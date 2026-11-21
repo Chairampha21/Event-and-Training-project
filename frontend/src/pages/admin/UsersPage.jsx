@@ -150,7 +150,7 @@ export default function UsersPage() {
             <div className="field"><label>บทบาท</label><select value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}>{ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}</select></div>
             {form.role !== 'student' && <div className="field"><label>สังกัด / หน่วยงาน</label><input type="text" value={form.dept} onChange={(e) => setForm((f) => ({ ...f, dept: e.target.value }))} /></div>}
           </div>
-          {form.role === 'student' && <StudentDeptFields key={editingId || 'new'} idPrefix="um" value={form.dept} onChange={setField('dept')} />}
+          {form.role === 'student' && <StudentDeptFields key={editingId || 'new'} idPrefix="um" value={form.dept} onChange={setField('dept')} studentId={users.find((u) => u.id === editingId)?.student_id} />}
         </div>
         <div className="modal-foot">
           <button className="btn btn-outline" onClick={() => setFormOpen(false)}>ยกเลิก</button>

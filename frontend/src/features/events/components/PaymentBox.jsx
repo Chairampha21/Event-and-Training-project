@@ -44,54 +44,48 @@ const SLIP_TYPES = ['image/jpeg', 'image/png'];
  * "I have paid" form: the transfer slip plus when and how much was
  * transferred, which is what the organizer checks the slip against.
  */
-function SlipForm({ regId, fee, resend, onCancel, askPromptPay, promptPayNow }) {
-  const { submitSlip } = useEvents();
-  const [promptPay, setPromptPay] = useState(promptPayNow || '');
+/** A blank slip form for a fee of `fee` baht. */
+export const emptySlip = (fee, promptPay = '') => ({ slip: null, date: todayIso(), time: '', amountText: String(fee || ''), promptPay });
+
+/** What is still missing from a slip form, or '' when it can be sent. */
+export function slipProblem(v, askPromptPay) {
+  if (!v.slip) return 'กรุณาแนบรูปสลิปการโอนเงิน';
+  if (!v.date || !v.time) return 'กรุณาระบุวันที่และเวลาที่โอนตามสลิป';
+  if (!(parseMoney(v.amountText) > 0)) return 'กรุณาระบุจำนวนเงินที่โอน';
+  if (askPromptPay && !validPromptPay(v.promptPay)) return 'กรอกพร้อมเพย์สำหรับรับเงินคืน: เบอร์มือถือ 10 หลัก หรือเลขประจำตัวประชาชน 13 หลัก';
+  return '';
+}
+
+/** The slip form as submitSlip takes it. */
+export const slipPayload = (v, askPromptPay) => ({
+  slip: v.slip, transferredAt: `${v.date}T${v.time}`, amount: parseMoney(v.amountText), refundPromptPay: askPromptPay ? v.promptPay : '',
+});
+
+/**
+ * The slip, when and how much was transferred (and, for refunds by transfer,
+ * the payer's PromptPay): used to report a payment later and while registering.
+ */
+export function SlipFields({ value, onChange, askPromptPay, onError }) {
   const inputRef = useRef(null);
-  const [slip, setSlip] = useState(null);
-  const [date, setDate] = useState(todayIso());
-  const [time, setTime] = useState('');
-  const [amountText, setAmountText] = useState(String(fee));
-  const [error, setError] = useState('');
-  const [sending, setSending] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState(false);
   const [viewerOpen, setViewerOpen] = useState(false);
-  const amount = parseMoney(amountText);
+  const set = (patch) => onChange({ ...value, ...patch });
+  const amount = parseMoney(value.amountText);
 
   async function pick(file) {
     if (!file) return;
-    if (!SLIP_TYPES.includes(file.type)) { setError('สลิปต้องเป็นรูป JPG หรือ PNG'); return; }
-    if (file.size > SLIP_MAX_BYTES) { setError(`ไฟล์มีขนาด ${(file.size / 1024 / 1024).toFixed(1)} MB · เกินขนาดสูงสุด 2 MB`); return; }
-    setError('');
-    setSlip(await fileToDataUrl(file));
-  }
-
-  function send(e) {
-    e.preventDefault();
-    if (!slip) { setError('กรุณาแนบรูปสลิปการโอนเงิน'); return; }
-    if (!date || !time) { setError('กรุณาระบุวันที่และเวลาที่โอนตามสลิป'); return; }
-    if (!(amount > 0)) { setError('กรุณาระบุจำนวนเงินที่โอน'); return; }
-    if (askPromptPay && !validPromptPay(promptPay)) { setError('กรอกพร้อมเพย์สำหรับรับเงินคืน: เบอร์มือถือ 10 หลัก หรือเลขประจำตัวประชาชน 13 หลัก'); return; }
-    setError('');
-    setConfirmOpen(true);
-  }
-
-  async function confirmSend() {
-    setSending(true);
-    const ok = await submitSlip(regId, { slip, transferredAt: `${date}T${time}`, amount, refundPromptPay: askPromptPay ? promptPay : '' });
-    setSending(false);
-    setConfirmOpen(false);
-    if (ok && onCancel) onCancel();
+    if (!SLIP_TYPES.includes(file.type)) { onError?.('สลิปต้องเป็นรูป JPG หรือ PNG'); return; }
+    if (file.size > SLIP_MAX_BYTES) { onError?.(`ไฟล์มีขนาด ${(file.size / 1024 / 1024).toFixed(1)} MB · เกินขนาดสูงสุด 2 MB`); return; }
+    onError?.('');
+    set({ slip: await fileToDataUrl(file) });
   }
 
   return (
-    <form className="slip-form" onSubmit={send}>
-      <div className="slip-form-title">{resend ? 'ส่งหลักฐานการชำระเงินใหม่' : 'แจ้งชำระเงิน'}</div>
+    <>
       <input ref={inputRef} type="file" accept={SLIP_TYPES.join(',')} hidden onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ''; }} />
       <div className="slip-file">
-        {slip ? (
+        {value.slip ? (
           <>
-            <button type="button" className="slip-thumb" onClick={() => setViewerOpen(true)} aria-label="ดูสลิปเต็มจอ"><img src={slip} alt="สลิปที่เลือก" /></button>
+            <button type="button" className="slip-thumb" onClick={() => setViewerOpen(true)} aria-label="ดูสลิปเต็มจอ"><img src={value.slip} alt="สลิปที่เลือก" /></button>
             <button type="button" className="btn btn-outline" onClick={() => inputRef.current?.click()}><i className="ti ti-replace" /> เปลี่ยนรูป</button>
           </>
         ) : (
@@ -102,27 +96,68 @@ function SlipForm({ regId, fee, resend, onCancel, askPromptPay, promptPayNow }) 
       </div>
       <div className="slip-fields">
         <div className="slip-field">วันที่โอน
-          <DateInput value={date} max={todayIso()} onChange={setDate} aria-label="วันที่โอน" />
+          <DateInput value={value.date} max={todayIso()} onChange={(d) => set({ date: d })} aria-label="วันที่โอน" />
         </div>
         <div className="slip-field">เวลาที่โอน
-          <TimeInput compact minuteStep={1} value={time} onChange={setTime} placeholder="เลือกเวลา" aria-label="เวลาที่โอน" />
+          <TimeInput compact minuteStep={1} value={value.time} onChange={(t) => set({ time: t })} placeholder="เลือกเวลา" aria-label="เวลาที่โอน" />
         </div>
         <label>จำนวนเงิน (บาท)
-          <input type="text" inputMode="decimal" value={amountText} onChange={(e) => setAmountText(e.target.value)} aria-invalid={Number.isNaN(amount)} />
+          <input type="text" inputMode="decimal" value={value.amountText} onChange={(e) => set({ amountText: e.target.value })} aria-invalid={Number.isNaN(amount)} />
         </label>
         {askPromptPay && (
           <label className="slip-wide">พร้อมเพย์สำหรับรับเงินคืน
-            <input type="text" inputMode="numeric" value={promptPay} maxLength={17} onChange={(e) => setPromptPay(e.target.value)} placeholder="เบอร์มือถือ หรือเลขประจำตัวประชาชน" />
+            <input type="text" inputMode="numeric" value={value.promptPay} maxLength={17} onChange={(e) => set({ promptPay: e.target.value })} placeholder="เบอร์มือถือ หรือเลขประจำตัวประชาชน" />
           </label>
         )}
       </div>
+      <ImageViewer open={viewerOpen} src={value.slip} title="สลิปการโอนเงิน" paper onClose={() => setViewerOpen(false)} />
+    </>
+  );
+}
+
+/** What a slip form says, for a confirmation box. */
+export function SlipSummary({ value, askPromptPay }) {
+  return (
+    <>
+      วันเวลาที่โอน: <strong style={{ color: 'var(--c4)' }}>{formatThaiDateTime(`${value.date}T${value.time}`)}</strong><br />
+      จำนวนเงิน: <strong style={{ color: 'var(--c4)' }}>{formatBaht(parseMoney(value.amountText))}</strong>
+      {askPromptPay && <><br />พร้อมเพย์รับเงินคืน: <strong style={{ color: 'var(--c4)' }}>{formatPromptPay(value.promptPay.replace(/[\s-]/g, ''))}</strong></>}
+    </>
+  );
+}
+
+function SlipForm({ regId, fee, resend, onCancel, askPromptPay, promptPayNow }) {
+  const { submitSlip } = useEvents();
+  const [form, setForm] = useState(() => emptySlip(fee, promptPayNow || ''));
+  const [error, setError] = useState('');
+  const [sending, setSending] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  function send(e) {
+    e.preventDefault();
+    const problem = slipProblem(form, askPromptPay);
+    setError(problem);
+    if (!problem) setConfirmOpen(true);
+  }
+
+  async function confirmSend() {
+    setSending(true);
+    const ok = await submitSlip(regId, slipPayload(form, askPromptPay));
+    setSending(false);
+    setConfirmOpen(false);
+    if (ok && onCancel) onCancel();
+  }
+
+  return (
+    <form className="slip-form" onSubmit={send}>
+      <div className="slip-form-title">{resend ? 'ส่งหลักฐานการชำระเงินใหม่' : 'แจ้งชำระเงิน'}</div>
+      <SlipFields value={form} onChange={setForm} askPromptPay={askPromptPay} onError={setError} />
       {error && <div className="slip-error" role="alert"><i className="ti ti-alert-circle" /> {error}</div>}
       <div className="slip-actions">
         {onCancel && <button type="button" className="btn btn-outline" onClick={onCancel} disabled={sending}>ยกเลิก</button>}
         <button type="submit" className="btn btn-primary" disabled={sending}><i className="ti ti-send" /> {sending ? 'กำลังส่ง...' : 'ส่งหลักฐานให้ผู้จัดตรวจสอบ'}</button>
       </div>
       <p className="slip-privacy"><i className="ti ti-lock" /> สลิปเห็นเฉพาะคุณและผู้จัดกิจกรรมนี้ · กรอกวันเวลาและยอดเงินให้ตรงกับสลิป</p>
-      <ImageViewer open={viewerOpen} src={slip} title="สลิปการโอนเงิน" paper onClose={() => setViewerOpen(false)} />
       <ConfirmDialog
         open={confirmOpen}
         eyebrow="ยืนยันการส่งหลักฐาน"
@@ -136,9 +171,7 @@ function SlipForm({ regId, fee, resend, onCancel, askPromptPay, promptPayNow }) 
       >
         <p style={{ fontSize: 13.5, color: 'var(--c4-70)', lineHeight: 1.7 }}>
           ตรวจสอบให้ตรงกับสลิปก่อนส่ง<br />
-          วันเวลาที่โอน: <strong style={{ color: 'var(--c4)' }}>{formatThaiDateTime(`${date}T${time}`)}</strong><br />
-          จำนวนเงิน: <strong style={{ color: 'var(--c4)' }}>{formatBaht(amount)}</strong>
-          {askPromptPay && <><br />พร้อมเพย์รับเงินคืน: <strong style={{ color: 'var(--c4)' }}>{formatPromptPay(promptPay.replace(/[\s-]/g, ''))}</strong></>}
+          <SlipSummary value={form} askPromptPay={askPromptPay} />
         </p>
       </ConfirmDialog>
     </form>
@@ -194,7 +227,8 @@ function RefundAccount({ reg }) {
  * `refundNote` say how the money comes back; `cancelled` = the event was
  * called off, so whoever paid is refunded whatever the method says.
  */
-export default function PaymentBox({ fee, info, reg, refundMethod = 'none', refundNote = '', cancelled = false }) {
+// children: shown at the bottom of the box (the slip form while registering).
+export default function PaymentBox({ fee, info, reg, refundMethod = 'none', refundNote = '', cancelled = false, children }) {
   const [formOpen, setFormOpen] = useState(false);
   if (!(fee > 0)) return null;
   const status = reg?.paymentStatus && reg.paymentStatus !== 'none' ? reg.paymentStatus : null;
@@ -247,6 +281,7 @@ export default function PaymentBox({ fee, info, reg, refundMethod = 'none', refu
           askPromptPay={transfer} promptPayNow={reg.refundPromptPay}
           onCancel={status === 'submitted' ? () => setFormOpen(false) : undefined} />
       )}
+      {children}
     </div>
   );
 }

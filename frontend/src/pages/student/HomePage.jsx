@@ -53,9 +53,9 @@ export default function HomePage() {
     setParams({}, { replace: true });
   }, [params, setParams]);
 
-  // The page opens on the current fiscal year (October - September). Whoever
-  // manages events can step back to earlier years; students only ever see what
-  // is open for registration, so nothing is held back from them by year.
+  // The page opens on the current fiscal year (October - September), for
+  // everyone: students see that year's events whatever their state (open ones
+  // first; closed and finished ones to look back on) and can pick earlier years.
   const currentFy = fiscalYearOf(todayIso());
   const [fy, setFy] = useState(currentFy);
   const fiscalYears = useMemo(() => {
@@ -67,8 +67,8 @@ export default function HomePage() {
   const statusRank = { open: 0, soon: 1, full: 2, closed: 3, done: 4 };
 
   const pills = useMemo(
-    () => categoryPills(events.filter((e) => e.listed && (isStudent ? e.status === 'open' : fy === 'all' || fiscalYearOf(e.dateStart) === fy))),
-    [events, isStudent, fy],
+    () => categoryPills(events.filter((e) => e.listed && (fy === 'all' || fiscalYearOf(e.dateStart) === fy))),
+    [events, fy],
   );
   // A custom category's pill goes away when the year changes to one without it.
   useEffect(() => {
@@ -78,8 +78,7 @@ export default function HomePage() {
   const list = useMemo(() => {
     let l = events.filter((e) => {
       if (!e.listed) return false;
-      if (isStudent && e.status !== 'open') return false;
-      if (!isStudent && fy !== 'all' && fiscalYearOf(e.dateStart) !== fy) return false;
+      if (fy !== 'all' && fiscalYearOf(e.dateStart) !== fy) return false;
       if (pillFilter !== 'all' && !matchFilter(e, pillFilter)) return false;
       if (statusFilter !== 'all' && e.status !== statusFilter) return false;
       if (appliedQuery) {
@@ -88,7 +87,11 @@ export default function HomePage() {
       }
       return true;
     });
-    l = [...l].sort((a, b) => (statusRank[a.status] - statusRank[b.status]) || (a.id - b.id));
+    // Open first, then not yet open, full, closed and finished; within each,
+    // the soonest first, finished ones the most recent first.
+    l = [...l].sort((a, b) => (statusRank[a.status] - statusRank[b.status])
+      || (a.status === 'done' ? (b.dateStart || '').localeCompare(a.dateStart || '') : (a.dateStart || '').localeCompare(b.dateStart || ''))
+      || (a.id - b.id));
     return l;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [events, isStudent, pillFilter, statusFilter, appliedQuery, fy]);
@@ -123,24 +126,24 @@ export default function HomePage() {
       <SearchBar
         pills={pills}
         pillFilter={pillFilter} onPillChange={setPillFilter}
-        statusFilter={statusFilter} onStatusChange={setStatusFilter} hideStatus={isStudent}
+        statusFilter={statusFilter} onStatusChange={setStatusFilter}
       />
 
       <div className="wrap" style={{ paddingTop: 46 }}>
         <div className="section-head">
           <div>
-            <div className="sh-title">กิจกรรมและการอบรม{!isStudent && fy !== 'all' ? ` ปีงบประมาณ พ.ศ. ${fy}` : ''} <span className="count">{list.length} รายการ</span></div>
-            <div className="sh-sub">ค้นหากิจกรรมและการอบรมที่เปิดรับสมัคร ดูรายละเอียดและลงทะเบียนเข้าร่วมได้ในหน้าเดียว</div>
+            <div className="sh-title">กิจกรรมและการอบรม{fy !== 'all' ? ` ปีงบประมาณ พ.ศ. ${fy}` : ''} <span className="count">{list.length} รายการ</span></div>
+            <div className="sh-sub">{isStudent
+              ? 'กิจกรรมที่เปิดรับสมัครแสดงก่อน · กิจกรรมที่ปิดรับหรือจบแล้วเปิดดูรายละเอียดย้อนหลังได้'
+              : 'ค้นหากิจกรรมและการอบรมที่เปิดรับสมัคร ดูรายละเอียดและลงทะเบียนเข้าร่วมได้ในหน้าเดียว'}</div>
           </div>
-          {!isStudent && (
-            <label className="fy-pick">
-              <span>ปีงบประมาณ</span>
-              <select className="role-select" value={fy} onChange={(e) => setFy(e.target.value === 'all' ? 'all' : Number(e.target.value))}>
-                {fiscalYears.map((y) => <option key={y} value={y}>พ.ศ. {y}{y === currentFy ? ' (ปีปัจจุบัน)' : ''}</option>)}
-                <option value="all">ทุกปีงบประมาณ</option>
-              </select>
-            </label>
-          )}
+          <label className="fy-pick">
+            <span>ปีงบประมาณ</span>
+            <select className="role-select" value={fy} onChange={(e) => setFy(e.target.value === 'all' ? 'all' : Number(e.target.value))}>
+              {fiscalYears.map((y) => <option key={y} value={y}>พ.ศ. {y}{y === currentFy ? ' (ปีปัจจุบัน)' : ''}</option>)}
+              <option value="all">ทุกปีงบประมาณ</option>
+            </select>
+          </label>
           {filtered && (
             <a href="#reset" className="see-all" onClick={(e) => { e.preventDefault(); resetSearch(); }}>ดูทั้งหมด <i className="ti ti-arrow-right" /></a>
           )}
@@ -150,7 +153,7 @@ export default function HomePage() {
           <div className="home-empty">
             <i className="ti ti-calendar-search" />
             <div className="he-title">ไม่พบกิจกรรมที่ตรงกับการค้นหา</div>
-            <div className="he-sub">{!isStudent && !filtered && fy !== 'all' ? `ยังไม่มีกิจกรรมในปีงบประมาณ พ.ศ. ${fy} · เลือกปีงบประมาณอื่นได้ด้านบน` : 'ลองปรับคำค้นหา หมวดหมู่ หรือสถานะ'}</div>
+            <div className="he-sub">{!filtered && fy !== 'all' ? `ยังไม่มีกิจกรรมในปีงบประมาณ พ.ศ. ${fy} · เลือกปีงบประมาณอื่นได้ด้านบน` : 'ลองปรับคำค้นหา หมวดหมู่ หรือสถานะ'}</div>
             <button className="btn btn-outline" onClick={resetSearch}><i className="ti ti-rotate" /> ล้างตัวกรอง</button>
           </div>
         ) : (

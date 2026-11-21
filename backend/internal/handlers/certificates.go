@@ -58,11 +58,12 @@ func (h *CertificatesHandler) Issue(c *gin.Context) {
 		title       string
 		studentID   int64
 		issueCert   bool
+		eventID     int64
 	)
 	err := h.DB.QueryRow(
-		`SELECT e.organizer_id, r.status, e.title, r.user_id, e.issue_certificate FROM registrations r JOIN events e ON e.id = r.event_id WHERE r.id = ?`,
+		`SELECT e.organizer_id, r.status, e.title, r.user_id, e.issue_certificate, e.id FROM registrations r JOIN events e ON e.id = r.event_id WHERE r.id = ?`,
 		regID,
-	).Scan(&organizerID, &status, &title, &studentID, &issueCert)
+	).Scan(&organizerID, &status, &title, &studentID, &issueCert, &eventID)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบรายการลงทะเบียน"})
 		return
@@ -102,6 +103,7 @@ func (h *CertificatesHandler) Issue(c *gin.Context) {
 		return
 	}
 
+	freezeSigner(h.DB, eventID) // this event's certificates keep today's signer
 	if _, err := h.DB.Exec(`INSERT INTO certificates (registration_id, cert_code, default_template_id) VALUES (?, ?, `+currentTemplateSQL+`)`, regID, code); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 		return
@@ -126,12 +128,19 @@ type myCertificateRow struct {
 	// The department's main template version current when it was issued (null =
 	// the built-in one) — drawn on that, not today's, unless the event has its own.
 	DefaultTemplateID *int64 `json:"default_template_id"`
+	// Who signed it: the event's own signer, kept from when its certificates
+	// were opened (see freezeSigner), never today's department default.
+	SignerName   string  `json:"signer_name"`
+	SignerTitle  string  `json:"signer_title"`
+	SignatureURL *string `json:"signature_url"` // "/events/:id/assets/signature?v=…"
 }
 
 func (h *CertificatesHandler) MyCertificates(c *gin.Context) {
 	claims, _ := middleware.CurrentUser(c)
 	rows, err := h.DB.Query(
-		`SELECT cert.cert_code, cert.issued_at, e.id, e.title, e.category, e.date_start, cert.default_template_id
+		`SELECT cert.cert_code, cert.issued_at, e.id, e.title, e.category, e.date_start, cert.default_template_id,
+		        COALESCE(e.cert_signer_name, ''), COALESCE(e.cert_signer_title, ''),
+		        IF(e.cert_signature_url LIKE 'data:%', CONCAT('/events/', e.id, '/assets/signature?v=', CRC32(e.cert_signature_url)), NULLIF(e.cert_signature_url, ''))
 		 FROM certificates cert
 		 JOIN registrations r ON r.id = cert.registration_id
 		 JOIN events e ON e.id = r.event_id
@@ -146,7 +155,7 @@ func (h *CertificatesHandler) MyCertificates(c *gin.Context) {
 	list := []myCertificateRow{}
 	for rows.Next() {
 		var r myCertificateRow
-		if err := rows.Scan(&r.CertCode, &r.IssuedAt, &r.EventID, &r.Title, &r.Category, &r.DateStart, &r.DefaultTemplateID); err != nil {
+		if err := rows.Scan(&r.CertCode, &r.IssuedAt, &r.EventID, &r.Title, &r.Category, &r.DateStart, &r.DefaultTemplateID, &r.SignerName, &r.SignerTitle, &r.SignatureURL); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 			return
 		}

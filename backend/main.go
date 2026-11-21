@@ -42,6 +42,7 @@ func main() {
 	dashboard := handlers.NewDashboardHandler(conn)
 	certDefaults := handlers.NewCertDefaultsHandler(conn)
 	users := handlers.NewUsersHandler(conn)
+	posterRead := handlers.NewPosterReadHandler()
 	activityLogs := handlers.NewActivityLogsHandler(conn)
 
 	r := gin.Default()
@@ -82,6 +83,8 @@ func main() {
 		eventsGroup.GET("", optionalAuth, events.List)
 		eventsGroup.GET("/:id/assets/:asset", events.Asset) // poster | cert-template | signature
 		eventsGroup.POST("", requireAuth, middleware.RequireRole("organizer", "admin"), events.Create)
+		// Reads a poster with Claude to fill the create-event form (503 without ANTHROPIC_API_KEY).
+		eventsGroup.POST("/read-poster", requireAuth, middleware.RequireRole("organizer", "admin"), posterRead.Read)
 		eventsGroup.PUT("/:id", requireAuth, middleware.RequireRole("organizer", "admin"), events.Update)
 		eventsGroup.DELETE("/:id", requireAuth, middleware.RequireRole("organizer", "admin"), events.Remove)
 

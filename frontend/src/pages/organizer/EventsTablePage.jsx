@@ -8,6 +8,9 @@ import BudgetActualModal from '../../features/budget/components/BudgetActualModa
 import ManageEventModal from '../../features/events/components/ManageEventModal';
 import { downloadCsv } from '../../utils/csvExport';
 import { REFUND_METHODS } from '../../features/events/components/PaymentBox';
+import useLocalStorage from '../../hooks/useLocalStorage';
+import { SORT_PRESETS, DEFAULT_SORT, presetOf, firstDir, sortEvents } from '../../features/events/eventSort';
+import { todayIso } from '../../utils/dateFormat';
 
 const PAGE_SIZE = 6;
 
@@ -40,6 +43,16 @@ export default function EventsTablePage() {
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [page, setPage] = useState(1);
+  // Remembered between visits, like the other table settings people expect to stick.
+  const [sort, setSort] = useLocalStorage('cpsu-etms:events-sort', DEFAULT_SORT);
+  function sortBy(key) {
+    setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: firstDir(key) }));
+    setPage(1);
+  }
+  function pickPreset(value) {
+    const p = SORT_PRESETS.find((x) => x.value === value);
+    if (p) { setSort({ key: p.key, dir: p.dir }); setPage(1); }
+  }
 
   const list = useMemo(() => events.filter((e) => e.listed), [events]);
   // Deleted events whose payers are not all refunded yet (the server only sends these to their managers).
@@ -54,10 +67,11 @@ export default function EventsTablePage() {
       return true;
     });
   }, [list, query, statusFilter]);
+  const sorted = useMemo(() => sortEvents(filtered, sort, todayIso()), [filtered, sort]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
-  const pageItems = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const pageItems = sorted.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   const totalParticipants = list.reduce((sum, e) => sum + e.reg, 0);
   const certsIssued = list.filter((e) => e.stage >= 3).reduce((sum, e) => sum + e.reg, 0);
@@ -149,6 +163,12 @@ export default function EventsTablePage() {
                   <option value="done">สิ้นสุดแล้ว</option>
                 </select>
               </label>
+              <label className="facet-select" title="เรียงลำดับ"><i className="ti ti-arrows-sort" />
+                <select value={presetOf(sort)} onChange={(e) => pickPreset(e.target.value)} aria-label="เรียงตาม">
+                  {!presetOf(sort) && <option value="" disabled>เรียงตามคอลัมน์ที่เลือก</option>}
+                  {SORT_PRESETS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+                </select>
+              </label>
               <span className="filter-chip active"><i className="ti ti-list" /> ทั้งหมด {filtered.length}</span>
             </div>
           </div>
@@ -156,10 +176,10 @@ export default function EventsTablePage() {
             <table>
               <thead>
                 <tr>
-                  <th>ชื่อกิจกรรม</th>
-                  <th>วันที่</th>
-                  <th>สถานะ</th>
-                  <th>Cycle Stage</th>
+                  <SortTh label="ชื่อกิจกรรม" k="title" sort={sort} onSort={sortBy} />
+                  <SortTh label="วันที่" k="date" sort={sort} onSort={sortBy} />
+                  <SortTh label="สถานะ" k="status" sort={sort} onSort={sortBy} />
+                  <SortTh label="Cycle Stage" k="stage" sort={sort} onSort={sortBy} />
                   <th className="right">การจัดการ</th>
                 </tr>
               </thead>
@@ -215,5 +235,18 @@ export default function EventsTablePage() {
 
       <ManageEventModal eventId={manageId} open={!!manageId} onClose={() => setManageId(null)} onOpenApplicants={(id, mode) => openApplicants(id, mode || 'list')} />
     </div>
+  );
+}
+
+// A column header that sorts the table: click to sort by it, again to reverse.
+function SortTh({ label, k, sort, onSort }) {
+  const on = sort.key === k;
+  const icon = !on ? 'ti-arrows-sort' : sort.dir === 'asc' ? 'ti-sort-ascending' : 'ti-sort-descending';
+  return (
+    <th aria-sort={on ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+      <button type="button" className={`th-sort${on ? ' on' : ''}`} onClick={() => onSort(k)} title={`เรียงตาม${label}`}>
+        {label} <i className={`ti ${icon}`} />
+      </button>
+    </th>
   );
 }

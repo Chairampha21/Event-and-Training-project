@@ -10,6 +10,32 @@ function formatBytes(n) {
   return n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`;
 }
 
+// Poster shapes the site lays out well; the card and detail views show the
+// whole poster in any of them. Sizes are the sharp ones (2160 px long side).
+export const POSTER_SIZES = [
+  { label: '1:1', ratio: 1, w: 2160, h: 2160 },
+  { label: '3:4', ratio: 3 / 4, w: 1620, h: 2160 },
+  { label: '9:16', ratio: 9 / 16, w: 1215, h: 2160 },
+];
+const SIZES_TEXT = POSTER_SIZES.map((s) => `${s.label} (${s.w} × ${s.h})`).join(', ');
+
+// Is the poster one of the supported shapes, and sharp enough?
+function checkPoster(dims) {
+  if (!dims) return [];
+  const ratio = dims.w / dims.h;
+  const size = POSTER_SIZES.find((s) => Math.abs(ratio - s.ratio) / s.ratio <= 0.03);
+  const checks = [];
+  checks.push(size
+    ? { ok: true, text: `สัดส่วน ${size.label}` }
+    : { ok: false, text: `สัดส่วนไม่ตรงกับที่รองรับ (1:1, 3:4, 9:16) · โปสเตอร์ยังแสดงครบ แต่จะมีขอบรอบภาพ` });
+  const long = Math.max(dims.w, dims.h);
+  const want = size || POSTER_SIZES[1];
+  if (long >= 2160) checks.push({ ok: true, text: 'ความละเอียดคมชัด' });
+  else if (long >= 1080) checks.push({ ok: true, text: `ความละเอียดพอใช้ · ภาพคมที่สุดที่ ${want.w} × ${want.h} px` });
+  else checks.push({ ok: false, text: `ความละเอียดต่ำ (${dims.w} × ${dims.h} px) · อาจไม่คมชัด แนะนำ ${want.w} × ${want.h} px` });
+  return checks;
+}
+
 // Size of the image a base64 data: URL carries (for a poster loaded from the
 // server, where there is no File object to ask).
 function dataUrlBytes(dataUrl) {
@@ -81,6 +107,13 @@ export default function PosterUpload({ value, onChange, onError }) {
               {dims && <span><i className="ti ti-dimensions" /> {dims.w} × {dims.h} px</span>}
               {value.startsWith('data:') && <span><i className="ti ti-file" /> {formatBytes(dataUrlBytes(value))}</span>}
             </div>
+            {dims && (
+              <ul className="pup-checks">
+                {checkPoster(dims).map((c) => (
+                  <li key={c.text} className={c.ok ? 'ok' : 'warn'}><i className={`ti ${c.ok ? 'ti-circle-check' : 'ti-alert-triangle'}`} /> {c.text}</li>
+                ))}
+              </ul>
+            )}
             <div className="pup-actions">
               <button type="button" className="btn btn-primary" onClick={() => setViewerOpen(true)}><i className="ti ti-zoom-in" /> ดูภาพเต็ม</button>
               <button type="button" className="btn btn-outline" onClick={pick}><i className="ti ti-replace" /> เปลี่ยนรูป</button>
@@ -102,7 +135,7 @@ export default function PosterUpload({ value, onChange, onError }) {
           <div className="pup-empty-ic"><i className={`ti ${dragOver ? 'ti-download' : 'ti-cloud-upload'}`} /></div>
           <div className="pup-empty-title">{dragOver ? 'วางไฟล์ที่นี่เพื่ออัปโหลด' : 'ลากไฟล์โปสเตอร์มาวางที่นี่'}</div>
           {!dragOver && <div className="pup-empty-or">หรือ <span className="pup-browse">เลือกไฟล์จากเครื่อง</span></div>}
-          <div className="pup-empty-hint">JPG หรือ PNG · สูงสุด 5 MB · แนะนำแนวตั้ง 4:5 เช่น 1080 × 1350 px</div>
+          <div className="pup-empty-hint">JPG หรือ PNG · สูงสุด 5 MB · รองรับ {SIZES_TEXT} px</div>
         </div>
       )}
 

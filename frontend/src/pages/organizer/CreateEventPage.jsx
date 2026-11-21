@@ -20,6 +20,8 @@ import { withProgress } from '../../utils/alert';
 import CertTemplateUpload from '../../features/certificates/components/CertTemplateUpload';
 import SignatureUpload from '../../features/certificates/components/SignatureUpload';
 import './CreateEventPage.css';
+import { MEAL_GROUPS, mealsText } from '../../utils/meals';
+import { readPoster } from '../../features/events/readPoster';
 
 // Categories where attendees usually work on their own machine, so the
 // "what to prepare" block starts switched on. It's only a default — any
@@ -193,7 +195,122 @@ export default function CreateEventPage() {
   // The event serves food: ask registrants about food allergies
   // (its own section — food is something the organizer provides, not something attendees bring).
   const [askDietary, setAskDietary] = useState(!!editing?.askDietary);
+  const [meals, setMeals] = useState(editing?.meals || []); // which meals it serves
+  const toggleMeal = (k) => setMeals((ms) => (ms.includes(k) ? ms.filter((m) => m !== k) : [...ms, k]));
   const prepTouched = useRef(false);
+
+  // A newly chosen poster is read by AI and the form is filled from it. Boxes
+  // the organizer typed or changed are never replaced; boxes still holding
+  // what the previous poster put there are cleared when that poster is
+  // removed or replaced, and refilled from the new one.
+  // posterRead: null | {busy} | {filled: [labels], source} | {error}
+  const [posterRead, setPosterRead] = useState(null);
+  const posterReadId = useRef(0);
+  const formNow = useRef({});
+  formNow.current = { title, desc, cat, catOptions, dayMode, dateIso, eventDates, timeStart, timeEnd, dayTimes, attendMode, place, onlineLink, feeOn, feeText, regEndIso };
+  // What the current poster filled, per group, as posterSnap() writes it.
+  const posterFilled = useRef({});
+  const posterSnap = (n) => ({
+    title: n.title, desc: n.desc, cat: n.cat,
+    dates: JSON.stringify([n.dayMode, n.dateIso, n.eventDates]),
+    times: JSON.stringify([n.timeStart, n.timeEnd, n.dayTimes]),
+    attendMode: n.attendMode, place: n.place, onlineLink: n.onlineLink,
+    fee: JSON.stringify([n.feeOn, n.feeText]), regEnd: n.regEndIso,
+  });
+  const POSTER_RESET = {
+    title: () => setTitle(''), desc: () => setDesc(''), cat: () => setCat(''),
+    dates: () => { setDayMode('single'); setDateIso(''); setEventDates([]); },
+    times: () => { setTimeStart(''); setTimeEnd(''); setDayTimes({}); },
+    attendMode: () => setAttendMode('onsite'), place: () => setPlace(''), onlineLink: () => setOnlineLink(''),
+    fee: () => { setFeeOn(false); setFeeText(''); }, regEnd: () => setRegEndIso(''),
+  };
+
+  // Clears what the previous poster filled and nobody has changed since;
+  // returns the groups it cleared.
+  function clearPosterFilled() {
+    const cur = posterSnap(formNow.current);
+    const cleared = new Set();
+    for (const [key, value] of Object.entries(posterFilled.current)) {
+      if (cur[key] === value) { POSTER_RESET[key](); cleared.add(key); }
+    }
+    posterFilled.current = {};
+    return cleared;
+  }
+
+  async function choosePoster(dataUrl) {
+    setPoster(dataUrl);
+    const id = ++posterReadId.current;
+    const cleared = clearPosterFilled();
+    if (!dataUrl) { setPosterRead(null); return; }
+    setPosterRead({ busy: true });
+    let f;
+    let source;
+    try {
+      ({ fields: f, source } = await readPoster(dataUrl, formNow.current.catOptions));
+    } catch (err) {
+      if (id === posterReadId.current) setPosterRead({ error: err.message || 'อ่านโปสเตอร์ไม่สำเร็จ' });
+      return;
+    }
+    if (id !== posterReadId.current) return; // another poster was chosen meanwhile
+    // Groups cleared above count as empty even if this render hasn't caught up.
+    const n = { ...formNow.current };
+    if (cleared.has('title')) n.title = '';
+    if (cleared.has('desc')) n.desc = '';
+    if (cleared.has('cat')) n.cat = '';
+    if (cleared.has('dates')) { n.dayMode = 'single'; n.dateIso = ''; n.eventDates = []; }
+    if (cleared.has('times')) { n.timeStart = ''; n.timeEnd = ''; n.dayTimes = {}; }
+    if (cleared.has('attendMode')) n.attendMode = 'onsite';
+    if (cleared.has('place')) n.place = '';
+    if (cleared.has('onlineLink')) n.onlineLink = '';
+    if (cleared.has('fee')) { n.feeOn = false; n.feeText = ''; }
+    if (cleared.has('regEnd')) n.regEndIso = '';
+
+    const filled = [];
+    const next = { ...n }; // the form as it will be after this fill
+    const took = new Set();
+    const str = (v) => (typeof v === 'string' ? v.trim() : '');
+    const isDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v || '');
+    const isTime = (v) => /^\d{2}:\d{2}$/.test(v || '');
+
+    if (!n.title.trim() && str(f.title)) { setTitle(next.title = str(f.title)); took.add('title'); filled.push('ชื่อกิจกรรม'); }
+    if (!n.desc.trim() && str(f.description)) { setDesc(next.desc = str(f.description)); took.add('desc'); filled.push('รายละเอียด'); }
+    if (!n.cat && n.catOptions.includes(str(f.category))) { setCat(next.cat = str(f.category)); took.add('cat'); filled.push('ประเภท'); }
+
+    const days = (f.days || []).filter((d) => isDate(d.date)).sort((a, b) => a.date.localeCompare(b.date));
+    const noDates = !n.dateIso && n.eventDates.length === 0;
+    const noTimes = !n.timeStart && !n.timeEnd;
+    if (noDates && days.length === 1) {
+      const d = days[0];
+      setDayMode(next.dayMode = 'single');
+      setDateIso(next.dateIso = d.date);
+      took.add('dates'); filled.push('วันที่');
+      if (noTimes && isTime(d.start) && isTime(d.end)) {
+        setTimeStart(next.timeStart = d.start); setTimeEnd(next.timeEnd = d.end);
+        took.add('times'); filled.push('เวลา');
+      }
+    } else if (noDates && days.length > 1) {
+      setDayMode(next.dayMode = 'multi');
+      setEventDates(next.eventDates = days.map((d) => d.date));
+      took.add('dates'); filled.push(`วันที่ (${days.length} วัน)`);
+      const timed = days.filter((d) => isTime(d.start) && isTime(d.end));
+      if (timed.length > 0) {
+        setDayTimes(next.dayTimes = Object.fromEntries(timed.map((d) => [d.date, { start: d.start, end: d.end }])));
+        took.add('times'); filled.push('เวลา');
+      }
+    }
+
+    const mode = ['onsite', 'online', 'hybrid'].includes(f.attend_mode) ? f.attend_mode : '';
+    if (mode && !n.place.trim() && !n.onlineLink.trim()) { setAttendMode(next.attendMode = mode); took.add('attendMode'); filled.push('รูปแบบการเข้าร่วม'); }
+    if (!n.place.trim() && str(f.place) && mode !== 'online') { setPlace(next.place = str(f.place)); took.add('place'); filled.push('สถานที่'); }
+    if (!n.onlineLink.trim() && /^https?:\/\/\S+$/i.test(str(f.online_link))) { setOnlineLink(next.onlineLink = str(f.online_link)); took.add('onlineLink'); filled.push('ลิงก์ออนไลน์'); }
+    if (!n.feeOn && typeof f.fee === 'number' && f.fee > 0) { setFeeOn(next.feeOn = true); setFeeText(next.feeText = String(f.fee)); took.add('fee'); filled.push('ค่าลงทะเบียน'); }
+    if (!n.regEndIso && isDate(f.reg_end)) { setRegEndIso(next.regEndIso = f.reg_end); took.add('regEnd'); filled.push('วันปิดรับสมัคร'); }
+
+    // Remember what this poster put in, to clear it if the poster changes.
+    const snap = posterSnap(next);
+    posterFilled.current = Object.fromEntries([...took].map((k) => [k, snap[k]]));
+    setPosterRead({ filled, source });
+  }
   // Lending notebooks only makes sense when people come in person.
   const loanAvailable = attendMode !== 'online' || loanTaken > 0;
 
@@ -431,6 +548,7 @@ export default function CreateEventPage() {
     if (attendMode !== 'onsite' && !/^https?:\/\/\S+$/i.test(onlineLink.trim())) return at('link', 'ลิงก์ต้องขึ้นต้นด้วย http:// หรือ https://');
     if (feeOn && !(feeValue > 0)) return at('fee', 'กรอกจำนวนเงินมากกว่า 0 หรือปิดสวิตช์หากไม่มีค่าใช้จ่าย');
     if (feeOn && !paymentInfo.trim()) return at('payinfo', 'บอกผู้สมัครว่าต้องชำระอย่างไร เช่น เลขบัญชีหรือพร้อมเพย์');
+    if (askDietary && meals.length === 0) return at('meals', 'เลือกอย่างน้อย 1 มื้อ หรือปิดสวิตช์หากไม่มีอาหาร');
     if (prepOn && loanAvailable && loanQtyInvalid) return at('loan', 'กรอกเป็นจำนวนเต็ม 0–1000 เครื่อง');
     if (prepOn && loanAvailable && loanQty < loanTaken) return at('loan', `มีผู้ขอยืมแล้ว ${loanTaken} เครื่อง จึงลดต่ำกว่านี้ไม่ได้`);
     return null;
@@ -475,6 +593,7 @@ export default function CreateEventPage() {
       attendeeNote: prepOn ? attendeeNote : '',
       loanQty: prepOn && loanAvailable ? loanQty : 0,
       askDietary,
+      meals: askDietary ? meals : [],
       issueCert,
       fee: feeOn && feeValue > 0 ? feeValue : 0,
       paymentInfo: feeOn ? paymentInfo : '',
@@ -583,6 +702,7 @@ export default function CreateEventPage() {
     loanQty: prepOn && loanAvailable && !loanQtyInvalid ? loanQty : 0,
     loanLeft: prepOn && loanAvailable && !loanQtyInvalid ? Math.max(0, loanQty - loanTaken) : 0,
     askDietary,
+    meals: askDietary ? meals : [],
     issueCert,
     fee: feeOn && feeValue > 0 ? feeValue : 0,
     paymentInfo: feeOn ? paymentInfo.trim() : '',
@@ -607,8 +727,26 @@ export default function CreateEventPage() {
             <h2><span className="fc-num">1</span> โปสเตอร์กิจกรรม <span className="req">*</span></h2>
             <p className="fc-sub">ภาพประกาศสัมพันธ์ที่จะแสดงบนการ์ดกิจกรรมและหน้ารายละเอียด · ต้องอัปโหลดก่อนเผยแพร่</p>
             <div className={`field${errCls('poster')}`} data-field="poster">
-              <PosterUpload value={poster} onChange={setPoster} />
+              <PosterUpload value={poster} onChange={choosePoster} />
               {errMsg('poster')}
+              {posterRead?.busy && (
+                <div className="poster-read busy" role="status"><i className="ti ti-loader-2 spin" /> กำลังอ่านข้อมูลจากโปสเตอร์เพื่อกรอกฟอร์มให้... (ครั้งแรกอาจใช้เวลาสักครู่)</div>
+              )}
+              {posterRead?.filled && (
+                <div className="poster-read ok" role="status">
+                  <i className="ti ti-sparkles" />
+                  {posterRead.filled.length > 0
+                    ? <span><strong>กรอกจากโปสเตอร์แล้ว:</strong> {posterRead.filled.join(' · ')} · {posterRead.source === 'ocr' ? 'อ่านด้วยระบบอ่านตัวอักษร (OCR) ซึ่งอาจผิดพลาดได้ กรุณาตรวจสอบทุกช่อง' : 'กรุณาตรวจสอบความถูกต้องก่อนเผยแพร่'}</span>
+                    : <span>ไม่พบข้อมูลในโปสเตอร์ที่จะกรอกเพิ่มได้ (ช่องที่กรอกไว้แล้วจะไม่ถูกเปลี่ยน)</span>}
+                </div>
+              )}
+              {posterRead?.error && (
+                <div className="poster-read err" role="status">
+                  <i className="ti ti-alert-circle" />
+                  <span>{posterRead.error} · กรอกข้อมูลเองได้ตามปกติ</span>
+                  <button type="button" className="poster-read-retry" onClick={() => choosePoster(poster)}><i className="ti ti-refresh" /> ลองอีกครั้ง</button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -947,10 +1085,33 @@ export default function CreateEventPage() {
             <div className="setup-head">
               <div className="setup-head-text">
                 <h2><span className="fc-num">6</span> อาหารและของว่าง</h2>
-                <p className="fc-sub">{askDietary ? 'กิจกรรมนี้มีอาหารหรือของว่าง · ผู้สมัครจะถูกถามเรื่องการแพ้อาหารตอนลงทะเบียน' : 'ไม่บังคับ · เปิดใช้เมื่อกิจกรรมมีอาหารหรือของว่าง เพื่อสอบถามการแพ้อาหารของผู้สมัคร'}</p>
+                <p className="fc-sub">{askDietary ? `กิจกรรมนี้มี${mealsText(meals) || 'อาหารหรือของว่าง'} · ผู้สมัครจะถูกถามเรื่องการแพ้อาหารตอนลงทะเบียน` : 'ไม่บังคับ · เปิดใช้เมื่อกิจกรรมมีอาหารหรือของว่าง เพื่อสอบถามการแพ้อาหารของผู้สมัคร'}</p>
               </div>
               <button type="button" className={`switch${askDietary ? ' on' : ''}`} onClick={() => setAskDietary((o) => !o)} role="switch" aria-checked={askDietary} aria-label="สอบถามการแพ้อาหารตอนลงทะเบียน" title="เปิด/ปิดการสอบถามการแพ้อาหาร" />
             </div>
+            {askDietary && (
+              <div className={`field${errCls('meals')}`} data-field="meals" style={{ marginBottom: 14 }}>
+                <label>มื้ออาหารที่จัดให้ <span className="req">*</span></label>
+                <div className="meal-pick" role="group" aria-label="มื้ออาหารที่จัดให้">
+                  {MEAL_GROUPS.map((g) => (
+                    <div className="mp-group" key={g.when}>
+                      <div className="mp-when">{g.when}</div>
+                      {g.meals.map((m) => {
+                        const on = meals.includes(m.key);
+                        return (
+                          <button type="button" key={m.key} className={on ? 'on' : ''} aria-pressed={on} aria-label={m.label} onClick={() => toggleMeal(m.key)}>
+                            <i className={`ti ${m.icon} mp-icon`} />
+                            <span className="mp-what">{m.what}</span>
+                            <i className={`ti ${on ? 'ti-circle-check-filled' : 'ti-circle'} mp-tick`} />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+                {errMsg('meals') || <span className="helper budget-hint"><i className="ti ti-info-circle" /> เลือกได้มากกว่า 1 มื้อ · เบรกคืออาหารว่างและเครื่องดื่ม</span>}
+              </div>
+            )}
             {askDietary && (
               <div className="diet-preview">
                 <div className="diet-preview-title">ผู้สมัครจะต้องตอบตอนยืนยันการสมัคร</div>
@@ -1003,10 +1164,24 @@ export default function CreateEventPage() {
               certDate={dayMode === 'multi' ? formatCertDateList(eventDates) : formatCertDate(dateIso, dateIso)}
               category={cat}
             />
+            {certSettled && (
+              <div className="signer-locked" role="note">
+                <i className="ti ti-lock" />
+                <span>ผู้ลงนามล็อกแล้ว เพราะเปิดสิทธิ์เกียรติบัตรไปแล้ว · เกียรติบัตรของกิจกรรมนี้ใช้ผู้ลงนามและลายเซ็นนี้ตลอดไป แม้ภาควิชาจะเปลี่ยนผู้ลงนามในปีการศึกษาใหม่</span>
+              </div>
+            )}
             <div className="form-row" style={{ marginTop: 18 }}>
-              <div className="field"><label>ชื่อผู้ลงนาม <span className="req">*</span></label><div className="with-icon"><i className="ti ti-signature" /><input type="text" value={signerName} onChange={(e) => { signerTouched.current = true; setSignerName(e.target.value); }} /></div></div>
-              <div className="field"><label>ตำแหน่ง <span className="req">*</span></label><div className="with-icon"><i className="ti ti-id-badge-2" /><input type="text" value={signerTitle} onChange={(e) => { signerTouched.current = true; setSignerTitle(e.target.value); }} /></div></div>
+              <div className="field"><label>ชื่อผู้ลงนาม <span className="req">*</span></label><div className="with-icon"><i className="ti ti-signature" /><input type="text" value={signerName} disabled={certSettled} onChange={(e) => { signerTouched.current = true; setSignerName(e.target.value); }} /></div></div>
+              <div className="field"><label>ตำแหน่ง <span className="req">*</span></label><div className="with-icon"><i className="ti ti-id-badge-2" /><input type="text" value={signerTitle} disabled={certSettled} onChange={(e) => { signerTouched.current = true; setSignerTitle(e.target.value); }} /></div></div>
             </div>
+            {certSettled ? (
+              <div className="field">
+                <label>ลายเซ็นบนเกียรติบัตร</label>
+                {signatureOn && signature
+                  ? <div className="signer-locked-sig"><img src={signature} alt={`ลายเซ็น ${signerName}`} /></div>
+                  : <div className="sig-off-note"><i className="ti ti-writing" /> ไม่ใส่ลายเซ็นบนเกียรติบัตร</div>}
+              </div>
+            ) : (
             <div className="field">
               <div className="sig-toggle-row">
                 <label id="sig-toggle-label">ใส่รูปลายเซ็นบนเกียรติบัตร</label>
@@ -1021,6 +1196,7 @@ export default function CreateEventPage() {
                 <div className="sig-off-note"><i className="ti ti-writing" /> ไม่ใส่ลายเซ็นบนเกียรติบัตร · พิมพ์ออกมาแล้วผู้ลงนามเซ็นด้วยมือเหนือชื่อ</div>
               )}
             </div>
+            )}
             </>)}
           </div>
 

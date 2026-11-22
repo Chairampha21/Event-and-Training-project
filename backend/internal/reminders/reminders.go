@@ -321,20 +321,22 @@ func organizerEventTomorrow(db *sql.DB) error {
 // already announced themselves then).
 func registrationOpened(db *sql.DB) error {
 	rows, err := db.Query(`
-		SELECT e.id, e.title FROM events e
+		SELECT e.id, e.title, e.program, COALESCE(e.years, '') FROM events e
 		WHERE e.is_listed = 1 AND e.status = 'open' AND e.reg_start = ` + todayTH + `
 		  AND DATE(e.created_at + INTERVAL 7 HOUR) < e.reg_start`)
 	if err != nil {
 		return err
 	}
 	type item struct {
-		id    int64
-		title string
+		id      int64
+		title   string
+		program string
+		years   string
 	}
 	var items []item
 	for rows.Next() {
 		var it item
-		if err := rows.Scan(&it.id, &it.title); err != nil {
+		if err := rows.Scan(&it.id, &it.title, &it.program, &it.years); err != nil {
 			rows.Close()
 			return err
 		}
@@ -346,7 +348,7 @@ func registrationOpened(db *sql.DB) error {
 	}
 	for _, it := range items {
 		if claim(db, "reg_opened", it.id, 0, 1) {
-			notify.SendToStudents(db, "ti-sparkles", notify.ToneDark, "เปิดรับสมัครแล้ววันนี้", it.title+" · ลงทะเบียนได้แล้ว", fmt.Sprintf("/home?event=%d", it.id))
+			notify.SendToStudents(db, it.program, it.years, "ti-sparkles", notify.ToneDark, "เปิดรับสมัครแล้ววันนี้", it.title+" · ลงทะเบียนได้แล้ว", fmt.Sprintf("/home?event=%d", it.id))
 		}
 	}
 	return nil

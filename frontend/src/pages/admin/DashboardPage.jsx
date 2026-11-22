@@ -4,6 +4,21 @@ import { downloadCsv } from '../../utils/csvExport';
 import BudgetSection, { exportBudgetCsv } from '../../features/budget/components/BudgetSection';
 import CategoryMixCard from '../../features/dashboard/components/CategoryMixCard';
 import AttendanceCard from '../../features/dashboard/components/AttendanceCard';
+import BreakdownCard from '../../features/dashboard/components/BreakdownCard';
+import { STUDENT_YEARS } from '../../utils/constants';
+
+const PROGRAMS = [{ key: 'cs', label: 'วิทยาการคอมพิวเตอร์ (CS)' }, { key: 'it', label: 'เทคโนโลยีสารสนเทศ (IT)' }];
+
+// Audience rows (one per programme × year) summed into one group per programme
+// or per year, plus "ไม่ระบุ" for people who left it out of their profile.
+function sumBy(audience, field, groups, none) {
+  const pick = (k) => audience.filter((r) => r[field] === k);
+  const total = (list) => ({ reg: list.reduce((a, r) => a + r.registered, 0), in: list.reduce((a, r) => a + r.attended, 0), cert: list.reduce((a, r) => a + r.certified, 0) });
+  const rows = groups.map((g) => ({ key: g.key, label: g.label, ...total(pick(g.key)) }));
+  const unknown = total(pick(none));
+  if (unknown.reg) rows.push({ key: '', label: 'ไม่ระบุ', ...unknown });
+  return rows;
+}
 
 
 // "1 ตุลาคม 2568 – 30 กันยายน 2569" for ปีงบประมาณ 2569 (the year is named after its end).
@@ -13,8 +28,22 @@ function fiscalYearRange(fy) {
 
 function fmt(n) { return (n || 0).toLocaleString('en-US'); }
 
+// "77%" of a whole, or nothing when there is no whole.
+function pct(part, whole) { return whole ? `${Math.round((part / whole) * 100)}%` : ''; }
+
+// A score out of 5 with a short bar; "ยังไม่มีผลประเมิน" when nobody rated.
+function Satisfaction({ value }) {
+  if (!value) return <span className="cell-muted">ยังไม่มีผลประเมิน</span>;
+  return (
+    <span className="satis">
+      <strong>{value.toFixed(1)}</strong>
+      <span className="satis-bar"><span style={{ width: `${(value / 5) * 100}%` }} /></span>
+    </span>
+  );
+}
+
 export default function DashboardPage() {
-  const { getDashboardYearly, getDashboardBudget, saveBudgetActual } = useEvents();
+  const { getDashboardYearly, getDashboardBudget, saveBudgetActual, getDashboardAudience } = useEvents();
   const [rows, setRows] = useState([]);
   const [budgetRows, setBudgetRows] = useState([]);
   const [year, setYear] = useState(null);
@@ -45,15 +74,36 @@ export default function DashboardPage() {
   }
   const yearRows = useMemo(() => rows.filter((r) => r.report_year === year), [rows, year]);
 
+  // The year's people split by programme and year of study.
+  const [audience, setAudience] = useState([]);
+  useEffect(() => {
+    if (!year) return undefined;
+    let live = true;
+    getDashboardAudience(year).then((a) => { if (live) setAudience(a); });
+    return () => { live = false; };
+  }, [getDashboardAudience, year]);
+  const programRows = useMemo(() => sumBy(audience, 'program', PROGRAMS, 'all'), [audience]);
+  const studyYearRows = useMemo(() => sumBy(audience, 'year', STUDENT_YEARS, ''), [audience]);
+  const audienceTotal = audience.reduce((a, r) => a + r.registered, 0);
+  const audienceIn = audience.reduce((a, r) => a + r.attended, 0);
+  const audienceCert = audience.reduce((a, r) => a + r.certified, 0);
+  // Programme × year: how many registered in each pair.
+  const crossCell = (p, y) => audience.filter((r) => r.program === p && r.year === y).reduce((a, r) => a + r.registered, 0);
+  // Only the years (and "ไม่ระบุ") someone registered from get a column.
+  const crossYears = studyYearRows.filter((r) => r.reg > 0).map((r) => ({ key: r.key, label: r.label }));
+  const crossPrograms = programRows.filter((r) => r.reg > 0 || r.key);
+
   const totals = useMemo(() => yearRows.reduce((acc, r) => ({
     events: acc.events + r.event_count,
     participants: acc.participants + r.participant_count,
     certs: acc.certs + r.certificate_count,
   }), { events: 0, participants: 0, certs: 0 }), [yearRows]);
 
-  const avgSatisfaction = yearRows.length
-    ? (yearRows.reduce((a, r) => a + (r.avg_satisfaction || 0), 0) / yearRows.length).toFixed(1)
-    : '0.0';
+  // Categories nobody has rated yet (0) are left out of the average, not counted as 0.
+  const rated = yearRows.filter((r) => r.avg_satisfaction > 0);
+  const avgSatisfaction = rated.length
+    ? (rated.reduce((a, r) => a + r.avg_satisfaction, 0) / rated.length).toFixed(1)
+    : '–';
 
 
   function exportDash() {
@@ -62,7 +112,7 @@ export default function DashboardPage() {
     })), [
       { label: 'หมวดหมู่', value: 'cat' },
       { label: 'กิจกรรม', value: 'events' },
-      { label: 'ผู้เข้าร่วม', value: 'participants' },
+      { label: 'ผู้ลงทะเบียน', value: 'participants' },
       { label: 'เกียรติบัตร', value: 'certs' },
       { label: 'ความพึงพอใจ', value: 'satis' },
     ]);
@@ -116,7 +166,7 @@ export default function DashboardPage() {
               <div className="cmp-card"><div className="cm-lbl">กิจกรรมทั้งหมด</div><div className="cm-vals"><span className="cm-now">{fmt(totals.events)}</span></div></div>
               <div className="cmp-card"><div className="cm-lbl">ผู้เข้าร่วมสะสม</div><div className="cm-vals"><span className="cm-now">{fmt(totals.participants)}</span></div></div>
               <div className="cmp-card"><div className="cm-lbl">เกียรติบัตรที่ออก</div><div className="cm-vals"><span className="cm-now">{fmt(totals.certs)}</span></div></div>
-              <div className="cmp-card"><div className="cm-lbl">ความพึงพอใจเฉลี่ย</div><div className="cm-vals"><span className="cm-now">{avgSatisfaction} / 5</span></div></div>
+              <div className="cmp-card"><div className="cm-lbl">ความพึงพอใจเฉลี่ย</div><div className="cm-vals"><span className="cm-now">{avgSatisfaction}{rated.length ? ' / 5' : ''}</span></div></div>
             </div>
 
             <div className="chart-row">
@@ -124,15 +174,68 @@ export default function DashboardPage() {
               <AttendanceCard rows={yearDoneRows} certificates={totals.certs} year={year} />
             </div>
 
-            <div className="table-card">
+            <div className="chart-row even">
+              <BreakdownCard icon="ti-school" title="ผู้เข้าร่วมแยกตามสาขา" rows={programRows} total={audienceTotal}
+                note={`ปีงบประมาณ ${year} · ผู้ลงทะเบียน (อ่อน) กับผู้เข้าร่วมจริง (เข้ม) · ${fmt(audienceTotal)} คน`} />
+              <BreakdownCard icon="ti-stairs-up" title="ผู้เข้าร่วมแยกตามชั้นปี" rows={studyYearRows} total={audienceTotal}
+                note={`ปีงบประมาณ ${year} · ผู้ลงทะเบียน (อ่อน) กับผู้เข้าร่วมจริง (เข้ม) · ${fmt(audienceTotal)} คน`} />
+            </div>
+
+            {audienceTotal > 0 && (
+              <div className="table-card dash-table">
+                <div className="table-toolbar">
+                  <h3><i className="ti ti-table" /> ผู้ลงทะเบียนตามสาขาและชั้นปี · ปีงบประมาณ {year}</h3>
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table>
+                    <thead>
+                      <tr className="th-group">
+                        <th rowSpan={2}>สาขา</th>
+                        <th className="center" colSpan={crossYears.length}>ผู้ลงทะเบียนแต่ละชั้นปี (คน)</th>
+                        <th className="center col-split" colSpan={3}>รวมทั้งสาขา</th>
+                      </tr>
+                      <tr>
+                        {crossYears.map((y) => <th className="center" key={y.key || 'none'}>{y.label}</th>)}
+                        <th className="center col-split">ลงทะเบียน</th>
+                        <th className="center">เข้าร่วมจริง</th>
+                        <th className="center">ได้เกียรติบัตร</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {crossPrograms.map((p) => (
+                        <tr key={p.key || 'none'}>
+                          <td><strong>{p.label}</strong></td>
+                          {crossYears.map((y) => {
+                            const n = crossCell(p.key || 'all', y.key);
+                            return <td className="center" key={y.key || 'none'}>{n ? fmt(n) : <span className="cell-muted">–</span>}</td>;
+                          })}
+                          <td className="center col-split"><strong>{fmt(p.reg)}</strong></td>
+                          <td className="center">{fmt(p.in)}<span className="cell-sub">{pct(p.in, p.reg)}</span></td>
+                          <td className="center">{fmt(p.cert)}<span className="cell-sub">{pct(p.cert, p.reg)}</span></td>
+                        </tr>
+                      ))}
+                      <tr className="row-total">
+                        <td>รวม</td>
+                        {crossYears.map((y) => <td className="center" key={y.key || 'none'}>{fmt(studyYearRows.find((r) => r.key === y.key)?.reg)}</td>)}
+                        <td className="center col-split">{fmt(audienceTotal)}</td>
+                        <td className="center">{fmt(audienceIn)}<span className="cell-sub">{pct(audienceIn, audienceTotal)}</span></td>
+                        <td className="center">{fmt(audienceCert)}<span className="cell-sub">{pct(audienceCert, audienceTotal)}</span></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            <div className="table-card dash-table">
               <div className="table-toolbar">
-                <h3><i className="ti ti-table-options" /> สรุปผลการจัดกิจกรรม · ปีงบประมาณ {year}</h3>
+                <h3><i className="ti ti-table-options" /> สรุปผลการจัดกิจกรรมตามประเภท · ปีงบประมาณ {year}</h3>
                 <button className="btn btn-outline" style={{ padding: '7px 12px', fontSize: 13 }} onClick={exportDash}><i className="ti ti-download" /> ส่งออก CSV</button>
               </div>
               <div style={{ overflowX: 'auto' }}>
                 <table>
                   <thead>
-                    <tr><th>หมวดหมู่</th><th className="center">กิจกรรม</th><th className="center">ผู้เข้าร่วม</th><th className="center">เกียรติบัตร</th><th className="center">ความพึงพอใจ</th></tr>
+                    <tr><th>ประเภทกิจกรรม</th><th className="center">กิจกรรม</th><th className="center">ผู้ลงทะเบียน (คน)</th><th className="center">ได้เกียรติบัตร (คน)</th><th>ความพึงพอใจ (เต็ม 5)</th></tr>
                   </thead>
                   <tbody>
                     {yearRows.map((r) => (
@@ -140,16 +243,16 @@ export default function DashboardPage() {
                         <td><strong>{r.category}</strong></td>
                         <td className="center">{r.event_count}</td>
                         <td className="center">{fmt(r.participant_count)}</td>
-                        <td className="center">{fmt(r.certificate_count)}</td>
-                        <td className="center">{(r.avg_satisfaction || 0).toFixed(1)}</td>
+                        <td className="center">{fmt(r.certificate_count)}<span className="cell-sub">{pct(r.certificate_count, r.participant_count)}</span></td>
+                        <td><Satisfaction value={r.avg_satisfaction} /></td>
                       </tr>
                     ))}
-                    <tr style={{ background: 'var(--c2-08)', fontWeight: 700 }}>
-                      <td><strong style={{ color: 'var(--c4)' }}>รวมทั้งปี</strong></td>
-                      <td className="center"><strong>{totals.events}</strong></td>
-                      <td className="center"><strong>{fmt(totals.participants)}</strong></td>
-                      <td className="center"><strong>{fmt(totals.certs)}</strong></td>
-                      <td className="center"><strong>{avgSatisfaction}</strong></td>
+                    <tr className="row-total">
+                      <td>รวมทั้งปี</td>
+                      <td className="center">{totals.events}</td>
+                      <td className="center">{fmt(totals.participants)}</td>
+                      <td className="center">{fmt(totals.certs)}<span className="cell-sub">{pct(totals.certs, totals.participants)}</span></td>
+                      <td><Satisfaction value={rated.length ? Number(avgSatisfaction) : 0} /></td>
                     </tr>
                   </tbody>
                 </table>

@@ -1,10 +1,12 @@
 import React from 'react';
-import { STATUS_META } from '../../../utils/constants';
+import { STATUS_META, EVENT_PROGRAMS, yearsText } from '../../../utils/constants';
 import CycleProgress from './CycleProgress';
 import { formatBaht } from '../../../utils/money';
 import { formatThaiDayMonth } from '../../../utils/dateFormat';
 import { PAYMENT_STATUS } from './PaymentBox';
 import './EventCard.css';
+
+const PROGRAM_TAG = Object.fromEntries(EVENT_PROGRAMS.filter((p) => p.tag).map((p) => [p.key, p.tag]));
 
 const STRIP_TONE = { '': 'strip-1', alt: 'strip-2', dark: 'strip-3' };
 
@@ -56,6 +58,8 @@ export default function EventCard({ event, isStudent, myStatus, myPayment, onApp
           <div className="card-top-left">
             <div className={`icon-box sm ${event.tone}`}><i className={`ti ${event.icon}`} /></div>
             <span className="card-cat">{event.cat}</span>
+            {PROGRAM_TAG[event.program] && <span className="card-program" title={`เฉพาะนักศึกษาสาขา${EVENT_PROGRAMS.find((p) => p.key === event.program).short}`}>{PROGRAM_TAG[event.program]}</span>}
+            {event.years?.length > 0 && <span className="card-program" title={`เฉพาะนักศึกษา${yearsText(event.years)}`}>{event.years.length === 1 && event.years[0] !== '5' ? `ปี ${event.years[0]}` : `ปี ${event.years.map((y) => (y === '5' ? '5+' : y)).join(',')}`}</span>}
           </div>
           {!event.poster && <span className={`badge ${sm.badge}`}><i className={`ti ${sm.ico}`} /> {sm.label}</span>}
         </div>

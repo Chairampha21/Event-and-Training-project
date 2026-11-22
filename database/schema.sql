@@ -49,6 +49,9 @@ CREATE TABLE users (
   food_allergy      VARCHAR(255)    NULL,                 -- อาหารที่แพ้ / ข้อจำกัดด้านอาหาร
   medical_note      VARCHAR(255)    NULL,                 -- โรคประจำตัว / ยาที่แพ้
   emergency_contact VARCHAR(150)    NULL,                 -- ชื่อและเบอร์ผู้ติดต่อกรณีฉุกเฉิน
+  -- profile picture: a small square image as a data: URL; NULL = initials.
+  -- Existing databases: database/migrations/2026-11-user-avatar.sql
+  avatar            MEDIUMTEXT   NULL,
   active          TINYINT(1)        NOT NULL DEFAULT 1,
   -- When the owner proved the address is theirs (a code sent to it, Google
   -- Sign-In, or an admin creating the account). A self sign-up can't log in
@@ -73,6 +76,18 @@ CREATE TABLE events (
   description           TEXT          NULL,
   category              VARCHAR(50)   NOT NULL,           -- อบรมเชิงบรรยาย / อบรมเชิงปฏิบัติการ / การแข่งขัน / Cybersecurity
   subcategory           VARCHAR(150)  NULL,                -- e.g. 'AI / Data', 'Hackathon'
+  -- who may register: 'cs' / 'it' = only students of that programme (their
+  -- major, kept in users.dept); 'all' = everyone.
+  -- Existing databases: database/migrations/2026-11-event-program.sql
+  program               ENUM('all','cs','it') NOT NULL DEFAULT 'all',
+  -- years of study that may register, comma list of '1'..'5' ('5' = year 5 and
+  -- above, read from the year in users.dept); NULL = every year.
+  -- Existing databases: database/migrations/2026-11-event-years.sql
+  years                 VARCHAR(20)   NULL,
+  -- 1 = students on the blacklist may still register (events everyone must
+  -- attend); 0 = they are refused as usual.
+  -- Existing databases: database/migrations/2026-11-event-allow-blacklisted.sql
+  allow_blacklisted     TINYINT(1)    NOT NULL DEFAULT 0,
   poster_url            LONGTEXT      NULL,               -- the frontend stores this as a base64 data: URL, not a path
 
   organizer_id          INT UNSIGNED  NULL,                -- account that owns/manages this event

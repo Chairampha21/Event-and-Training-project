@@ -21,7 +21,7 @@ export function HeroSearch({ query, onQueryChange, onSearch }) {
   );
 }
 
-export default function SearchBar({ pills, pillFilter, onPillChange, statusFilter, onStatusChange, hideStatus }) {
+export default function SearchBar({ pills, pillFilter, onPillChange, statusFilter, onStatusChange, hideStatus, sortBy, onSortChange, sortOptions, programFilter, onProgramChange }) {
   const list = pills || DEFAULT_PILLS;
   return (
     <div className="filter-section">
@@ -43,6 +43,23 @@ export default function SearchBar({ pills, pillFilter, onPillChange, statusFilte
                 <option value="full">เต็มแล้ว</option>
                 <option value="closed">ปิดรับสมัคร</option>
                 <option value="done">สิ้นสุดแล้ว</option>
+              </select>
+            </label>
+          )}
+          {onProgramChange && (
+            <label className="facet-select"><i className="ti ti-school" />
+              <select value={programFilter} onChange={(e) => onProgramChange(e.target.value)} aria-label="กรองตามสาขา">
+                <option value="any">ทุกสาขา</option>
+                <option value="cs">เฉพาะ CS</option>
+                <option value="it">เฉพาะ IT</option>
+                <option value="all">เปิดรับทุกสาขา</option>
+              </select>
+            </label>
+          )}
+          {sortOptions && (
+            <label className="facet-select"><i className="ti ti-arrows-sort" />
+              <select value={sortBy} onChange={(e) => onSortChange(e.target.value)}>
+                {sortOptions.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
               </select>
             </label>
           )}

@@ -8,6 +8,7 @@ import BudgetActualModal from '../../budget/components/BudgetActualModal';
 import { CertIssueReview } from '../../certificates/components/CertIssuePreview';
 import { formatBaht } from '../../../utils/money';
 import { REFUND_METHODS } from './PaymentBox';
+import { todayIso } from '../../../utils/dateFormat';
 
 // Organizer/admin action menu for one event: edit, roster & check-in, record
 // actual spend, issue certificates, open/close registration, delete.
@@ -40,6 +41,7 @@ export default function ManageEventModal({ eventId, open, onClose, onOpenApplica
     return <BudgetActualModal open event={{ ...ev, budgetPlanned: ev.budgetTotal }} onSave={(amount) => saveBudgetActual(ev.id, amount)} onClose={() => setBudgetOpen(false)} />;
   }
   const sm = STATUS_META[ev.status];
+  const started = ev.status === 'done' || (!!ev.dateStart && todayIso() >= ev.dateStart.slice(0, 10));
   const isOpen = ev.status === 'open';
   const canToggle = ev.status === 'open' || ev.status === 'closed';
   const certIssued = ev.stage === 4; // certificates already opened to attendees
@@ -160,10 +162,12 @@ export default function ManageEventModal({ eventId, open, onClose, onOpenApplica
               <i className="ti ti-chevron-right me-go" />
             </button>
           )}
-          <button className="me-action danger" onClick={() => setConfirmDelete(true)}>
+          {/* Only an event still ahead can be deleted; once its first day has come
+              (or it is done) it stays, as the backend also enforces. */}
+          <button className="me-action danger" onClick={() => setConfirmDelete(true)} disabled={started}>
             <div className="me-ic dark"><i className="ti ti-trash" /></div>
-            <div className="me-tx"><strong>ลบกิจกรรม</strong><span>นำกิจกรรมออกจากระบบ (ย้อนกลับไม่ได้)</span></div>
-            <i className="ti ti-chevron-right me-go" />
+            <div className="me-tx"><strong>ลบกิจกรรม</strong><span>{started ? 'ลบไม่ได้ · กิจกรรมถึงวันจัดหรือจัดเสร็จแล้ว' : 'นำกิจกรรมออกจากระบบ (ย้อนกลับไม่ได้)'}</span></div>
+            {!started && <i className="ti ti-chevron-right me-go" />}
           </button>
         </div>
       </div>

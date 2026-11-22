@@ -5,6 +5,7 @@ import ConfirmDialog from '../../../components/ui/ConfirmDialog';
 import { useEvents } from '../../../hooks/useEvents';
 import { downloadXlsx } from '../../../utils/xlsxExport';
 import { buildSignInSheets, buildAttendanceSheet } from '../utils/signInSheet';
+import { bySid } from '../../../utils/bySid';
 import { formatThaiDate, formatThaiDateTime, todayIso } from '../../../utils/dateFormat';
 import { formatBaht } from '../../../utils/money';
 import SlipReviewModal from './SlipReviewModal';
@@ -65,7 +66,8 @@ export default function ApplicantsModal({ eventId, open, onClose, mode = 'list' 
   const [checkAllAsk, setCheckAllAsk] = useState(false); // checking (or unchecking) everyone at once waits for a confirmation
 
   const ev = eventId ? evById(eventId) : null;
-  const roster = useMemo(() => (eventId ? (rosters[eventId] || []) : []), [eventId, rosters]);
+  // By student ID, the same order as the printed sign-in sheet.
+  const roster = useMemo(() => (eventId ? bySid(rosters[eventId] || []) : []), [eventId, rosters]);
   const hybrid = ev?.attendMode === 'hybrid';
   const onlineOnly = ev?.attendMode === 'online';
   // An event that runs over several days is checked in day by day: `day` is

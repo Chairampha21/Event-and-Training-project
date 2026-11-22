@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { fileToDataUrl } from '../../../utils/fileToDataUrl';
 import ImageViewer from '../../../components/ui/ImageViewer';
+import { showResult } from '../../../utils/alert';
 import './PosterUpload.css';
 
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -18,16 +19,33 @@ export const POSTER_SIZES = [
   { label: '9:16', ratio: 9 / 16, w: 1215, h: 2160 },
 ];
 const SIZES_TEXT = POSTER_SIZES.map((s) => `${s.label} (${s.w} × ${s.h})`).join(', ');
+const fmt = (n) => n.toLocaleString('en-US');
+// The standard a poster must meet, as told to the user.
+const POSTER_STANDARD = `มาตรฐานโปสเตอร์: สัดส่วน 1:1, 3:4 หรือ 9:16 · แนะนำ ${SIZES_TEXT} px`;
+
+// The supported shape the image is (within 3%), or undefined.
+function posterSize({ w, h }) {
+  const ratio = w / h;
+  return POSTER_SIZES.find((s) => Math.abs(ratio - s.ratio) / s.ratio <= 0.03);
+}
+
+function imageSize(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+    img.onerror = reject;
+    img.src = dataUrl;
+  });
+}
 
 // Is the poster one of the supported shapes, and sharp enough?
 function checkPoster(dims) {
   if (!dims) return [];
-  const ratio = dims.w / dims.h;
-  const size = POSTER_SIZES.find((s) => Math.abs(ratio - s.ratio) / s.ratio <= 0.03);
+  const size = posterSize(dims);
   const checks = [];
   checks.push(size
     ? { ok: true, text: `สัดส่วน ${size.label}` }
-    : { ok: false, text: `สัดส่วนไม่ตรงกับที่รองรับ (1:1, 3:4, 9:16) · โปสเตอร์ยังแสดงครบ แต่จะมีขอบรอบภาพ` });
+    : { ok: false, text: 'สัดส่วนไม่ตรงกับที่รองรับ (1:1, 3:4, 9:16) · กรุณาเปลี่ยนรูป' });
   const long = Math.max(dims.w, dims.h);
   const want = size || POSTER_SIZES[1];
   if (long >= 2160) checks.push({ ok: true, text: 'ความละเอียดคมชัด' });
@@ -67,6 +85,13 @@ export default function PosterUpload({ value, onChange, onError }) {
     if (file.size > MAX_BYTES) { fail(`ไฟล์มีขนาด ${formatBytes(file.size)} · เกินขนาดสูงสุด 5 MB`); return; }
     try {
       const dataUrl = await fileToDataUrl(file);
+      const got = await imageSize(dataUrl);
+      if (!posterSize(got)) {
+        const why = `สัดส่วนภาพ (${fmt(got.w)} × ${fmt(got.h)} px) ไม่ตรงกับที่รองรับ`;
+        fail(`ไม่สามารถใช้ไฟล์ "${file.name}" ได้ · ${why} · ${POSTER_STANDARD}`);
+        showResult('ขนาดไฟล์ไม่ตรงตามมาตรฐานโปสเตอร์', `"${file.name}" ${why} · ${POSTER_STANDARD}`, 'warn');
+        return;
+      }
       setError('');
       setFileName(file.name);
       setDims(null);

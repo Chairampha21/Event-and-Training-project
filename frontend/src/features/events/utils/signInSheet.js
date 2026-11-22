@@ -1,5 +1,6 @@
 import { STYLE, colName } from '../../../utils/xlsxExport';
 import { formatThaiDate } from '../../../utils/dateFormat';
+import { bySid } from '../../../utils/bySid';
 
 // 2026-10-11 -> 11/10/69, the short Buddhist-era date written on the
 // department's paper sign-in sheets.
@@ -16,7 +17,8 @@ function shortThaiDate(iso) {
  * sheets have a single signature box per day instead.
  * `people` are roster rows; `noteOf(person)` gives the remark for a row.
  */
-export function buildSignInSheets({ ev, days, people, noteOf }) {
+export function buildSignInSheets({ ev, days, people: roster, noteOf }) {
+  const people = bySid(roster);
   return days.map((day, n) => {
     const time = ev.schedule?.find((s) => s.date === day)?.time || (ev.time && ev.time !== '-' ? ev.time : '');
     const where = ev.placeRaw || '';
@@ -61,7 +63,8 @@ export function buildSignInSheets({ ev, days, people, noteOf }) {
  * of them. `people` are roster rows; `showVia` adds the Onsite/Online column
  * for an event held both ways.
  */
-export function buildAttendanceSheet({ ev, days, people, showVia }) {
+export function buildAttendanceSheet({ ev, days, people: roster, showVia }) {
+  const people = bySid(roster);
   const head = (v) => ({ v, s: STYLE.head });
   const fixed = ['ลำดับ', 'รหัสนักศึกษา', 'ชื่อ-สกุล', ...(showVia ? ['รูปแบบ'] : [])];
   const firstDay = fixed.length; // column index of the first day

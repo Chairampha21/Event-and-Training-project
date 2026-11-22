@@ -14,6 +14,19 @@ export function parseStudentDept(dept) {
   return { year, major };
 }
 
+// The event programme key ('cs' / 'it') a student's dept belongs to; '' if no major is set.
+export function studentProgram(dept) {
+  const { major } = parseStudentDept(dept);
+  return major === MAJORS[0] ? 'cs' : major === MAJORS[1] ? 'it' : '';
+}
+
+// A student's year of study as an event years key: '1'..'4', '5' for 5 and above, '' if not set.
+export function studentYearKey(dept) {
+  const n = Number(parseStudentDept(dept).year);
+  if (!n) return '';
+  return n >= 5 ? '5' : String(n);
+}
+
 export function formatStudentDept(year, major) {
   return [year ? `นักศึกษาชั้นปีที่ ${year}` : '', major].filter(Boolean).join(' · ');
 }

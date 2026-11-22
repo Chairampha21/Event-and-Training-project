@@ -190,7 +190,7 @@ export default function EventsTablePage() {
                 {pageItems.map((ev) => {
                   const sm = STATUS_META[ev.status];
                   return (
-                    <tr key={ev.id}>
+                    <tr key={ev.id} className="row-clickable" onClick={() => setManageId(ev.id)}>
                       <td>
                         <div className="ev-cell">
                           <div className={`ev-thumb ${ev.tone}`}><i className={`ti ${ev.icon}`} /></div>
@@ -204,7 +204,7 @@ export default function EventsTablePage() {
                         {/* Everything (edit, applicants, check-in, slips, budget,
                             certificates, delete) is in the same "จัดการ" menu as on the event card. */}
                         <div className="row-actions">
-                          <button className="btn btn-outline row-manage" onClick={() => setManageId(ev.id)} aria-label={`จัดการ ${ev.title}`}><i className="ti ti-settings" /> จัดการ</button>
+                          <button className="btn btn-outline row-manage" onClick={(e) => { e.stopPropagation(); setManageId(ev.id); }} aria-label={`จัดการ ${ev.title}`}><i className="ti ti-settings" /> จัดการ</button>
                         </div>
                       </td>
                     </tr>

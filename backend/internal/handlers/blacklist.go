@@ -32,6 +32,8 @@ type blacklistEntry struct {
 	CreatedByName models.NullString `json:"created_by_name"`
 	CreatedAt     string            `json:"created_at"`
 	RestoredAt    models.NullString `json:"restored_at"`
+	Dept          models.NullString `json:"dept"`          // the student's year and major, from their profile
+	AbsenceCount  int               `json:"absence_count"` // events they missed (marked absent), all years
 }
 
 // List returns currently-suspended entries by default; ?all=1 includes restored ones too.
@@ -40,8 +42,11 @@ func (h *BlacklistHandler) List(c *gin.Context) {
 	if c.Query("all") == "1" {
 		where = "1=1"
 	}
-	rows, err := h.DB.Query(`SELECT b.id, b.user_id, b.name, b.email, b.student_id, b.reason, b.created_by, u.name, b.created_at, b.restored_at
-		FROM blacklist_entries b LEFT JOIN users u ON u.id = b.created_by
+	rows, err := h.DB.Query(`SELECT b.id, b.user_id, b.name, b.email, b.student_id, b.reason, b.created_by, u.name, b.created_at, b.restored_at,
+		       su.dept,
+		       (SELECT COUNT(*) FROM registrations r JOIN events e ON e.id = r.event_id
+		         WHERE r.user_id = b.user_id AND r.status = 'absent' AND e.is_listed = 1)
+		FROM blacklist_entries b LEFT JOIN users u ON u.id = b.created_by LEFT JOIN users su ON su.id = b.user_id
 		WHERE ` + where + ` ORDER BY b.created_at DESC`)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
@@ -52,7 +57,8 @@ func (h *BlacklistHandler) List(c *gin.Context) {
 	list := []blacklistEntry{}
 	for rows.Next() {
 		var e blacklistEntry
-		if err := rows.Scan(&e.ID, &e.UserID, &e.Name, &e.Email, &e.StudentID, &e.Reason, &e.CreatedBy, &e.CreatedByName, &e.CreatedAt, &e.RestoredAt); err != nil {
+		if err := rows.Scan(&e.ID, &e.UserID, &e.Name, &e.Email, &e.StudentID, &e.Reason, &e.CreatedBy, &e.CreatedByName, &e.CreatedAt, &e.RestoredAt,
+			&e.Dept, &e.AbsenceCount); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 			return
 		}
@@ -66,6 +72,7 @@ type userLookupResult struct {
 	Name      string `json:"name"`
 	Email     string `json:"email"`
 	StudentID string `json:"student_id"`
+	Dept      string `json:"dept"` // year and major, shown on the add form
 }
 
 // LookupUsers searches students by student ID or name so organizers/admins can
@@ -79,7 +86,7 @@ func (h *BlacklistHandler) LookupUsers(c *gin.Context) {
 	}
 	like := "%" + q + "%"
 	rows, err := h.DB.Query(
-		`SELECT id, name, email, COALESCE(student_id, '') FROM users
+		`SELECT id, name, email, COALESCE(student_id, ''), COALESCE(dept, '') FROM users
 		 WHERE role IN ('student', 'teacher') AND (student_id LIKE ? OR name LIKE ?)
 		 ORDER BY student_id LIMIT 8`,
 		like, like,
@@ -93,7 +100,7 @@ func (h *BlacklistHandler) LookupUsers(c *gin.Context) {
 	list := []userLookupResult{}
 	for rows.Next() {
 		var u userLookupResult
-		if err := rows.Scan(&u.ID, &u.Name, &u.Email, &u.StudentID); err != nil {
+		if err := rows.Scan(&u.ID, &u.Name, &u.Email, &u.StudentID, &u.Dept); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 			return
 		}

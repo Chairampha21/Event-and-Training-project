@@ -3,6 +3,23 @@ import { useEvents } from '../../hooks/useEvents';
 import Modal, { ModalHead } from '../../components/ui/Modal';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import { api } from '../../services/api';
+import { STUDENT_YEARS } from '../../utils/constants';
+import { studentProgram, studentYearKey } from '../../components/common/StudentDeptFields';
+
+const SORTS = [
+  { key: 'newest', label: 'บันทึกล่าสุดก่อน' },
+  { key: 'oldest', label: 'บันทึกเก่าสุดก่อน' },
+  { key: 'absent-desc', label: 'ขาดมากไปน้อย' },
+  { key: 'absent-asc', label: 'ขาดน้อยไปมาก' },
+  { key: 'name', label: 'ชื่อ ก–ฮ' },
+  { key: 'sid', label: 'รหัสนักศึกษา' },
+];
+const PROGRAM_TAG = { cs: 'CS', it: 'IT' };
+const PROGRAM_NAME = { cs: 'วิทยาการคอมพิวเตอร์ (CS)', it: 'เทคโนโลยีสารสนเทศ (IT)' };
+const yearLabel = (dept) => STUDENT_YEARS.find((y) => y.key === studentYearKey(dept))?.label || '–';
+const programLabel = (dept) => PROGRAM_NAME[studentProgram(dept)] || '–';
+// "ปี 3 · CS" for the search suggestions; '' when the profile has neither.
+const deptText = (dept) => [STUDENT_YEARS.find((y) => y.key === studentYearKey(dept))?.label, PROGRAM_TAG[studentProgram(dept)]].filter(Boolean).join(' · ');
 
 function formatDate(ts) {
   if (!ts) return '';
@@ -13,7 +30,7 @@ function formatDate(ts) {
 export default function BlacklistPage() {
   const { blacklist, addToBlacklist, restoreFromBlacklist } = useEvents();
   const [addOpen, setAddOpen] = useState(false);
-  const [form, setForm] = useState({ name: '', email: '', sid: '', reason: '' });
+  const [form, setForm] = useState({ name: '', email: '', sid: '', reason: '', dept: '' });
   const [restoreId, setRestoreId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
@@ -21,7 +38,7 @@ export default function BlacklistPage() {
 
   const sidQuery = form.sid.trim();
   useEffect(() => {
-    if (!sidQuery) { setSidMatches([]); return; }
+    if (!sidQuery) { setSidMatches([]); setForm((f) => ({ ...f, dept: '' })); return; }
     let cancelled = false;
     const t = setTimeout(async () => {
       try {
@@ -29,9 +46,10 @@ export default function BlacklistPage() {
         if (cancelled) return;
         const exact = users.find((u) => u.student_id === sidQuery);
         if (exact) {
-          setForm((f) => ({ ...f, name: exact.name || '', email: exact.email || '' }));
+          setForm((f) => ({ ...f, name: exact.name || '', email: exact.email || '', dept: exact.dept || '' }));
           setSidMatches([]);
         } else {
+          setForm((f) => ({ ...f, dept: '' }));
           setSidMatches(users);
         }
       } catch {
@@ -42,18 +60,42 @@ export default function BlacklistPage() {
   }, [sidQuery]);
 
   function pickUser(u) {
-    setForm((f) => ({ ...f, name: u.name || '', email: u.email || '', sid: u.student_id || '' }));
+    setForm((f) => ({ ...f, name: u.name || '', email: u.email || '', sid: u.student_id || '', dept: u.dept || '' }));
     setSidMatches([]);
   }
 
+  const [yearFilter, setYearFilter] = useState('all'); // 'all' | '1'..'5' | 'none'
+  const [programFilter, setProgramFilter] = useState('all'); // 'all' | 'cs' | 'it' | 'none'
+  const [sortBy, setSortBy] = useState('newest');
+
   const q = search.trim().toLowerCase();
-  const filtered = q
-    ? blacklist.filter((u) =>
-        (u.student_id || '').toLowerCase().includes(q) ||
-        (u.name || '').toLowerCase().includes(q) ||
-        (u.email || '').toLowerCase().includes(q)
-      )
-    : blacklist;
+  const filtered = blacklist
+    .filter((u) => !q ||
+      (u.student_id || '').toLowerCase().includes(q) ||
+      (u.name || '').toLowerCase().includes(q) ||
+      (u.email || '').toLowerCase().includes(q))
+    .filter((u) => {
+      if (yearFilter === 'all') return true;
+      const y = studentYearKey(u.dept);
+      return yearFilter === 'none' ? !y : y === yearFilter;
+    })
+    .filter((u) => {
+      if (programFilter === 'all') return true;
+      const p = studentProgram(u.dept);
+      return programFilter === 'none' ? !p : p === programFilter;
+    });
+  const byDate = (a, b) => (a.created_at || '').localeCompare(b.created_at || '');
+  const sorted = [...filtered].sort((a, b) => {
+    switch (sortBy) {
+      case 'oldest': return byDate(a, b);
+      case 'absent-desc': return (b.absence_count || 0) - (a.absence_count || 0) || byDate(b, a);
+      case 'absent-asc': return (a.absence_count || 0) - (b.absence_count || 0) || byDate(b, a);
+      case 'name': return (a.name || '').localeCompare(b.name || '', 'th');
+      case 'sid': return (a.student_id || '').localeCompare(b.student_id || '');
+      default: return byDate(b, a);
+    }
+  });
+  const narrowed = !!q || yearFilter !== 'all' || programFilter !== 'all';
 
   // Suspending someone takes effect at once and tells them, so it is asked first.
   const [addAsk, setAddAsk] = useState(false);
@@ -67,7 +109,7 @@ export default function BlacklistPage() {
     setSaving(true);
     await addToBlacklist(form);
     setSaving(false);
-    setForm({ name: '', email: '', sid: '', reason: '' });
+    setForm({ name: '', email: '', sid: '', reason: '', dept: '' });
     setAddOpen(false);
   }
 
@@ -96,8 +138,8 @@ export default function BlacklistPage() {
         </div>
 
         <div className="table-card">
-          <div style={{ padding: 16, borderBottom: '1px solid var(--c4-10)' }}>
-            <div className="field" style={{ maxWidth: 320 }}>
+          <div className="bl-tools">
+            <div className="field bl-search">
               <input
                 type="text"
                 placeholder="ค้นหาด้วยรหัสนักศึกษา, ชื่อ หรืออีเมล"
@@ -105,15 +147,37 @@ export default function BlacklistPage() {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
+            <div className="bl-facets">
+              <label className="facet-select"><i className="ti ti-stairs-up" />
+                <select value={yearFilter} onChange={(e) => setYearFilter(e.target.value)} aria-label="กรองตามชั้นปี">
+                  <option value="all">ทุกชั้นปี</option>
+                  {STUDENT_YEARS.map((y) => <option key={y.key} value={y.key}>{y.label}</option>)}
+                  <option value="none">ไม่ระบุชั้นปี</option>
+                </select>
+              </label>
+              <label className="facet-select"><i className="ti ti-school" />
+                <select value={programFilter} onChange={(e) => setProgramFilter(e.target.value)} aria-label="กรองตามสาขา">
+                  <option value="all">ทุกสาขา</option>
+                  <option value="cs">CS</option>
+                  <option value="it">IT</option>
+                  <option value="none">ไม่ระบุสาขา</option>
+                </select>
+              </label>
+              <label className="facet-select"><i className="ti ti-arrows-sort" />
+                <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} aria-label="เรียงลำดับ">
+                  {SORTS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+                </select>
+              </label>
+            </div>
           </div>
           <div style={{ overflowX: 'auto' }}>
             <table>
               <thead>
-                <tr><th>ชื่อ–นามสกุล</th><th>รหัสนักศึกษา</th><th>เหตุผล</th><th>วันที่บันทึก</th><th>ผู้บันทึก</th><th className="right">การจัดการ</th></tr>
+                <tr><th>ชื่อ–นามสกุล</th><th>รหัสนักศึกษา</th><th className="center">ขาด (ครั้ง)</th><th>เหตุผล</th><th>วันที่บันทึก</th><th>ผู้บันทึก</th><th className="right">การจัดการ</th></tr>
               </thead>
               <tbody>
-                {filtered.length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--c4-60)', padding: 24 }}>{blacklist.length === 0 ? 'ไม่มีรายชื่อ Blacklist' : 'ไม่พบรายชื่อที่ค้นหา'}</td></tr>}
-                {filtered.map((u) => (
+                {sorted.length === 0 && <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--c4-60)', padding: 24 }}>{blacklist.length === 0 ? 'ไม่มีรายชื่อ Blacklist' : narrowed ? 'ไม่พบรายชื่อที่ตรงกับการค้นหาหรือตัวกรอง' : 'ไม่พบรายชื่อ'}</td></tr>}
+                {sorted.map((u) => (
                   <tr key={u.id}>
                     <td>
                       <div className="ev-cell">
@@ -121,7 +185,13 @@ export default function BlacklistPage() {
                         <div><div className="ev-title">{u.name}</div><div className="ev-sub">{u.email}</div></div>
                       </div>
                     </td>
-                    <td><strong>{u.student_id}</strong></td>
+                    <td>
+                      <strong>{u.student_id || '–'}</strong>
+                      {(studentYearKey(u.dept) || studentProgram(u.dept)) && (
+                        <div className="ev-sub">{[STUDENT_YEARS.find((y) => y.key === studentYearKey(u.dept))?.label, PROGRAM_TAG[studentProgram(u.dept)]].filter(Boolean).join(' · ')}</div>
+                      )}
+                    </td>
+                    <td className="center"><span className={`bl-absent${u.absence_count >= 3 ? ' high' : ''}`}>{u.absence_count || 0}</span></td>
                     <td style={{ maxWidth: 260 }}>{u.reason}</td>
                     <td>{formatDate(u.created_at)}</td>
                     <td>{u.created_by_name || (u.created_by ? '–' : 'ระบบ (อัตโนมัติ)')}</td>
@@ -135,7 +205,7 @@ export default function BlacklistPage() {
               </tbody>
             </table>
           </div>
-          <div className="table-foot"><span>แสดง {filtered.length} จาก {blacklist.length} รายการ</span></div>
+          <div className="table-foot"><span>แสดง {sorted.length} จาก {blacklist.length} รายการ</span></div>
         </div>
       </div>
 
@@ -162,7 +232,7 @@ export default function BlacklistPage() {
                       style={{ padding: '8px 12px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', gap: 8 }}
                       className="sid-suggest-item"
                     >
-                      <span>{u.name}</span>
+                      <span>{u.name}{deptText(u.dept) && <small style={{ color: 'var(--c4-60)', marginLeft: 6 }}>{deptText(u.dept)}</small>}</span>
                       <strong style={{ color: 'var(--c4-60)' }}>{u.student_id}</strong>
                     </div>
                   ))}
@@ -171,6 +241,11 @@ export default function BlacklistPage() {
             </div>
           </div>
           <div className="form-row full"><div className="field"><label>ชื่อ–นามสกุล <span className="req">*</span></label><input type="text" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} /></div></div>
+          <div className="form-row">
+            <div className="field"><label>ชั้นปี</label><input type="text" readOnly disabled value={yearLabel(form.dept)} /></div>
+            <div className="field"><label>สาขา</label><input type="text" readOnly disabled value={programLabel(form.dept)} /></div>
+          </div>
+          <span className="helper budget-hint" style={{ display: 'block', marginTop: -8, marginBottom: 14 }}><i className="ti ti-info-circle" /> {form.sid.trim() && !form.dept && !form.name ? 'ไม่พบรหัสนี้ในระบบ · ชั้นปีและสาขาจะแสดงเมื่อเลือกนักศึกษาที่มีบัญชี' : 'ดึงจากโปรไฟล์ของนักศึกษาเมื่อเลือกรหัสนักศึกษา'}</span>
           <div className="form-row full"><div className="field"><label>อีเมล</label><input type="text" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} /></div></div>
           <div className="form-row full"><div className="field"><label>เหตุผล <span className="req">*</span></label><textarea value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} /></div></div>
         </div>

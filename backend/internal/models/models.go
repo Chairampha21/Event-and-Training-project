@@ -61,6 +61,9 @@ type User struct {
 	FoodAllergy      NullString `json:"food_allergy"`
 	MedicalNote      NullString `json:"medical_note"` // โรคประจำตัว / ยาที่แพ้
 	EmergencyContact NullString `json:"emergency_contact"`
+	// Profile picture (data: URL). Only filled in for the signed-in user's own
+	// record (login, /auth/me), never in user lists.
+	Avatar NullString `json:"avatar,omitempty"`
 }
 
 type Event struct {
@@ -68,6 +71,9 @@ type Event struct {
 	Title               string     `json:"title"`
 	Description         NullString `json:"description"`
 	Category            string     `json:"category"`
+	Program             string     `json:"program"`           // who may register: all | cs | it
+	AllowBlacklisted    bool       `json:"allow_blacklisted"` // blacklisted students may register anyway
+	Years               NullString `json:"years"`             // years of study that may register, "1,2" ("5" = 5 and above); null = all
 	Subcategory         NullString `json:"subcategory"`
 	PosterURL           NullString `json:"poster_url"`
 	OrganizerID         NullInt    `json:"organizer_id"`

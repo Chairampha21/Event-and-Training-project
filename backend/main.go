@@ -76,6 +76,7 @@ func main() {
 		authGroup.POST("/reset-password", auth.ResetPassword)
 		authGroup.GET("/me", requireAuth, auth.Me)
 		authGroup.PUT("/me", requireAuth, auth.UpdateMe)
+		authGroup.PUT("/me/avatar", requireAuth, auth.UpdateAvatar)
 	}
 
 	eventsGroup := r.Group("/api/events")
@@ -127,6 +128,7 @@ func main() {
 	r.POST("/api/notifications/:id/read", requireAuth, notifs.MarkRead)
 
 	r.GET("/api/dashboard/yearly", requireAuth, middleware.RequireRole("organizer", "admin"), dashboard.Yearly)
+	r.GET("/api/dashboard/audience", requireAuth, middleware.RequireRole("organizer", "admin"), dashboard.Audience)
 	r.GET("/api/dashboard/budget", requireAuth, middleware.RequireRole("organizer", "admin"), dashboard.Budget)
 	r.GET("/api/dashboard/summary", requireAuth, dashboard.Summary)
 

@@ -8,6 +8,10 @@ import PaymentBox from '../../features/events/components/PaymentBox';
 import CancelRegistrationButton from '../../features/events/components/CancelRegistrationButton';
 import { buddhistYearOf } from '../../utils/dateFormat';
 import { fullNameTh } from '../../utils/personName';
+import { evaluationDue, evaluationOverdue } from '../../utils/evaluationDue';
+import { formatThaiDate } from '../../utils/dateFormat';
+import UserAvatar from '../../components/common/UserAvatar';
+import { downloadActivityTranscript } from '../../utils/activityTranscript';
 
 // The order the status filter is offered in: what still needs doing first.
 const STATUS_ORDER = ['registered', 'attended', 'certified', 'evaluated', 'absent', 'cancelled'];
@@ -26,7 +30,7 @@ const statusOf = (r) => {
 const metaOf = (st) => (st === 'cancelled' ? CANCELLED_META : st === 'evaluated' ? EVALUATED_META : REG_STATUS_META[st]);
 
 export default function MyRegistrationsPage() {
-  const { regs, session } = useEvents();
+  const { regs, session, myCertificates } = useEvents();
   const navigate = useNavigate();
   const [certId, setCertId] = useState(null);
 
@@ -63,7 +67,7 @@ export default function MyRegistrationsPage() {
       <div className="page-header dark" style={{ padding: '46px 32px 90px' }}>
         <div className="ph-inner" style={{ display: 'block' }}>
           <div className="ph-top">
-            <div className="avatar">{(session?.name || '').slice(0, 1)}</div>
+            <UserAvatar className="avatar" name={session?.name} avatar={session?.avatar} />
             <div className="ph-info">
               <span className="ph-role"><i className="ti ti-school" /> {session?.role === 'teacher' ? 'อาจารย์' : 'นักศึกษาปัจจุบัน'}</span>
               <div className="ph-name">{fullNameTh(session)}</div>
@@ -74,6 +78,11 @@ export default function MyRegistrationsPage() {
                 <span><i className="ti ti-mail" /> {session?.email}</span>
               </div>
             </div>
+            {session?.role === 'student' && (
+              <button type="button" className="btn glass ph-transcript" onClick={() => downloadActivityTranscript(session, regs, myCertificates)} title="ดาวน์โหลดรายการกิจกรรมที่เข้าร่วมทั้งหมดเป็นไฟล์ Excel">
+                <i className="ti ti-file-spreadsheet" /> ทรานสคริปต์กิจกรรม (Excel)
+              </button>
+            )}
           </div>
           <div className="ph-stats">
             <div className="ph-stat"><div className="pi"><i className="ti ti-calendar-check" /></div><div><div className="pv">{regs.filter((r) => statusOf(r) !== 'cancelled').length} <small>รายการ</small></div><div className="pl">ลงทะเบียนปีการศึกษานี้</div></div></div>
@@ -192,9 +201,12 @@ export default function MyRegistrationsPage() {
                   {r.daysTotal > 1 && r.daysAttended > 0 && r.daysAttended < r.daysTotal && (
                     <div className="hi-note info"><i className="ti ti-calendar-check" /> เช็คอินแล้ว {r.daysAttended} จาก {r.daysTotal} วัน · {r.issueCert ? 'ต้องเข้าร่วมครบทุกวันจึงจะได้รับเกียรติบัตร' : 'ต้องเข้าร่วมครบทุกวันจึงจะนับว่าเข้าร่วมกิจกรรม'}</div>
                   )}
-                  {r.status === 'attended' && !r.evaluated && (
+                  {statusOf(r) === 'attended' && (
                     <div className="hi-note"><i className="ti ti-alert-circle" /> {r.issueCert ? 'ต้องทำแบบประเมินกิจกรรมให้เสร็จก่อนจึงจะรับเกียรติบัตรได้' : 'กรุณาทำแบบประเมินกิจกรรม · กิจกรรมนี้ไม่มีเกียรติบัตร'}</div>
                   )}
+                  {evaluationDue(r) && (evaluationOverdue(r)
+                    ? <div className="hi-note danger"><i className="ti ti-lock" /> เลยกำหนดทำแบบประเมิน ({formatThaiDate(r.evalDeadline)}) · ต้องทำให้เสร็จก่อนจึงจะสมัครกิจกรรมใหม่ได้</div>
+                    : <div className="hi-note"><i className="ti ti-clock" /> ทำแบบประเมินภายใน {formatThaiDate(r.evalDeadline)} · หลังจากนั้นจะสมัครกิจกรรมใหม่ไม่ได้จนกว่าจะทำ</div>)}
                 </div>
                 <div className="hi-actions">
                   <span className={`pill-status ${s.cls}`}><i className={`ti ${s.ico}`} /> {s.label}</span>
@@ -202,7 +214,7 @@ export default function MyRegistrationsPage() {
                     <button className="btn-download" onClick={() => setCertId(r.eid)}><i className="ti ti-download" /> เกียรติบัตร</button>
                   )}
                   <CancelRegistrationButton reg={r} className="btn-download cancel" />
-                  {r.status === 'attended' && !r.evaluated && (
+                  {statusOf(r) === 'attended' && (
                     <button className="btn-download eval" onClick={() => navigate(`/evaluate/${r.eid}`)}><i className="ti ti-clipboard-check" /> ทำแบบประเมิน</button>
                   )}
                 </div>

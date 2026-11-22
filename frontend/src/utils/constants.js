@@ -43,3 +43,27 @@ export const REG_STATUS_META = {
   certified: { cls: 'ps-pass', ico: 'ti-circle-check-filled', label: 'รับเกียรติบัตรแล้ว' },
   absent: { cls: 'ps-fail', ico: 'ti-circle-x', label: 'ไม่ได้เข้าร่วม' },
 };
+
+// Who may register for an event: everyone, or students of one programme
+// (matched against the major in the student's profile).
+export const EVENT_PROGRAMS = [
+  { key: 'all', label: 'ทุกสาขา', short: '', tag: '' },
+  { key: 'cs', label: 'เฉพาะสาขาวิทยาการคอมพิวเตอร์ (CS)', short: 'วิทยาการคอมพิวเตอร์', tag: 'CS' },
+  { key: 'it', label: 'เฉพาะสาขาเทคโนโลยีสารสนเทศ (IT)', short: 'เทคโนโลยีสารสนเทศ', tag: 'IT' },
+];
+
+// Years of study an event can be limited to; '5' covers year 5 and above.
+// An event with none picked takes every year.
+export const STUDENT_YEARS = [
+  { key: '1', label: 'ปี 1' },
+  { key: '2', label: 'ปี 2' },
+  { key: '3', label: 'ปี 3' },
+  { key: '4', label: 'ปี 4' },
+  { key: '5', label: 'ปี 5 ขึ้นไป' },
+];
+
+/** ['1', '2'] → "ชั้นปีที่ 1, 2"; [] → '' (every year). */
+export function yearsText(years) {
+  if (!years || years.length === 0) return '';
+  return `ชั้นปีที่ ${years.map((y) => (y === '5' ? '5 ขึ้นไป' : y)).join(', ')}`;
+}

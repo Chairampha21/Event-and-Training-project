@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"log"
+	"strings"
 )
 
 // Tabler icon class + tone pairs the navbar bell already knows how to render.
@@ -73,10 +74,28 @@ func SendGrouped(db querier, userID int64, icon, tone, title, message, link stri
 }
 
 // SendToStudents notifies every active participant account (students and teachers) (e.g. a new event opened).
-func SendToStudents(db execer, icon, tone, title, message string, link ...string) {
+// program is the event's ('all', 'cs' or 'it'): a CS-only / IT-only event skips
+// students of the other programme (those with no major set still hear of it).
+// years ("1,2"; "" = every year, "5" = 5 and above) likewise skips students
+// whose year of study is known and not in it.
+func SendToStudents(db execer, program, years, icon, tone, title, message string, link ...string) {
+	otherProgram := "0"
+	switch program {
+	case "cs":
+		otherProgram = `role = 'student' AND COALESCE(dept, '') LIKE '%สารสนเทศ%'`
+	case "it":
+		otherProgram = `role = 'student' AND COALESCE(dept, '') LIKE '%คอมพิวเตอร์%' AND COALESCE(dept, '') NOT LIKE '%สารสนเทศ%'`
+	}
+	otherYear := "0"
+	if ys := yearList(years); len(ys) > 0 {
+		// The year number in "นักศึกษาชั้นปีที่ 3 · ..."; 5 and above count as 5.
+		yearOf := `LEAST(CAST(REGEXP_SUBSTR(REGEXP_SUBSTR(COALESCE(dept, ''), 'ชั้นปีที่ *[0-9]+'), '[0-9]+') AS UNSIGNED), 5)`
+		otherYear = `role = 'student' AND COALESCE(dept, '') REGEXP 'ชั้นปีที่ *[0-9]' AND ` + yearOf + ` NOT IN (` + strings.Join(ys, ",") + `)`
+	}
 	_, err := db.Exec(
 		`INSERT INTO notifications (user_id, icon, tone, title, message, link)
-		 SELECT id, ?, ?, ?, ?, ? FROM users WHERE role IN ('student', 'teacher') AND active = 1`,
+		 SELECT id, ?, ?, ?, ?, ? FROM users WHERE role IN ('student', 'teacher') AND active = 1
+		   AND NOT (`+otherProgram+`) AND NOT (`+otherYear+`)`,
 		icon, tone, title, truncate(message), link0(link),
 	)
 	if err != nil {
@@ -259,6 +278,17 @@ func repeat(s string, n int) string {
 	out := ""
 	for i := 0; i < n; i++ {
 		out += s
+	}
+	return out
+}
+
+// yearList keeps the valid years ("1".."5") of a comma list, safe to put in SQL.
+func yearList(years string) []string {
+	out := []string{}
+	for _, y := range strings.Split(years, ",") {
+		if y = strings.TrimSpace(y); len(y) == 1 && y >= "1" && y <= "5" {
+			out = append(out, y)
+		}
 	}
 	return out
 }

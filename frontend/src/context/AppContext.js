@@ -7,6 +7,7 @@ import { formatBaht } from '../utils/money';
 import { normalizeLayout, serializeLayout } from '../features/certificates/utils/certLayout';
 import { ROLE_LABEL, EVENT_CATEGORY_ICONS, isParticipant } from '../utils/constants';
 import { fullNameTh } from '../utils/personName';
+import { studentProgram, studentYearKey } from '../components/common/StudentDeptFields';
 
 const AppContext = createContext(null);
 
@@ -75,6 +76,9 @@ function adaptEvent(be) {
     title: be.title,
     desc: be.description || '',
     cat: be.category,
+    program: be.program || 'all', // who may register: all | cs | it
+    years: (be.years || '').split(',').filter(Boolean), // years of study that may register; [] = every year
+    allowBlacklisted: !!be.allow_blacklisted, // blacklisted students may register anyway
     icon: deriveIcon(be.category),
     tone: deriveTone(be.id),
     date: displayDate(be, be.day_mode === 'multi'),
@@ -88,6 +92,7 @@ function adaptEvent(be) {
       : [],
     regStart: be.reg_start || '',
     regEnd: be.reg_end || '',
+    createdAt: be.created_at || '', // when it was posted, for "newest first"
     regPeriod: formatRegPeriod(be.reg_start, be.reg_end),
     time: be.time_range || '-',
     // What to show as the place. placeRaw is the room alone, as the organizer typed it.
@@ -147,6 +152,9 @@ function toEventBody(payload) {
     title: payload.title,
     description: payload.desc,
     category: payload.cat,
+    program: payload.program || 'all',
+    years: (payload.years || []).join(','),
+    allow_blacklisted: !!payload.allowBlacklisted,
     organizer_name: payload.org,
     day_mode: payload.dayMode,
     attend_mode: payload.attendMode,
@@ -195,7 +203,10 @@ function toEventBody(payload) {
 // `via` = attends 'onsite' or 'online'; `checkinKeys` = per day, the key of the
 // self check-in link for online attendees (same on every row).
 function adaptRosterRow(r, eventDays = [], checkinKeys = {}) {
-  return { sid: r.student_id || '', isTeacher: r.role === 'teacher', name: fullNameTh(r), in: !!r.checked_in, days: r.checkin_dates || [], eventDays, via: r.attend_via || 'onsite', checkinKeys, regId: r.id, status: r.status, wantsLaptop: !!r.wants_laptop, foodAllergy: r.food_allergy || '', dietaryPref: r.dietary_pref || '', paymentStatus: r.payment_status || 'none',
+  return { sid: r.student_id || '', isTeacher: r.role === 'teacher', name: fullNameTh(r),
+    // Programme ('cs' | 'it' | '') and year of study ('1'..'5' | '') for the report's breakdown.
+    program: studentProgram(r.dept), year: studentYearKey(r.dept),
+    in: !!r.checked_in, days: r.checkin_dates || [], eventDays, via: r.attend_via || 'onsite', checkinKeys, regId: r.id, status: r.status, wantsLaptop: !!r.wants_laptop, foodAllergy: r.food_allergy || '', dietaryPref: r.dietary_pref || '', paymentStatus: r.payment_status || 'none',
     hasSlip: !!r.has_slip, slipTransferredAt: r.slip_transferred_at || '', slipAmount: r.slip_amount ?? null, rejectReason: r.payment_reject_reason || '',
     refundedAt: r.refunded_at || '', refundPromptPay: r.refund_promptpay || '',
   };
@@ -243,6 +254,7 @@ function adaptMyRegistration(r) {
     cancelled: !!r.event_cancelled,
     issueCert: r.issue_certificate !== false, // the event gives certificates
     evaluated: !!r.evaluated, // the evaluation was submitted
+    evalDeadline: r.eval_deadline || '', // last day to evaluate before new registrations are held back ('' = nothing due)
   };
 }
 
@@ -270,6 +282,7 @@ function sessionFields(user) {
     name: user.name, title_th: user.title_th || '', name_en: user.name_en || '', title_en: user.title_en || '',
     nickname: user.nickname || '', gender: user.gender || '', phone: user.phone || '', blood_type: user.blood_type || '',
     food_allergy: user.food_allergy || '', medical_note: user.medical_note || '', emergency_contact: user.emergency_contact || '',
+    avatar: user.avatar || '', // profile picture (data: URL); '' = initials
   };
 }
 
@@ -619,6 +632,19 @@ export function AppProvider({ children }) {
       return true;
     } catch (err) {
       pushToast('บันทึกโปรไฟล์ไม่สำเร็จ', err.message || '', 'warn');
+      return false;
+    }
+  }, [pushToast, setSession]);
+
+  // Sets the signed-in user's profile picture (a data: URL), or removes it with null.
+  const updateAvatar = useCallback(async (dataUrl) => {
+    try {
+      const { avatar } = await api.put('/auth/me/avatar', { avatar: dataUrl || null });
+      setSession((s) => (s ? { ...s, avatar: avatar || '' } : s));
+      pushToast(dataUrl ? 'เปลี่ยนรูปโปรไฟล์แล้ว' : 'ลบรูปโปรไฟล์แล้ว', '');
+      return true;
+    } catch (err) {
+      pushToast('บันทึกรูปโปรไฟล์ไม่สำเร็จ', err.message || '', 'warn');
       return false;
     }
   }, [pushToast, setSession]);
@@ -1041,9 +1067,20 @@ export function AppProvider({ children }) {
     }
   }, [pushToast]);
 
-  const getDashboardSummary = useCallback(async () => {
+  // People of a fiscal year's finished events, one row per programme × year of study.
+  const getDashboardAudience = useCallback(async (fy) => {
     try {
-      const { summary } = await api.get('/dashboard/summary');
+      const { audience } = await api.get(`/dashboard/audience?fy=${fy}`);
+      return audience || [];
+    } catch {
+      return [];
+    }
+  }, []);
+
+  // fy: a fiscal year (2569) or 'all'; left out = the current year's events and all-time people figures.
+  const getDashboardSummary = useCallback(async (fy) => {
+    try {
+      const { summary } = await api.get(`/dashboard/summary${fy ? `?fy=${fy}` : ''}`);
       return summary;
     } catch {
       return null;
@@ -1093,22 +1130,22 @@ export function AppProvider({ children }) {
   const value = useMemo(() => ({
     session, events, regs, rosters, users, notifs, toasts, activityLog, blacklist, myCertificates,
     evById, myStatus,
-    login, logout, loginWithGoogle, registerAccount, verifyEmail, resendCode, forgotPassword, resetPassword, updateProfile,
+    login, logout, loginWithGoogle, registerAccount, verifyEmail, resendCode, forgotPassword, resetPassword, updateProfile, updateAvatar,
     registerForEvent, toggleEventStatus, createEvent, updateEvent, deleteEvent,
     toggleCheckin, setPaymentStatus, getSlip, submitSlip, setRefundAccount, cancelRegistration, selfCheckin, issueCertificate, submitEvaluation, downloadCert,
     addToBlacklist, restoreFromBlacklist,
-    getSar, saveSar, getEvaluationResults, getEventEvalQuestions, getEventEvalSetup, saveEventEvalQuestions, getDashboardYearly, getDashboardSummary, certDefaults, saveCertDefaults, certTemplateCache,
+    getSar, saveSar, getEvaluationResults, getEventEvalQuestions, getEventEvalSetup, saveEventEvalQuestions, getDashboardYearly, getDashboardSummary, getDashboardAudience, certDefaults, saveCertDefaults, certTemplateCache,
     getDashboardBudget, saveBudgetActual,
     upsertUser, toggleUserActive, deleteUser,
     refreshNotifications, markAllRead, markNotifRead, clearAllNotif,
     pushToast, dismissToast,
   }), [
     session, events, regs, rosters, users, notifs, toasts, activityLog, blacklist, myCertificates,
-    evById, myStatus, login, logout, loginWithGoogle, registerAccount, verifyEmail, resendCode, forgotPassword, resetPassword, updateProfile,
+    evById, myStatus, login, logout, loginWithGoogle, registerAccount, verifyEmail, resendCode, forgotPassword, resetPassword, updateProfile, updateAvatar,
     registerForEvent, toggleEventStatus, createEvent, updateEvent, deleteEvent,
     toggleCheckin, setPaymentStatus, getSlip, submitSlip, setRefundAccount, cancelRegistration, selfCheckin, issueCertificate, submitEvaluation, downloadCert,
     addToBlacklist, restoreFromBlacklist,
-    getSar, saveSar, getEvaluationResults, getEventEvalQuestions, getEventEvalSetup, saveEventEvalQuestions, getDashboardYearly, getDashboardSummary, certDefaults, saveCertDefaults, certTemplateCache,
+    getSar, saveSar, getEvaluationResults, getEventEvalQuestions, getEventEvalSetup, saveEventEvalQuestions, getDashboardYearly, getDashboardSummary, getDashboardAudience, certDefaults, saveCertDefaults, certTemplateCache,
     getDashboardBudget, saveBudgetActual,
     upsertUser, toggleUserActive, deleteUser,
     refreshNotifications, markAllRead, markNotifRead, clearAllNotif, pushToast, dismissToast,

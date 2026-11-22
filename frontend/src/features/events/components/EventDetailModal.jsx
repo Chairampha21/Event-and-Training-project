@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useEvents } from '../../../hooks/useEvents';
-import { STATUS_META, isParticipant } from '../../../utils/constants';
+import { STATUS_META, EVENT_PROGRAMS, isParticipant, yearsText } from '../../../utils/constants';
+import { studentProgram, studentYearKey } from '../../../components/common/StudentDeptFields';
 import Modal, { ModalHead } from '../../../components/ui/Modal';
 import ImageViewer from '../../../components/ui/ImageViewer';
 import CycleProgress from './CycleProgress';
@@ -13,6 +14,7 @@ import { formatThaiDate } from '../../../utils/dateFormat';
 import { needsNames } from '../../../utils/personName';
 import DietaryQuestions, { dietaryFromProfile, dietaryComplete, dietaryPayload } from './DietaryQuestions';
 import { mealsText } from '../../../utils/meals';
+import { overdueEvaluations } from '../../../utils/evaluationDue';
 
 // Event details for whoever opened it; students register from here (with the
 // confirmation step and the optional notebook-loan request).
@@ -48,8 +50,22 @@ export default function EventDetailModal({ eventId, open, onClose, preview }) {
   if (!ev) return null;
   const sm = STATUS_META[ev.status];
   const st = preview ? null : myStatus(ev.id);
+  // A CS-only / IT-only event takes students of that programme alone (teachers aren't limited).
+  const programName = EVENT_PROGRAMS.find((p) => p.key === ev.program && p.key !== 'all')?.short || '';
+  const myProgram = studentProgram(session?.dept);
+  const programBlocked = !preview && !!programName && session?.role === 'student' && myProgram !== ev.program;
+  // Likewise an event for some years of study only.
+  const yearsLabel = yearsText(ev.years);
+  const myYear = studentYearKey(session?.dept);
+  const yearBlocked = !preview && !!yearsLabel && session?.role === 'student' && !ev.years.includes(myYear);
+  // The first thing that keeps this student out, for the note by the close button.
+  const blockNote = programBlocked ? { what: `นักศึกษาสาขา${programName}`, missing: !myProgram, field: 'สาขา' }
+    : yearBlocked ? { what: `นักศึกษา${yearsLabel}`, missing: !myYear, field: 'ชั้นปี' } : null;
+  // An evaluation left undone past its deadline holds back new registrations,
+  // except for events everyone must attend (those that take blacklisted students too).
+  const overdue = !preview && session?.role === 'student' && !ev.allowBlacklisted ? overdueEvaluations(regs) : [];
   // Only students register; an organizer or admin opening the details just reads them.
-  const canReg = preview ? true : ev.status === 'open' && !st && isParticipant(session?.role);
+  const canReg = preview ? true : ev.status === 'open' && !st && isParticipant(session?.role) && !blockNote && overdue.length === 0;
   const myReg = preview ? null : regs.find((r) => r.eid === ev.id);
   const studentView = preview || isParticipant(session?.role);
   // Teachers don't pay the fee: they register only so the organizer knows the seats they take.
@@ -205,6 +221,7 @@ export default function EventDetailModal({ eventId, open, onClose, preview }) {
               <li><i className="ti ti-map-pin" /> {ev.place}</li>
               {ev.askDietary && ev.meals?.length > 0 && <li><i className="ti ti-tools-kitchen-2" /> มี{mealsText(ev.meals)}</li>}
               {ev.regPeriod && <li><i className="ti ti-user-plus" /> รับสมัคร {ev.regPeriod}</li>}
+              {(programName || yearsLabel) && <li><i className="ti ti-school" /> เฉพาะนักศึกษา{[programName && `สาขา${programName}`, yearsLabel].filter(Boolean).join(' ')}</li>}
             </ul>
           </div>
         </div>
@@ -257,7 +274,17 @@ export default function EventDetailModal({ eventId, open, onClose, preview }) {
             <button className="btn btn-primary" onClick={() => setConfirmOpen(true)}><i className="ti ti-user-plus" /> {preview ? 'ลงทะเบียน (ดูขั้นถัดไป)' : 'ลงทะเบียน'}</button>
           </>
         ) : (
-          <button className="btn btn-primary" onClick={onClose}>ปิด</button>
+          <>
+            {!blockNote && overdue.length > 0 && ev.status === 'open' && !st && (
+              <span className="diet-need" role="status"><i className="ti ti-clipboard-check" /> <span>ทำแบบประเมินที่ค้าง {overdue.length} รายการให้เสร็จก่อนจึงจะสมัครได้ · <a href="/my-registrations" onClick={(e) => { e.preventDefault(); onClose(); navigate('/my-registrations'); }}>ไปทำแบบประเมิน</a></span></span>
+            )}
+            {blockNote && ev.status === 'open' && !st && (
+              <span className="diet-need" role="status"><i className="ti ti-info-circle" /> <span>{!blockNote.missing
+                ? `กิจกรรมนี้รับเฉพาะ${blockNote.what}`
+                : <>กิจกรรมนี้รับเฉพาะ{blockNote.what} · กรอก{blockNote.field}ใน <a href="/profile" onClick={(e) => { e.preventDefault(); onClose(); navigate('/profile'); }}>โปรไฟล์</a> ก่อนสมัคร</>}</span></span>
+            )}
+            <button className="btn btn-primary" onClick={onClose}>ปิด</button>
+          </>
         )}
       </div>
     </Modal>

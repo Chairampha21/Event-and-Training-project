@@ -6,6 +6,25 @@ import { downloadXlsx, STYLE } from '../../utils/xlsxExport';
 import { THAI_MONTHS, toBuddhistYear } from '../../utils/dateFormat';
 import EvalResultChart from '../../features/evaluations/components/EvalResultChart';
 import EventBudgetReport from '../../features/budget/components/EventBudgetReport';
+import { STUDENT_YEARS } from '../../utils/constants';
+import BreakdownCard from '../../features/dashboard/components/BreakdownCard';
+
+const PROGRAM_LABEL = { cs: 'วิทยาการคอมพิวเตอร์ (CS)', it: 'เทคโนโลยีสารสนเทศ (IT)' };
+const programOf = (p) => (p.program ? PROGRAM_LABEL[p.program].match(/\((\w+)\)/)[1] : '-');
+const yearOf = (p) => (p.year ? STUDENT_YEARS.find((y) => y.key === p.year).label : '-');
+
+// Registered and attended per group (programme or year of study), with the
+// people who left it out of their profile as "ไม่ระบุ" when there are any.
+function groupCounts(roster, field, groups) {
+  const rows = groups.map(({ key, label }) => {
+    const people = roster.filter((p) => p[field] === key);
+    return { key, label, reg: people.length, in: people.filter((p) => p.in).length };
+  });
+  const unknown = roster.filter((p) => !p[field]);
+  if (unknown.length) rows.push({ key: '', label: 'ไม่ระบุ', reg: unknown.length, in: unknown.filter((p) => p.in).length });
+  return rows;
+}
+
 
 export default function ReportPage() {
   const { session, events, rosters, pushToast, getEvaluationResults } = useEvents();
@@ -20,6 +39,8 @@ export default function ReportPage() {
   const roster = ((ev && rosters[ev.id]) || []).filter((p) => !p.isTeacher);
   const attended = roster.filter((p) => p.in).length;
   const attendRate = roster.length ? ((attended / roster.length) * 100) : 0;
+  const programRows = groupCounts(roster, 'program', [{ key: 'cs', label: PROGRAM_LABEL.cs }, { key: 'it', label: PROGRAM_LABEL.it }]);
+  const yearRows = groupCounts(roster, 'year', STUDENT_YEARS);
 
   // ปี/เดือน ที่จัด — คำนวณจาก dateStart (ISO) ของแต่ละกิจกรรม
   const years = useMemo(() => {
@@ -118,6 +139,8 @@ export default function ReportPage() {
   const ROSTER_COLS = [
     { label: 'ชื่อ–นามสกุล', value: 'name' },
     { label: 'รหัสนักศึกษา', value: 'sid' },
+    { label: 'สาขา', value: programOf },
+    { label: 'ชั้นปี', value: yearOf },
     { label: 'เช็คอิน', value: (r) => (r.in ? 'เข้าร่วม' : 'ไม่เข้าร่วม') },
   ];
   const EVAL_COLS = [
@@ -156,11 +179,25 @@ export default function ReportPage() {
         ],
       },
       {
-        name: 'รายชื่อและการเข้าร่วม', cols: [7, 16, 34, 16], ...merged('D'),
+        name: 'รายชื่อและการเข้าร่วม', cols: [7, 16, 34, 10, 14, 16], ...merged('F'),
         rows: [
           ...top('รายชื่อและการเข้าร่วม'),
-          { height: 22, cells: [head('ลำดับ'), head('รหัสนักศึกษา'), head('ชื่อ–นามสกุล'), head('เช็คอิน')] },
-          ...roster.map((r, i) => ({ height: 22, cells: [{ v: i + 1, s: STYLE.center }, { v: r.sid, s: STYLE.center }, { v: r.name, s: STYLE.left }, { v: r.in ? 'เข้าร่วม' : 'ไม่เข้าร่วม', s: STYLE.center }] })),
+          { height: 22, cells: [head('ลำดับ'), head('รหัสนักศึกษา'), head('ชื่อ–นามสกุล'), head('สาขา'), head('ชั้นปี'), head('เช็คอิน')] },
+          ...roster.map((r, i) => ({ height: 22, cells: [{ v: i + 1, s: STYLE.center }, { v: r.sid, s: STYLE.center }, { v: r.name, s: STYLE.left }, { v: programOf(r), s: STYLE.center }, { v: yearOf(r), s: STYLE.center }, { v: r.in ? 'เข้าร่วม' : 'ไม่เข้าร่วม', s: STYLE.center }] })),
+        ],
+      },
+      {
+        name: 'แยกตามสาขาและชั้นปี', cols: [30, 14, 14, 16], ...merged('D'),
+        rows: [
+          ...top('ผู้สมัครและผู้เข้าร่วม แยกตามสาขาและชั้นปี'),
+          { height: 22, cells: [head('กลุ่ม'), head('ผู้สมัคร (คน)'), head('เข้าร่วม (คน)'), head('อัตราเข้าร่วม (%)')] },
+          ...[
+            ...programRows.map((r) => ({ ...r, label: r.key ? `สาขา${r.label}` : 'สาขาไม่ระบุ' })),
+            ...yearRows.map((r) => ({ ...r, label: r.key ? `ชั้น${r.label}` : 'ชั้นปีไม่ระบุ' })),
+          ].map((r) => ({ height: 22, cells: [
+            { v: r.label, s: STYLE.left }, { v: r.reg, s: STYLE.center }, { v: r.in, s: STYLE.center },
+            { v: r.reg ? Number(((r.in / r.reg) * 100).toFixed(1)) : '-', s: STYLE.center },
+          ] })),
         ],
       },
       {
@@ -354,6 +391,11 @@ export default function ReportPage() {
           </div>
         </div>
 
+        <div className="chart-row even">
+          <BreakdownCard icon="ti-school" title="แยกตามสาขา" rows={programRows} total={roster.length} />
+          <BreakdownCard icon="ti-stairs-up" title="แยกตามชั้นปี" rows={yearRows} total={roster.length} />
+        </div>
+
         <div className="table-card">
           <div className="table-toolbar">
             <h3><i className="ti ti-table" /> รายชื่อผู้เข้าร่วม · {ev.title.slice(0, 30)}</h3>
@@ -364,14 +406,16 @@ export default function ReportPage() {
           </div>
           <div style={{ overflowX: 'auto' }}>
             <table>
-              <thead><tr><th>ลำดับ</th><th>ชื่อ–นามสกุล</th><th>รหัสนักศึกษา</th><th className="center">เช็คอิน</th></tr></thead>
+              <thead><tr><th>ลำดับ</th><th>ชื่อ–นามสกุล</th><th>รหัสนักศึกษา</th><th className="center">สาขา</th><th className="center">ชั้นปี</th><th className="center">เช็คอิน</th></tr></thead>
               <tbody>
-                {roster.length === 0 && <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--c4-60)', padding: 24 }}>ยังไม่มีผู้สมัคร</td></tr>}
+                {roster.length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--c4-60)', padding: 24 }}>ยังไม่มีผู้สมัคร</td></tr>}
                 {roster.map((p, i) => (
                   <tr key={p.sid}>
                     <td className="center"><strong>{i + 1}</strong></td>
                     <td>{p.name}</td>
                     <td>{p.sid}</td>
+                    <td className="center">{programOf(p)}</td>
+                    <td className="center">{yearOf(p)}</td>
                     <td className="center">{p.in ? <i className="ti ti-check" style={{ color: 'var(--c1)' }} /> : <i className="ti ti-x" style={{ color: 'var(--c4-60)' }} />}</td>
                   </tr>
                 ))}

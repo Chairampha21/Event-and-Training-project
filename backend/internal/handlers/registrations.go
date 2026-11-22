@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -63,6 +64,9 @@ func (h *RegistrationsHandler) RegisterForEvent(c *gin.Context) {
 		hasOnlineLink                  bool
 		askDietary                     bool
 		fee                            sql.NullFloat64
+		program                        string
+		years                          sql.NullString
+		allowBlacklisted               bool
 	)
 	// Optional body: the student may ask to borrow one of the event's notebooks.
 	var body struct {
@@ -89,10 +93,10 @@ func (h *RegistrationsHandler) RegisterForEvent(c *gin.Context) {
 		`SELECT title, status, attend_mode, capacity, capacity_onsite, capacity_online, organizer_id,
 		        reg_start, reg_end,
 		        COALESCE(`+todayTH+` < reg_start, 0), COALESCE(`+todayTH+` > reg_end, 0),
-		        attendee_note, loan_laptop_qty, COALESCE(online_link, '') <> '', ask_dietary, fee
+		        attendee_note, loan_laptop_qty, COALESCE(online_link, '') <> '', ask_dietary, fee, program, years, allow_blacklisted
 		 FROM events WHERE id = ? AND is_listed = 1`, eventID,
 	).Scan(&title, &status, &attendMode, &capacity, &capacityOnsite, &capacityOnline, &organizerID,
-		&regStart, &regEnd, &beforeWindow, &afterWindow, &attendeeNote, &loanQty, &hasOnlineLink, &askDietary, &fee)
+		&regStart, &regEnd, &beforeWindow, &afterWindow, &attendeeNote, &loanQty, &hasOnlineLink, &askDietary, &fee, &program, &years, &allowBlacklisted)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบกิจกรรม"})
 		return
@@ -115,9 +119,52 @@ func (h *RegistrationsHandler) RegisterForEvent(c *gin.Context) {
 	}
 
 	var studentID sql.NullString
-	if err := h.DB.QueryRow(`SELECT student_id FROM users WHERE id = ?`, claims.UserID).Scan(&studentID); err != nil {
+	var dept string
+	if err := h.DB.QueryRow(`SELECT student_id, COALESCE(dept, '') FROM users WHERE id = ?`, claims.UserID).Scan(&studentID, &dept); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 		return
+	}
+
+	// A student with an evaluation left undone past its deadline registers for
+	// nothing new until it is in — the evaluation is the price of the last
+	// event, certificate or not. Events everyone must attend are exempt.
+	if claims.Role == "student" && !allowBlacklisted {
+		overdue, err := overdueEvaluations(h.DB, claims.UserID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
+			return
+		}
+		if len(overdue) > 0 {
+			c.JSON(http.StatusConflict, gin.H{"error": "ทำแบบประเมินกิจกรรมที่ค้างให้เสร็จก่อนจึงจะสมัครกิจกรรมใหม่ได้: " + strings.Join(overdue, ", ")})
+			return
+		}
+	}
+
+	// An event for some years of study takes only students in those years.
+	if claims.Role == "student" && years.Valid && years.String != "" {
+		mine := studentYear(dept)
+		if mine == "" {
+			c.JSON(http.StatusForbidden, gin.H{"error": "กิจกรรมนี้รับเฉพาะ" + yearsText(years.String) + " · กรอกชั้นปีในโปรไฟล์ก่อนสมัคร"})
+			return
+		}
+		if !strings.Contains(","+years.String+",", ","+mine+",") {
+			c.JSON(http.StatusForbidden, gin.H{"error": "กิจกรรมนี้รับเฉพาะ" + yearsText(years.String)})
+			return
+		}
+	}
+
+	// A 'cs' / 'it' event takes only students of that programme. Teachers and
+	// staff are not limited.
+	if claims.Role == "student" && program != "all" {
+		mine := studentProgram(dept)
+		if mine == "" {
+			c.JSON(http.StatusForbidden, gin.H{"error": "กิจกรรมนี้รับเฉพาะนักศึกษาสาขา" + programNames[program] + " · กรอกสาขาในโปรไฟล์ก่อนสมัคร"})
+			return
+		}
+		if mine != program {
+			c.JSON(http.StatusForbidden, gin.H{"error": "กิจกรรมนี้รับเฉพาะนักศึกษาสาขา" + programNames[program]})
+			return
+		}
 	}
 
 	var blacklistCount int
@@ -130,7 +177,8 @@ func (h *RegistrationsHandler) RegisterForEvent(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 		return
 	}
-	if blacklistCount > 0 {
+	// Some events take everyone, blacklisted or not (the organizer ticks it).
+	if blacklistCount > 0 && !allowBlacklisted {
 		c.JSON(http.StatusForbidden, gin.H{"error": "บัญชีนี้ถูกระงับสิทธิ์การลงทะเบียนกิจกรรม"})
 		return
 	}
@@ -698,6 +746,7 @@ type myRegistrationRow struct {
 	EventCancelled    bool              `json:"event_cancelled"`   // the organizer deleted the event after this registration
 	IssueCertificate  bool              `json:"issue_certificate"` // the event gives certificates
 	Evaluated         bool              `json:"evaluated"`         // this registration's evaluation was submitted
+	EvalDeadline      models.NullString `json:"eval_deadline"`     // last day to evaluate before new registrations are held back; null = not open yet
 }
 
 func (h *RegistrationsHandler) MyRegistrations(c *gin.Context) {
@@ -706,9 +755,15 @@ func (h *RegistrationsHandler) MyRegistrations(c *gin.Context) {
 		`SELECT r.id, r.status, r.checked_in, r.checked_in_at, r.registered_at, r.wants_laptop, r.food_allergy, r.dietary_pref, r.payment_status, r.slip_transferred_at, r.slip_amount, r.payment_reject_reason, r.refunded_at, r.refund_promptpay, e.fee, e.payment_info, e.refund_method, e.refund_note, e.attendee_note, e.attend_mode, e.online_link,
 		        e.id, e.title, e.category, e.date_start, e.date_end, e.event_dates, e.time_range, e.status, e.place, e.organizer_name,
 		        DATE_FORMAT(e.reg_end, '%Y-%m-%d'), `+cancellableSQL+`, e.is_listed = 0,
-		        e.issue_certificate, EXISTS (SELECT 1 FROM evaluations ev WHERE ev.registration_id = r.id)
+		        e.issue_certificate, EXISTS (SELECT 1 FROM evaluations ev WHERE ev.registration_id = r.id),
+		        `+evalDeadlineSQL("r")+`
 		 FROM registrations r JOIN events e ON e.id = r.event_id
-		 WHERE r.user_id = ? ORDER BY r.registered_at DESC`, claims.UserID,
+		 WHERE r.user_id = ?
+		   -- An event deleted after this person took part in it (attended,
+		   -- absent, certified) is left out; one deleted before it took
+		   -- place still shows, as cancelled.
+		   AND NOT (e.is_listed = 0 AND r.status <> 'registered')
+		 ORDER BY r.registered_at DESC`, claims.UserID,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
@@ -723,7 +778,7 @@ func (h *RegistrationsHandler) MyRegistrations(c *gin.Context) {
 		var eventDates sql.NullString
 		if err := rows.Scan(&r.ID, &r.Status, &checkedIn, &r.CheckedInAt, &r.RegisteredAt, &r.WantsLaptop, &r.FoodAllergy, &r.DietaryPref, &r.PaymentStatus, &r.SlipTransferredAt, &r.SlipAmount, &r.RejectReason, &r.RefundedAt, &r.RefundPromptPay, &r.Fee, &r.PaymentInfo, &r.RefundMethod, &r.RefundNote, &r.AttendeeNote, &r.AttendMode, &r.OnlineLink,
 			&r.EventID, &r.Title, &r.Category, &r.DateStart, &r.DateEnd, &eventDates, &r.TimeRange, &r.EventStatus, &r.Place, &r.OrganizerName,
-			&r.RegEnd, &r.CanCancel, &r.EventCancelled, &r.IssueCertificate, &r.Evaluated); err != nil {
+			&r.RegEnd, &r.CanCancel, &r.EventCancelled, &r.IssueCertificate, &r.Evaluated, &r.EvalDeadline); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 			return
 		}
@@ -780,6 +835,7 @@ type rosterRow struct {
 	StudentID         models.NullString `json:"student_id"`
 	Role              string            `json:"role"` // a teacher stays on the roster but off the sign-in sheet and reports
 	TitleTH           models.NullString `json:"title_th"`
+	Dept              models.NullString `json:"dept"` // students: "นักศึกษาชั้นปีที่ 3 · วิทยาการคอมพิวเตอร์" (year and major for the report)
 }
 
 // EventRoster is the organizer/admin roster view for one event — the check-in modal's data source.
@@ -811,7 +867,7 @@ func (h *RegistrationsHandler) EventRoster(c *gin.Context) {
 		`SELECT r.id, r.status, r.checked_in, r.checked_in_at, r.registered_at, r.wants_laptop, r.food_allergy, r.dietary_pref, r.payment_status,
 		        r.slip_url IS NOT NULL, r.slip_transferred_at, r.slip_amount, r.slip_submitted_at, r.payment_reject_reason,
 		        r.refunded_at, r.refund_promptpay,
-		        u.id, u.name, u.email, u.student_id, u.role, u.title_th
+		        u.id, u.name, u.email, u.student_id, u.role, u.title_th, u.dept
 		 FROM registrations r JOIN users u ON u.id = r.user_id
 		 WHERE r.event_id = ? ORDER BY u.name ASC`, c.Param("id"),
 	)
@@ -828,7 +884,7 @@ func (h *RegistrationsHandler) EventRoster(c *gin.Context) {
 		if err := rows.Scan(&r.ID, &r.Status, &checkedIn, &r.CheckedInAt, &r.RegisteredAt, &r.WantsLaptop, &r.FoodAllergy, &r.DietaryPref, &r.PaymentStatus,
 			&r.HasSlip, &r.SlipTransferredAt, &r.SlipAmount, &r.SlipSubmittedAt, &r.RejectReason,
 			&r.RefundedAt, &r.RefundPromptPay,
-			&r.UserID, &r.Name, &r.Email, &r.StudentID, &r.Role, &r.TitleTH); err != nil {
+			&r.UserID, &r.Name, &r.Email, &r.StudentID, &r.Role, &r.TitleTH, &r.Dept); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 			return
 		}
@@ -1273,4 +1329,93 @@ func scanRegistration(row interface{ Scan(dest ...any) error }) (models.Registra
 	err := row.Scan(&r.ID, &r.EventID, &r.UserID, &r.Status, &checkedIn, &r.CheckedInAt, &r.RegisteredAt, &r.UpdatedAt)
 	r.CheckedIn = checkedIn == 1
 	return r, err
+}
+
+var programNames = map[string]string{"cs": "วิทยาการคอมพิวเตอร์", "it": "เทคโนโลยีสารสนเทศ"}
+
+// studentProgram reads a student's programme from their dept text
+// ("นักศึกษาชั้นปีที่ 3 · วิทยาการคอมพิวเตอร์"; older rows say
+// "วท.บ. คอมพิวเตอร์" / "วท.บ. เทคโนโลยีสารสนเทศ"): "cs", "it" or "" if not given.
+func studentProgram(dept string) string {
+	switch {
+	case strings.Contains(dept, "สารสนเทศ"):
+		return "it"
+	case strings.Contains(dept, "คอมพิวเตอร์"):
+		return "cs"
+	}
+	return ""
+}
+
+var deptYearRe = regexp.MustCompile(`ชั้นปีที่\s*(\d+)`)
+
+// studentYear is a student's year of study from their dept text, "1".."5"
+// ("5" for year 5 and above), or "" when none is given.
+func studentYear(dept string) string {
+	m := deptYearRe.FindStringSubmatch(dept)
+	if m == nil {
+		return ""
+	}
+	n, err := strconv.Atoi(m[1])
+	if err != nil || n < 1 {
+		return ""
+	}
+	if n >= 5 {
+		return "5"
+	}
+	return strconv.Itoa(n)
+}
+
+// yearsText names a years list for a message: "1,2" → "นักศึกษาชั้นปีที่ 1, 2".
+func yearsText(years string) string {
+	parts := []string{}
+	for _, y := range strings.Split(years, ",") {
+		if y == "5" {
+			parts = append(parts, "5 ขึ้นไป")
+		} else if y != "" {
+			parts = append(parts, y)
+		}
+	}
+	return "นักศึกษาชั้นปีที่ " + strings.Join(parts, ", ")
+}
+
+// EvalGraceDays is how long a student has to evaluate an event once the
+// organizer opens the evaluation (cert_notified_at) before new registrations
+// are held back.
+const EvalGraceDays = 7
+
+// evalDeadlineSQL is the last day (Thai date, 'YYYY-MM-DD') registration
+// alias r has to evaluate its event, or NULL when there is nothing to do:
+// not attended, already evaluated, or the evaluation not opened yet.
+func evalDeadlineSQL(r string) string {
+	return `DATE_FORMAT(` + evalDeadlineDateSQL(r) + `, '%Y-%m-%d')`
+}
+
+// evalDeadlineDateSQL is evalDeadlineSQL as a DATE, for comparing.
+func evalDeadlineDateSQL(r string) string {
+	return `(CASE WHEN ` + r + `.status = 'attended' AND ` + r + `.cert_notified_at IS NOT NULL
+	             AND NOT EXISTS (SELECT 1 FROM evaluations ev2 WHERE ev2.registration_id = ` + r + `.id)
+	        THEN DATE(` + r + `.cert_notified_at + INTERVAL 7 HOUR) + INTERVAL ` + strconv.Itoa(EvalGraceDays-1) + ` DAY END)`
+}
+
+// overdueEvaluations lists the titles of the (still listed) events a user has
+// not evaluated by the deadline.
+func overdueEvaluations(db *sql.DB, userID int64) ([]string, error) {
+	rows, err := db.Query(`
+		SELECT e.title FROM registrations r JOIN events e ON e.id = r.event_id
+		WHERE r.user_id = ? AND e.is_listed = 1
+		  AND `+evalDeadlineDateSQL("r")+` < `+todayTH+`
+		ORDER BY e.date_start`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	titles := []string{}
+	for rows.Next() {
+		var t string
+		if err := rows.Scan(&t); err != nil {
+			return nil, err
+		}
+		titles = append(titles, t)
+	}
+	return titles, rows.Err()
 }

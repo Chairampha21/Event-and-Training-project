@@ -29,6 +29,9 @@ const pct = (part, whole) => (whole > 0 ? Math.round((part / whole) * 100) : 0);
 
 // Actual spend per person who checked in; null until the event has both.
 const perAttendee = (r) => (r.budget_actual != null && r.attended_count > 0 ? Math.round(r.budget_actual / r.attended_count) : null);
+// Actual spend per person who registered (attended or not) — set against
+// perAttendee, it shows what the no-shows cost per head.
+const perRegistrant = (r) => (r.budget_actual != null && r.registered_count > 0 ? Math.round(r.budget_actual / r.registered_count) : null);
 
 /** Downloads one fiscal year's per-event budget table as a CSV file. */
 export function exportBudgetCsv(rows, year) {
@@ -42,8 +45,10 @@ export function exportBudgetCsv(rows, year) {
     { label: 'งบประมาณที่ใช้จริง (บาท)', value: (r) => r.budget_actual ?? '' },
     { label: 'ส่วนต่าง (บาท)', value: (r) => (r.budget_total != null && r.budget_actual != null ? r.budget_total - r.budget_actual : '') },
     { label: 'ใช้ไป (%)', value: (r) => (r.budget_total > 0 && r.budget_actual != null ? pct(r.budget_actual, r.budget_total) : '') },
-    { label: 'ผู้เข้าร่วม (เช็คอิน)', value: 'attended_count' },
-    { label: 'งบประมาณที่ใช้ต่อผู้เข้าร่วม (บาท)', value: (r) => perAttendee(r) ?? '' },
+    { label: 'ผู้สมัคร (คน)', value: 'registered_count' },
+    { label: 'งบประมาณที่ใช้ต่อผู้สมัคร (บาท)', value: (r) => perRegistrant(r) ?? '' },
+    { label: 'ผู้เข้าร่วมจริง (เช็คอิน)', value: 'attended_count' },
+    { label: 'งบประมาณที่ใช้ต่อผู้เข้าร่วมจริง (บาท)', value: (r) => perAttendee(r) ?? '' },
     { label: 'สถานะ', value: (r) => STATE_META[budgetState(r)].label },
   ]);
 }
@@ -58,7 +63,7 @@ export default function BudgetSection({ rows, year, onSaveActual }) {
   const [editing, setEditing] = useState(null);
 
   const stats = useMemo(() => {
-    const s = { income: 0, other: 0, planned: 0, actual: 0, plannedCount: 0, actualCount: 0, cmpPlanned: 0, cmpActual: 0, cmpCount: 0, costBase: 0, attendees: 0, states: {} };
+    const s = { income: 0, other: 0, planned: 0, actual: 0, plannedCount: 0, actualCount: 0, cmpPlanned: 0, cmpActual: 0, cmpCount: 0, costBase: 0, attendees: 0, regCostBase: 0, registrants: 0, states: {} };
     rows.forEach((r) => {
       const st = budgetState(r);
       s.states[st] = (s.states[st] || 0) + 1;
@@ -68,6 +73,7 @@ export default function BudgetSection({ rows, year, onSaveActual }) {
       if (r.budget_actual != null) {
         s.actual += r.budget_actual; s.actualCount += 1;
         if (r.attended_count > 0) { s.costBase += r.budget_actual; s.attendees += r.attended_count; }
+        if (r.registered_count > 0) { s.regCostBase += r.budget_actual; s.registrants += r.registered_count; }
       }
       // Variance is only meaningful over events that have both figures.
       if (r.budget_total != null && r.budget_actual != null) { s.cmpPlanned += r.budget_total; s.cmpActual += r.budget_actual; s.cmpCount += 1; }
@@ -139,9 +145,12 @@ export default function BudgetSection({ rows, year, onSaveActual }) {
               )}
             </div>
             <div className="cmp-card">
-              <div className="cm-lbl">งบประมาณที่ใช้ต่อผู้เข้าร่วม</div>
+              <div className="cm-lbl">งบประมาณที่ใช้ต่อผู้เข้าร่วมจริง</div>
               <div className="cm-vals"><span className="cm-now">{stats.attendees > 0 ? formatBaht(Math.round(stats.costBase / stats.attendees)) : '–'}</span></div>
               <div className="bud-note">{stats.attendees > 0 ? `ต่อคน · จากผู้เช็คอิน ${stats.attendees.toLocaleString('en-US')} คน` : 'ยังไม่มีกิจกรรมที่มีทั้งงบประมาณที่ใช้จริงและผู้เช็คอิน'}</div>
+              {stats.registrants > 0 && (
+                <div className="bud-note">ต่อผู้สมัคร <strong>{formatBaht(Math.round(stats.regCostBase / stats.registrants))}</strong> · จากผู้สมัคร {stats.registrants.toLocaleString('en-US')} คน</div>
+              )}
             </div>
           </div>
 
@@ -204,9 +213,9 @@ export default function BudgetSection({ rows, year, onSaveActual }) {
           <table className="bud-table">
             {/* Fixed widths, so the columns line up the same in every year
                 whatever the figures are; the event name takes what is left. */}
-            <colgroup><col /><col style={{ width: 140 }} /><col style={{ width: 124 }} /><col style={{ width: 116 }} /><col style={{ width: 108 }} /><col style={{ width: 150 }} /><col style={{ width: 150 }} /></colgroup>
+            <colgroup><col /><col style={{ width: 140 }} /><col style={{ width: 124 }} /><col style={{ width: 116 }} /><col style={{ width: 108 }} /><col style={{ width: 118 }} /><col style={{ width: 150 }} /><col style={{ width: 150 }} /></colgroup>
             <thead>
-              <tr><th>กิจกรรม</th><th className="right">งบประมาณ</th><th className="right">ใช้จริง</th><th className="right">ส่วนต่าง</th><th className="right">ต่อผู้เข้าร่วม</th><th>สถานะ</th><th className="center">จัดการ</th></tr>
+              <tr><th>กิจกรรม</th><th className="right">งบประมาณ</th><th className="right">ใช้จริง</th><th className="right">ส่วนต่าง</th><th className="right">ต่อผู้สมัคร</th><th className="right">ต่อผู้เข้าร่วมจริง</th><th>สถานะ</th><th className="center">จัดการ</th></tr>
             </thead>
             <tbody>
               {rows.map((r) => {
@@ -216,6 +225,7 @@ export default function BudgetSection({ rows, year, onSaveActual }) {
                 const diff = both ? r.budget_total - r.budget_actual : null;
                 const used = both && r.budget_total > 0 ? pct(r.budget_actual, r.budget_total) : null;
                 const perHead = perAttendee(r);
+                const perReg = perRegistrant(r);
                 const hasActual = r.budget_actual != null;
                 return (
                   <tr key={r.event_id}>
@@ -249,8 +259,13 @@ export default function BudgetSection({ rows, year, onSaveActual }) {
                       )}
                     </td>
                     <td className="right bud-num">
+                      {perReg === null ? '–' : (
+                        <>{formatBaht(perReg)}<div className="bud-sub">สมัคร {r.registered_count.toLocaleString('en-US')} คน</div></>
+                      )}
+                    </td>
+                    <td className="right bud-num">
                       {perHead === null ? '–' : (
-                        <>{formatBaht(perHead)}<div className="bud-sub">{r.attended_count.toLocaleString('en-US')} คน</div></>
+                        <>{formatBaht(perHead)}<div className="bud-sub">เข้าร่วม {r.attended_count.toLocaleString('en-US')} คน</div></>
                       )}
                     </td>
                     <td><span className={`bud-flag multi ${meta.cls}`}><i className={`ti ${meta.icon}`} /> {meta.label}</span></td>
@@ -265,7 +280,7 @@ export default function BudgetSection({ rows, year, onSaveActual }) {
                   </tr>
                 );
               })}
-              {rows.length === 0 && <tr><td colSpan={7} className="center" style={{ color: 'var(--c4-60)' }}>ยังไม่มีกิจกรรมในปีงบประมาณนี้</td></tr>}
+              {rows.length === 0 && <tr><td colSpan={8} className="center" style={{ color: 'var(--c4-60)' }}>ยังไม่มีกิจกรรมในปีงบประมาณนี้</td></tr>}
               {rows.length > 0 && (
                 <tr className="bud-total">
                   <td><strong style={{ color: 'var(--c4)' }}>รวม</strong></td>
@@ -275,6 +290,11 @@ export default function BudgetSection({ rows, year, onSaveActual }) {
                   </td>
                   <td className="right bud-num"><strong>{formatBaht(stats.actual)}</strong></td>
                   <td />
+                  <td className="right bud-num">
+                    {stats.registrants > 0 ? (
+                      <><strong>{formatBaht(Math.round(stats.regCostBase / stats.registrants))}</strong><div className="bud-sub">เฉลี่ย · {stats.registrants.toLocaleString('en-US')} คน</div></>
+                    ) : '–'}
+                  </td>
                   <td className="right bud-num">
                     {stats.attendees > 0 ? (
                       <><strong>{formatBaht(Math.round(stats.costBase / stats.attendees))}</strong><div className="bud-sub">เฉลี่ย · {stats.attendees.toLocaleString('en-US')} คน</div></>

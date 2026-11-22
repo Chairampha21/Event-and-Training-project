@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useEvents } from '../hooks/useEvents';
 import { ROLE_LABEL } from '../utils/constants';
-import { initials } from '../utils/initials';
+import UserAvatar from '../components/common/UserAvatar';
+import { squareImage } from '../utils/squareImage';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import { useLocation } from 'react-router-dom';
 import NameFields from '../components/common/NameFields';
@@ -27,7 +28,25 @@ const personalOf = (s) => Object.fromEntries(PERSONAL.map((f) => [f.key, s?.[f.k
 // are tied to the university address; roles are set by an admin); the rest is
 // the user's own to edit.
 export default function ProfilePage() {
-  const { session, updateProfile } = useEvents();
+  const { session, updateProfile, updateAvatar, pushToast } = useEvents();
+  const [photoBusy, setPhotoBusy] = useState(false);
+  async function pickPhoto(e) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // picking the same file again still triggers
+    if (!file) return;
+    setPhotoBusy(true);
+    try {
+      await updateAvatar(await squareImage(file));
+    } catch (err) {
+      pushToast('ใช้รูปนี้ไม่ได้', err.message || '', 'warn');
+    }
+    setPhotoBusy(false);
+  }
+  async function removePhoto() {
+    setPhotoBusy(true);
+    await updateAvatar(null);
+    setPhotoBusy(false);
+  }
   const location = useLocation();
   const [name, setName] = useState('');
   const [titleTh, setTitleTh] = useState('');
@@ -113,8 +132,15 @@ export default function ProfilePage() {
       <div className="wrap tight">
         <div className="pf-layout">
           <aside className="pf-card pf-summary">
-            {/* Picture made from the name: initials on the role's colour, the same mark the sidebar shows. */}
-            <div className={`pf-avatar ${session.role}`} aria-hidden="true">{initials(name || session.name) || <i className="ti ti-user" />}</div>
+            {/* The uploaded picture, or the initials on the role's colour — the same mark the sidebar shows. */}
+            <UserAvatar className={`pf-avatar ${session.role}`} name={name || session.name} avatar={session.avatar} />
+            <div className="pf-photo-actions">
+              <label className={`pf-photo-btn${photoBusy ? ' busy' : ''}`}>
+                <i className="ti ti-camera" /> {session.avatar ? 'เปลี่ยนรูป' : 'เพิ่มรูปโปรไฟล์'}
+                <input type="file" accept="image/*" onChange={pickPhoto} disabled={photoBusy} hidden />
+              </label>
+              {session.avatar && <button type="button" className="pf-photo-btn" onClick={removePhoto} disabled={photoBusy}><i className="ti ti-trash" /> ลบรูป</button>}
+            </div>
             <div className="pf-name">{joinThai(titleTh, name) || fullNameTh(session)}</div>
             {nameEn.trim() && <div className="pf-name-en">{joinEnglish(titleEn, nameEn)}</div>}
             <span className={`role-tag ${session.role}`}>{ROLE_LABEL[session.role]}</span>

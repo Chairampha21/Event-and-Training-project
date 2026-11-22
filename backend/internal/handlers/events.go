@@ -43,7 +43,7 @@ const effectiveStatusSQL = `CASE
     ELSE status END`
 
 const eventFields = `
-  id, title, description, category, subcategory, poster_url,
+  id, title, description, category, program, years, allow_blacklisted, subcategory, poster_url,
   organizer_id, organizer_name, coordinator_id,
   day_mode, date_start, date_end, event_dates, event_times, time_range, reg_start, reg_end,
   attend_mode, place, online_link, capacity, capacity_onsite, capacity_online,
@@ -86,7 +86,7 @@ func scanEvent(row interface{ Scan(dest ...any) error }) (models.Event, error) {
 	var pretestEnabled, emailOnRegister, emailBeforeEvent, emailAfterEvent, isListed int
 	var eventDates, eventTimes sql.NullString
 	err := row.Scan(
-		&e.ID, &e.Title, &e.Description, &e.Category, &e.Subcategory, &e.PosterURL,
+		&e.ID, &e.Title, &e.Description, &e.Category, &e.Program, &e.Years, &e.AllowBlacklisted, &e.Subcategory, &e.PosterURL,
 		&e.OrganizerID, &e.OrganizerName, &e.CoordinatorID,
 		&e.DayMode, &e.DateStart, &e.DateEnd, &eventDates, &eventTimes, &e.TimeRange, &e.RegStart, &e.RegEnd,
 		&e.AttendMode, &e.Place, &e.OnlineLink, &e.Capacity, &e.CapacityOnsite, &e.CapacityOnline,
@@ -283,6 +283,9 @@ type eventBody struct {
 	Title               string   `json:"title"`
 	Description         *string  `json:"description"`
 	Category            string   `json:"category"`
+	Program             *string  `json:"program"`
+	Years               *string  `json:"years"`
+	AllowBlacklisted    *bool    `json:"allow_blacklisted"`
 	Subcategory         *string  `json:"subcategory"`
 	PosterURL           *string  `json:"poster_url"`
 	OrganizerID         *int64   `json:"organizer_id"`
@@ -752,6 +755,19 @@ func (h *EventsHandler) Create(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "ข้อความถึงผู้เข้าร่วมยาวเกิน 500 ตัวอักษร"})
 		return
 	}
+	program := "all"
+	if b.Program != nil && *b.Program != "" {
+		program = *b.Program
+	}
+	if !validPrograms[program] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "สาขาที่รับสมัครไม่ถูกต้อง"})
+		return
+	}
+	years, ok := normalizeYears(strOrEmpty(b.Years))
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ชั้นปีที่รับสมัครไม่ถูกต้อง"})
+		return
+	}
 	meals, ok := normalizeMeals(strOrEmpty(b.Meals))
 	if !ok {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "มื้ออาหารไม่ถูกต้อง"})
@@ -801,7 +817,7 @@ func (h *EventsHandler) Create(c *gin.Context) {
 	pretestEnabled := b.PretestEnabled != nil && *b.PretestEnabled
 
 	res, err := h.DB.Exec(`INSERT INTO events (
-		title, description, category, subcategory, poster_url,
+		title, description, category, program, years, allow_blacklisted, subcategory, poster_url,
 		organizer_id, organizer_name, coordinator_id,
 		day_mode, date_start, date_end, event_dates, event_times, time_range, reg_start, reg_end,
 		attend_mode, place, online_link, capacity, capacity_onsite, capacity_online,
@@ -811,8 +827,8 @@ func (h *EventsHandler) Create(c *gin.Context) {
 		pretest_enabled, pretest_link, pretest_pass_pct, pretest_time_limit_min,
 		cert_template_url, cert_signer_name, cert_signer_title, cert_signature_url, cert_layout,
 		email_on_register, email_before_event, email_after_event
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		strings.TrimSpace(b.Title), b.Description, strings.TrimSpace(b.Category), b.Subcategory, b.PosterURL,
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		strings.TrimSpace(b.Title), b.Description, strings.TrimSpace(b.Category), program, nullIfEmpty(years), b.AllowBlacklisted != nil && *b.AllowBlacklisted, b.Subcategory, b.PosterURL,
 		organizerID, b.OrganizerName, coordinatorFor(h.DB, b.OrganizerName),
 		b.DayMode, b.DateStart, b.DateEnd, eventDates, eventTimes, b.TimeRange, nullIfEmpty(regStart), nullIfEmpty(regEnd),
 		b.AttendMode, b.Place, b.OnlineLink, capacity, b.CapacityOnsite, b.CapacityOnline,
@@ -843,7 +859,7 @@ func (h *EventsHandler) Create(c *gin.Context) {
 	// that opens later is announced once, on its opening day (reminders), not
 	// now as well.
 	if event.Status == "open" && reminders.Claim(h.DB, "reg_opened", event.ID, 0) {
-		notify.SendToStudents(h.DB, "ti-sparkles", notify.ToneDark, "กิจกรรมใหม่", event.Title+" เปิดรับสมัครแล้ว", fmt.Sprintf("/home?event=%d", event.ID))
+		notify.SendToStudents(h.DB, event.Program, event.Years.String, "ti-sparkles", notify.ToneDark, "กิจกรรมใหม่", event.Title+" เปิดรับสมัครแล้ว", fmt.Sprintf("/home?event=%d", event.ID))
 	}
 	c.JSON(http.StatusCreated, gin.H{"event": event})
 }
@@ -915,7 +931,7 @@ func (h *EventsHandler) Update(c *gin.Context) {
 	}
 
 	updatable := map[string]bool{
-		"title": true, "description": true, "category": true, "subcategory": true, "poster_url": true,
+		"title": true, "description": true, "category": true, "program": true, "years": true, "allow_blacklisted": true, "subcategory": true, "poster_url": true,
 		"organizer_name": true, "coordinator_id": true, "day_mode": true, "date_start": true, "date_end": true, "time_range": true,
 		"reg_start": true, "reg_end": true, "event_dates": true, "event_times": true,
 		"attend_mode": true, "place": true, "online_link": true, "capacity": true, "capacity_onsite": true, "capacity_online": true,
@@ -995,7 +1011,7 @@ func (h *EventsHandler) Update(c *gin.Context) {
 		}
 		raw["refund_note"] = nullIfEmpty(str)
 	}
-	for _, f := range []string{"ask_dietary", "issue_certificate"} {
+	for _, f := range []string{"ask_dietary", "issue_certificate", "allow_blacklisted"} {
 		v, present := raw[f]
 		if !present {
 			continue
@@ -1004,6 +1020,24 @@ func (h *EventsHandler) Update(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลไม่ถูกต้อง"})
 			return
 		}
+	}
+
+	if v, present := raw["program"]; present {
+		str, ok := v.(string)
+		if !ok || !validPrograms[str] {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "สาขาที่รับสมัครไม่ถูกต้อง"})
+			return
+		}
+	}
+
+	if v, present := raw["years"]; present && v != nil {
+		str, ok := v.(string)
+		years, valid := normalizeYears(str)
+		if !ok || !valid {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "ชั้นปีที่รับสมัครไม่ถูกต้อง"})
+			return
+		}
+		raw["years"] = nullIfEmpty(years)
 	}
 
 	if v, present := raw["meals"]; present && v != nil {
@@ -1317,7 +1351,7 @@ func (h *EventsHandler) notifyEventChanges(before, after models.Event) {
 	}
 	// Announced once per event, whichever comes first: this edit or the opening-day reminder.
 	if before.Status == "soon" && after.Status == "open" && reminders.Claim(h.DB, "reg_opened", after.ID, 0) {
-		notify.SendToStudents(h.DB, "ti-sparkles", notify.ToneDark, "กิจกรรมใหม่", after.Title+" เปิดรับสมัครแล้ว", fmt.Sprintf("/home?event=%d", after.ID))
+		notify.SendToStudents(h.DB, after.Program, after.Years.String, "ti-sparkles", notify.ToneDark, "กิจกรรมใหม่", after.Title+" เปิดรับสมัครแล้ว", fmt.Sprintf("/home?event=%d", after.ID))
 	}
 	// A new or reworded message to attendees reaches those already registered.
 	if after.AttendeeNote.Valid && after.AttendeeNote != before.AttendeeNote {
@@ -1346,6 +1380,19 @@ func (h *EventsHandler) notifyEventChanges(before, after models.Event) {
 func (h *EventsHandler) Remove(c *gin.Context) {
 	existing, ok := h.loadOwned(c)
 	if !ok {
+		return
+	}
+
+	// An event that has finished or whose first day has come stays: people
+	// attended it, and their evaluations, certificates and the year's figures
+	// rest on it. Only an event still ahead can be deleted (cancelled).
+	var started bool
+	if err := h.DB.QueryRow(`SELECT status = 'done' OR `+todayTH+` >= date_start FROM events WHERE id = ?`, existing.ID).Scan(&started); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
+		return
+	}
+	if started {
+		c.JSON(http.StatusConflict, gin.H{"error": "ลบกิจกรรมที่ถึงวันจัดหรือจัดเสร็จแล้วไม่ได้ · ลบได้เฉพาะกิจกรรมที่ยังไม่ถึงวันจัด"})
 		return
 	}
 
@@ -1404,6 +1451,32 @@ func (h *EventsHandler) Remove(c *gin.Context) {
 		}
 	}
 	c.Status(http.StatusNoContent)
+}
+
+// Who may register for an event: everyone, or students of one programme.
+var validPrograms = map[string]bool{"all": true, "cs": true, "it": true}
+
+// normalizeYears checks a comma list of years of study ("1".."5", "5" = year 5
+// and above) and returns it de-duplicated in order; ok is false for anything else.
+func normalizeYears(s string) (string, bool) {
+	picked := map[string]bool{}
+	for _, y := range strings.Split(s, ",") {
+		y = strings.TrimSpace(y)
+		if y == "" {
+			continue
+		}
+		if len(y) != 1 || y < "1" || y > "5" {
+			return "", false
+		}
+		picked[y] = true
+	}
+	out := []string{}
+	for _, y := range []string{"1", "2", "3", "4", "5"} {
+		if picked[y] {
+			out = append(out, y)
+		}
+	}
+	return strings.Join(out, ","), true
 }
 
 // Meals an event serves, in the order of the day. Stored as "break_am,lunch".

@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useEvents } from '../../hooks/useEvents';
 import { ROLE_LABEL } from '../../utils/constants';
 import './Navbar.css';
-import { initials } from '../../utils/initials';
+import UserAvatar from './UserAvatar';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import { fullNameTh } from '../../utils/personName';
 
@@ -233,7 +233,7 @@ export default function Navbar() {
         </div>
         <div className="sidebar-foot">
           <button type="button" className="user-pill" title="ดู/แก้ไขโปรไฟล์" onClick={() => navigate('/profile')}>
-            <div className={`up-av ${session.role}`}>{initials(session.name)}</div>
+            <UserAvatar className={`up-av ${session.role}`} name={session.name} avatar={session.avatar} />
             <div className="up-info">
               <span className="up-name" title={fullNameTh(session)}>{session.name}</span>
               <span className="up-role"><span className={`role-tag ${session.role}`}>{ROLE_LABEL[session.role]}</span></span>

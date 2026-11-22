@@ -228,6 +228,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	if u.Role == "admin" {
 		reminders.AdminDigest(h.DB, u.ID) // what is waiting across the system, at most once a day
 	}
+	h.attachAvatar(&u)
 	c.JSON(http.StatusOK, gin.H{"user": u, "token": token})
 }
 
@@ -350,6 +351,7 @@ func (h *AuthHandler) GoogleLogin(c *gin.Context) {
 	} else {
 		activitylog.Log(h.DB, &user.ID, "LOGIN", "เข้าสู่ระบบด้วย Google")
 	}
+	h.attachAvatar(&user)
 	c.JSON(http.StatusOK, gin.H{"user": user, "token": token})
 }
 
@@ -450,6 +452,7 @@ func (h *AuthHandler) UpdateMe(c *gin.Context) {
 	}
 
 	activitylog.Log(h.DB, &claims.UserID, "UPDATE", "แก้ไขโปรไฟล์ตนเอง")
+	h.attachAvatar(&user)
 	c.JSON(http.StatusOK, gin.H{"user": user})
 }
 
@@ -501,5 +504,42 @@ func (h *AuthHandler) Me(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "บัญชีนี้ถูกระงับการใช้งาน"})
 		return
 	}
+	h.attachAvatar(&user)
 	c.JSON(http.StatusOK, gin.H{"user": user})
+}
+
+// attachAvatar adds the user's profile picture to their own record (it is
+// kept out of userPublicFields so user lists don't carry every picture).
+func (h *AuthHandler) attachAvatar(u *models.User) {
+	_ = h.DB.QueryRow(`SELECT avatar FROM users WHERE id = ?`, u.ID).Scan(&u.Avatar)
+}
+
+// maxAvatarLen caps the stored picture; the page sends a 256 x 256 JPEG,
+// a few tens of KB.
+const maxAvatarLen = 400 * 1024
+
+// UpdateAvatar sets (or with "" / null, removes) the signed-in user's profile picture.
+func (h *AuthHandler) UpdateAvatar(c *gin.Context) {
+	var body struct {
+		Avatar *string `json:"avatar"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลไม่ถูกต้อง"})
+		return
+	}
+	avatar := ""
+	if body.Avatar != nil {
+		avatar = *body.Avatar
+	}
+	if avatar != "" && (len(avatar) > maxAvatarLen ||
+		!(strings.HasPrefix(avatar, "data:image/jpeg;base64,") || strings.HasPrefix(avatar, "data:image/png;base64,") || strings.HasPrefix(avatar, "data:image/webp;base64,"))) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "รูปโปรไฟล์ต้องเป็นไฟล์ JPG, PNG หรือ WebP ขนาดไม่เกิน 400 KB"})
+		return
+	}
+	claims, _ := middleware.CurrentUser(c)
+	if _, err := h.DB.Exec(`UPDATE users SET avatar = ? WHERE id = ?`, nullIfEmpty(avatar), claims.UserID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"avatar": nullIfEmpty(avatar)})
 }

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useEvents } from '../../hooks/useEvents';
 import useLocalStorage from '../../hooks/useLocalStorage';
-import { STATUS_META, EVENT_CATEGORIES } from '../../utils/constants';
+import { STATUS_META, EVENT_CATEGORIES, EVENT_PROGRAMS, STUDENT_YEARS } from '../../utils/constants';
 import { formatThaiDate, formatThaiDateList, formatCertDate, formatCertDateList, formatDayTime, formatRegPeriod, summarizeDayTimes, todayIso } from '../../utils/dateFormat';
 import MultiDatePicker from '../../components/ui/MultiDatePicker';
 import TimeInput from '../../components/ui/TimeInput';
@@ -112,6 +112,10 @@ export default function CreateEventPage() {
   const [title, setTitle] = useState(editing?.title || '');
   const [desc, setDesc] = useState(editing?.desc || '');
   const [cat, setCat] = useState(editing?.cat || '');
+  const [program, setProgram] = useState(editing?.program || 'all');
+  const [years, setYears] = useState(editing?.years || []); // [] = every year
+  const [allowBlacklisted, setAllowBlacklisted] = useState(!!editing?.allowBlacklisted);
+  const toggleYear = (y) => setYears((cur) => (cur.includes(y) ? cur.filter((x) => x !== y) : [...cur, y].sort()));
   const [customCats, setCustomCats] = useState(editing?.cat ? [editing.cat] : []);
   const [addingCat, setAddingCat] = useState(false);
   const [newCatName, setNewCatName] = useState('');
@@ -580,7 +584,7 @@ export default function CreateEventPage() {
 
   function buildPayload() {
     return {
-      title, desc, cat, org,
+      title, desc, cat, org, program, years, allowBlacklisted,
       dayMode, attendMode,
       // Keep the stored time only when the day mode is unchanged — a multi-day
       // summary ("เวลาต่างกันในแต่ละวัน") must not carry over to a single day.
@@ -679,6 +683,8 @@ export default function CreateEventPage() {
     title: title || 'ชื่อกิจกรรมของคุณ',
     desc,
     cat: cat || 'ประเภทกิจกรรม',
+    program,
+    years,
     date: previewDate,
     time: time || 'ยังไม่ระบุเวลา',
     place: previewPlace,
@@ -767,7 +773,7 @@ export default function CreateEventPage() {
                 {errMsg('desc') || <span className="helper budget-hint"><i className="ti ti-info-circle" /> อธิบายเนื้อหา กลุ่มเป้าหมาย และสิ่งที่ผู้เข้าร่วมจะได้รับ</span>}
               </div>
             </div>
-            <div className="form-row">
+            <div className="form-row three">
               <div className={`field${errCls('cat')}`} data-field="cat">
                 <label>ประเภทกิจกรรม <span className="req">*</span></label>
                 {addingCat ? (
@@ -806,6 +812,15 @@ export default function CreateEventPage() {
                 {errMsg('cat')}
               </div>
               <div className="field">
+                <label htmlFor="ce-program">สาขาที่รับสมัคร</label>
+                <div className="with-icon">
+                  <i className="ti ti-school" />
+                  <select id="ce-program" value={program} onChange={(e) => setProgram(e.target.value)}>
+                    {EVENT_PROGRAMS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="field">
                 <label>อาจารย์ผู้ประสานงาน</label>
                 <div className="with-icon">
                   <i className="ti ti-user-cog" />
@@ -815,6 +830,28 @@ export default function CreateEventPage() {
                     {[...teacherNames, ...otherCoordinators].map((name) => <option key={name} value={name}>{name}</option>)}
                   </select>
                 </div>
+              </div>
+            </div>
+            <div className="form-row full">
+              <div className="field">
+                <label>ชั้นปีที่รับสมัคร</label>
+                <div className="year-pick" role="group" aria-label="ชั้นปีที่รับสมัคร">
+                  <button type="button" className={years.length === 0 ? 'on' : ''} aria-pressed={years.length === 0} onClick={() => setYears([])}>ทุกชั้นปี</button>
+                  {STUDENT_YEARS.map((y) => {
+                    const on = years.includes(y.key);
+                    return <button type="button" key={y.key} className={on ? 'on' : ''} aria-pressed={on} onClick={() => toggleYear(y.key)}>{y.label}</button>;
+                  })}
+                </div>
+                <span className="helper budget-hint"><i className="ti ti-info-circle" /> เลือกได้มากกว่า 1 ชั้นปี · นักศึกษาชั้นปีอื่นจะไม่เห็นและสมัครกิจกรรมนี้ไม่ได้</span>
+              </div>
+            </div>
+            <div className="form-row full">
+              <div className="field">
+                <label className="check-line">
+                  <input type="checkbox" checked={allowBlacklisted} onChange={(e) => setAllowBlacklisted(e.target.checked)} />
+                  <span>ให้นักศึกษาที่ติด Blacklist สมัครกิจกรรมนี้ได้</span>
+                </label>
+                <span className="helper budget-hint"><i className="ti ti-info-circle" /> ใช้กับกิจกรรมที่นักศึกษาต้องเข้าร่วม เช่น ปฐมนิเทศ หรือกิจกรรมบังคับของหลักสูตร · ติ๊กแล้ว นักศึกษาที่ติด Blacklist หรือมีแบบประเมินค้างก็สมัครได้</span>
               </div>
             </div>
             <div className="form-row three" style={{ marginBottom: 6 }}>

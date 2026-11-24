@@ -273,8 +273,10 @@ func (h *RegistrationsHandler) RegisterForEvent(c *gin.Context) {
 		paymentStatus = "pending"
 	}
 	res, err := tx.Exec(
-		`INSERT INTO registrations (event_id, user_id, attend_via, wants_laptop, food_allergy, dietary_pref, payment_status) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		eventID, claims.UserID, attendVia, body.BorrowLaptop, nullIfEmpty(foodAllergy), nullIfEmpty(dietaryPref), paymentStatus,
+		// dept is kept as it is now, so the event's report keeps this person's
+		// year and major of the time even after their profile changes.
+		`INSERT INTO registrations (event_id, user_id, dept, attend_via, wants_laptop, food_allergy, dietary_pref, payment_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		eventID, claims.UserID, nullIfEmpty(dept), attendVia, body.BorrowLaptop, nullIfEmpty(foodAllergy), nullIfEmpty(dietaryPref), paymentStatus,
 	)
 	if err != nil {
 		if isDuplicateErr(err) {
@@ -670,6 +672,25 @@ func (h *RegistrationsHandler) CancelRegistration(c *gin.Context) {
 		return
 	}
 
+	// Someone who came stays on the list: deleting the registration takes their
+	// check-ins, evaluation and certificate with it, so the event's report and
+	// the year's figures would change and a certificate already handed out
+	// would no longer verify.
+	var attendedAny bool
+	if err := h.DB.QueryRow(
+		`SELECT r.status IN ('attended', 'certified') OR r.checked_in = 1
+		        OR EXISTS (SELECT 1 FROM registration_checkins rc WHERE rc.registration_id = r.id)
+		        OR EXISTS (SELECT 1 FROM certificates cert WHERE cert.registration_id = r.id)
+		 FROM registrations r WHERE r.id = ?`, reg.ID,
+	).Scan(&attendedAny); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
+		return
+	}
+	if attendedAny {
+		c.JSON(http.StatusConflict, gin.H{"error": "ลบผู้สมัครที่เช็คอินหรือได้รับเกียรติบัตรแล้วไม่ได้ · ประวัติการเข้าร่วม แบบประเมิน และเกียรติบัตรของผู้นี้จะหายไป และรายงานจะเปลี่ยน"})
+		return
+	}
+
 	if _, err := h.DB.Exec(`DELETE FROM registrations WHERE id = ?`, c.Param("id")); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
 		return
@@ -835,7 +856,7 @@ type rosterRow struct {
 	StudentID         models.NullString `json:"student_id"`
 	Role              string            `json:"role"` // a teacher stays on the roster but off the sign-in sheet and reports
 	TitleTH           models.NullString `json:"title_th"`
-	Dept              models.NullString `json:"dept"` // students: "นักศึกษาชั้นปีที่ 3 · วิทยาการคอมพิวเตอร์" (year and major for the report)
+	Dept              models.NullString `json:"dept"` // students: "นักศึกษาชั้นปีที่ 3 · วิทยาการคอมพิวเตอร์" (year and major for the report), as it was when they registered
 }
 
 // EventRoster is the organizer/admin roster view for one event — the check-in modal's data source.
@@ -867,7 +888,7 @@ func (h *RegistrationsHandler) EventRoster(c *gin.Context) {
 		`SELECT r.id, r.status, r.checked_in, r.checked_in_at, r.registered_at, r.wants_laptop, r.food_allergy, r.dietary_pref, r.payment_status,
 		        r.slip_url IS NOT NULL, r.slip_transferred_at, r.slip_amount, r.slip_submitted_at, r.payment_reject_reason,
 		        r.refunded_at, r.refund_promptpay,
-		        u.id, u.name, u.email, u.student_id, u.role, u.title_th, u.dept
+		        u.id, u.name, u.email, u.student_id, u.role, u.title_th, COALESCE(r.dept, u.dept)
 		 FROM registrations r JOIN users u ON u.id = r.user_id
 		 WHERE r.event_id = ? ORDER BY u.name ASC`, c.Param("id"),
 	)

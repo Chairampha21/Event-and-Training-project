@@ -238,6 +238,11 @@ CREATE TABLE registrations (
   -- Existing databases: ALTER TABLE registrations ADD COLUMN attend_via ENUM('onsite','online') NOT NULL DEFAULT 'onsite' AFTER status;
   --   UPDATE registrations r JOIN events e ON e.id = r.event_id SET r.attend_via = 'online' WHERE e.attend_mode = 'online';
   attend_via      ENUM('onsite','online') NOT NULL DEFAULT 'onsite',
+  -- The student's users.dept ("นักศึกษาชั้นปีที่ 3 · สาขา...") as it was on
+  -- registering, so reports keep their year and major of the time after the
+  -- profile changes. NULL (registered before this was kept) = read users.dept.
+  -- Existing databases: database/migrations/2026-11-registration-dept.sql
+  dept            VARCHAR(190)  NULL,
   wants_laptop    TINYINT(1)    NOT NULL DEFAULT 0,        -- asked to borrow one of the event's loan notebooks
   -- Health-related: shown only to the registrant, the event's organizer and admins,
   -- and used only to prepare food. '' / NULL = nothing declared.

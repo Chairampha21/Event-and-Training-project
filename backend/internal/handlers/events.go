@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"reflect"
 	"regexp"
@@ -916,6 +917,30 @@ func (h *EventsHandler) Update(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "เปลี่ยนผู้ลงนามเกียรติบัตรไม่ได้ เพราะเปิดสิทธิ์เกียรติบัตรให้ผู้เข้าร่วมไปแล้ว · เกียรติบัตรที่ออกไปแล้วต้องใช้ผู้ลงนามเดิม"})
 		return
 	}
+	// The year's figures file a finished event by its dates (fiscal year),
+	// category and programme; changing them afterwards would move it, and its
+	// people, into another year or group of past reports.
+	if existing.Status == "done" || existing.CycleStage >= 4 {
+		if field := reportFieldChanged(raw, existing); field != "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "แก้ไข" + field + "ไม่ได้ เพราะกิจกรรมจัดเสร็จหรือเปิดสิทธิ์เกียรติบัตรแล้ว · รายงานย้อนหลังจะเปลี่ยน"})
+			return
+		}
+	}
+	// The fee is settled once anyone has paid (or sent a slip): the report's fee
+	// income is the fee times those who paid, so changing it rewrites that.
+	if v, present := raw["fee"]; present && feeChanged(v, existing.Fee) {
+		var paying int
+		if err := h.DB.QueryRow(
+			`SELECT COUNT(*) FROM registrations WHERE event_id = ? AND payment_status IN ('submitted', 'paid', 'refunded')`, existing.ID,
+		).Scan(&paying); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในระบบ"})
+			return
+		}
+		if paying > 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("เปลี่ยนค่าลงทะเบียนไม่ได้ เพราะมีผู้ชำระเงินหรือส่งสลิปแล้ว %d คน · รายรับในรายงานจะไม่ตรงกับเงินที่ได้รับจริง", paying)})
+			return
+		}
+	}
 	// Whether the event gives certificates is settled once they are opened (or
 	// any was issued): switching it then would leave some attendees with a
 	// certificate and the rest unable to get one for the same event.
@@ -1322,6 +1347,70 @@ func sameLayout(v any, stored string) bool {
 		return s == stored
 	}
 	return reflect.DeepEqual(a, b)
+}
+
+// reportFieldChanged names (in Thai) the first field a past report files the
+// event under — dates, category, programme — that raw sets to something other
+// than what ev has, or "" when none does. Fields sent unchanged (the edit form
+// sends them all) don't count.
+func reportFieldChanged(raw map[string]any, ev models.Event) string {
+	day := func(v any) string { // "2026-11-24" from a date or datetime string; "" for null
+		s, _ := v.(string)
+		if len(s) > 10 {
+			s = s[:10]
+		}
+		return s
+	}
+	text := func(v any) string { s, _ := v.(string); return strings.TrimSpace(s) }
+
+	if v, ok := raw["date_start"]; ok && day(v) != day(ev.DateStart) {
+		return "วันที่จัดกิจกรรม"
+	}
+	if v, ok := raw["date_end"]; ok {
+		// A one-day event may store no end, or the start as its end.
+		start, before, after := day(ev.DateStart), day(ev.DateEnd.String), day(v)
+		if before == "" {
+			before = start
+		}
+		if after == "" {
+			after = start
+		}
+		if after != before {
+			return "วันที่จัดกิจกรรม"
+		}
+	}
+	if v, ok := raw["event_dates"]; ok {
+		list, _ := v.([]any)
+		if len(list) != len(ev.EventDates) {
+			return "วันที่จัดกิจกรรม"
+		}
+		for i, d := range list {
+			if day(d) != day(ev.EventDates[i]) {
+				return "วันที่จัดกิจกรรม"
+			}
+		}
+	}
+	if v, ok := raw["category"]; ok && text(v) != ev.Category {
+		return "หมวดหมู่กิจกรรม"
+	}
+	if v, ok := raw["subcategory"]; ok && text(v) != strings.TrimSpace(ev.Subcategory.String) {
+		return "หมวดหมู่ย่อย"
+	}
+	if v, ok := raw["program"]; ok && text(v) != ev.Program {
+		return "สาขาที่รับสมัคร"
+	}
+	return ""
+}
+
+// feeChanged reports whether a fee sent in an edit (a number, or null for
+// free) differs from the stored one; free is 0 either way.
+func feeChanged(v any, stored models.NullFloat) bool {
+	sent, _ := v.(float64)
+	cur := 0.0
+	if stored.Valid {
+		cur = stored.Float64
+	}
+	return math.Abs(sent-cur) >= 0.005
 }
 
 // tellCoordinator lets a teacher know they have just been named the

@@ -75,11 +75,18 @@ type programSplit struct {
 	All int `json:"all"`
 }
 
-// userProgramSQL is 'cs', 'it' or 'all' (no major) for a user row alias, read
-// from the major in their dept text (as studentProgram does).
-func userProgramSQL(u string) string {
-	return `CASE WHEN COALESCE(` + u + `.dept, '') LIKE '%สารสนเทศ%' THEN 'it'
-	             WHEN COALESCE(` + u + `.dept, '') LIKE '%คอมพิวเตอร์%' THEN 'cs' ELSE 'all' END`
+// regDeptSQL is a registrant's "ชั้นปีที่ N · สาขา" text as it was when they
+// registered (registrations.dept), so a later profile change — moving up a
+// year, switching major — doesn't move them in reports of past events.
+// Registrations made before that was kept fall back to the profile.
+// Needs the aliases reg (registrations) and u (users).
+const regDeptSQL = `COALESCE(reg.dept, u.dept)`
+
+// userProgramSQL is 'cs', 'it' or 'all' (no major) for a dept text expression,
+// read from the major in it (as studentProgram does).
+func userProgramSQL(dept string) string {
+	return `CASE WHEN COALESCE(` + dept + `, '') LIKE '%สารสนเทศ%' THEN 'it'
+	             WHEN COALESCE(` + dept + `, '') LIKE '%คอมพิวเตอร์%' THEN 'cs' ELSE 'all' END`
 }
 
 // notTeacherSQL keeps a registration alias out of the dashboard and report
@@ -136,18 +143,18 @@ func (h *DashboardHandler) Summary(c *gin.Context) {
 		 WHERE e.is_listed = 1` + scope + ` AND (` + effectiveStatusSQL + `) = 'open' GROUP BY program
 		UNION ALL
 		SELECT 'participants_total', p, COUNT(*) FROM (
-		  SELECT ` + userProgramSQL("u") + ` AS p FROM registrations reg
+		  SELECT ` + userProgramSQL(regDeptSQL) + ` AS p FROM registrations reg
 		  JOIN events e ON e.id = reg.event_id JOIN users u ON u.id = reg.user_id
 		  WHERE e.is_listed = 1` + scope + ` AND u.role <> 'teacher') x GROUP BY p
 		UNION ALL
 		SELECT 'attended_total', p, COUNT(*) FROM (
-		  SELECT ` + userProgramSQL("u") + ` AS p FROM registrations reg
+		  SELECT ` + userProgramSQL(regDeptSQL) + ` AS p FROM registrations reg
 		  JOIN events e ON e.id = reg.event_id JOIN users u ON u.id = reg.user_id
 		  WHERE e.is_listed = 1` + scope + ` AND u.role <> 'teacher'
 		    AND (reg.status IN ('attended', 'certified') OR EXISTS (SELECT 1 FROM registration_checkins rc WHERE rc.registration_id = reg.id))) x GROUP BY p
 		UNION ALL
 		SELECT 'certificates_issued', p, COUNT(*) FROM (
-		  SELECT ` + userProgramSQL("u") + ` AS p FROM registrations reg
+		  SELECT ` + userProgramSQL(regDeptSQL) + ` AS p FROM registrations reg
 		  JOIN events e ON e.id = reg.event_id JOIN users u ON u.id = reg.user_id
 		  WHERE e.is_listed = 1` + scope + ` AND u.role <> 'teacher' AND reg.status = 'certified') x GROUP BY p`)
 	if err != nil {
@@ -232,10 +239,10 @@ func (h *DashboardHandler) Budget(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"budget": list})
 }
 
-// userYearSQL is the year of study ('1'..'5', 5 = five and above) in a user
-// row's dept text ("นักศึกษาชั้นปีที่ 3 · ..."), or ” when none is given.
-func userYearSQL(u string) string {
-	return `COALESCE(CAST(LEAST(CAST(REGEXP_SUBSTR(REGEXP_SUBSTR(COALESCE(` + u + `.dept, ''), 'ชั้นปีที่ *[0-9]+'), '[0-9]+') AS UNSIGNED), 5) AS CHAR), '')`
+// userYearSQL is the year of study ('1'..'5', 5 = five and above) in a dept
+// text expression ("นักศึกษาชั้นปีที่ 3 · ..."), or ” when none is given.
+func userYearSQL(dept string) string {
+	return `COALESCE(CAST(LEAST(CAST(REGEXP_SUBSTR(REGEXP_SUBSTR(COALESCE(` + dept + `, ''), 'ชั้นปีที่ *[0-9]+'), '[0-9]+') AS UNSIGNED), 5) AS CHAR), '')`
 }
 
 type audienceRow struct {
@@ -257,7 +264,7 @@ func (h *DashboardHandler) Audience(c *gin.Context) {
 	}
 	rows, err := h.DB.Query(`
 		SELECT p, y, COUNT(*), COALESCE(SUM(went), 0), COALESCE(SUM(cert), 0) FROM (
-		  SELECT `+userProgramSQL("u")+` AS p, `+userYearSQL("u")+` AS y,
+		  SELECT `+userProgramSQL(regDeptSQL)+` AS p, `+userYearSQL(regDeptSQL)+` AS y,
 		         (reg.status IN ('attended', 'certified') OR EXISTS (SELECT 1 FROM registration_checkins rc WHERE rc.registration_id = reg.id)) AS went,
 		         reg.status = 'certified' AS cert
 		  FROM registrations reg

@@ -13,7 +13,7 @@
             "name": "CPSU ETMS",
             "database": "cpsu_etms",
             "username": "root",
-            "password": "cpsuetms123"
+            "password": ""
         }
     ],
     "remote.portsAttributes": {

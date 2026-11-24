@@ -10,7 +10,7 @@ set -euo pipefail
 
 NAME=cpsu-etms-mysql
 # The volume holding /var/lib/mysql. Override with DB_VOLUME=... if yours differs.
-VOLUME=${DB_VOLUME:-d23c4148344c66eeae257e0d913bf79ef6905f2af7eed243f5e4f024d1b5684d}
+VOLUME=${DB_VOLUME:-cpsu-etms-mysql-data}
 
 if [ "$(docker inspect -f '{{.State.Running}}' "$NAME" 2>/dev/null)" = "true" ]; then
   echo "$NAME is already running."
@@ -33,7 +33,7 @@ fi
 
 printf 'Waiting for MySQL'
 for _ in $(seq 1 60); do
-  if docker exec "$NAME" mysqladmin ping -uroot -pcpsuetms123 --silent >/dev/null 2>&1; then
+  if docker exec "$NAME" mysqladmin ping -uroot --silent >/dev/null 2>&1; then
     echo " ready."
     exit 0
   fi

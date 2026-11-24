@@ -38,17 +38,23 @@ function ApplyButton({ event, status, payment, onApply }) {
 export default function EventCard({ event, isStudent, myStatus, myPayment, onApply, onManage }) {
   const sm = STATUS_META[event.status];
   const pct = Math.round((event.reg / event.cap) * 100);
+  // Shown muted, so what still needs attention stands out; it comes back to
+  // full colour on hover, and stays readable and openable. A participant only
+  // cares whether they can still register (closed or finished); an organizer
+  // still runs an event whose registration has closed, so only finished ones.
+  const muted = isStudent ? event.status === 'closed' || event.status === 'done' : event.status === 'done';
+  // For the organizer, an event whose registration is over (closed or full)
+  // is still ahead of them: its badge keeps a solid colour, not the faded one.
+  const badge = !isStudent && (event.status === 'closed' || event.status === 'full') ? 'badge-waiting' : sm.badge;
 
   return (
-    // Registration over (closed or finished): shown muted, so what is still open stands out;
-    // it comes back to full colour on hover, and stays readable and openable.
-    <article className={`card card-clickable${event.status === 'closed' || event.status === 'done' ? ' is-past' : ''}`}>
+    <article className={`card card-clickable${muted ? ' is-past' : ''}`}>
       {event.poster ? (
         <div className="card-poster">
           {/* The whole poster, never cropped; a blurred copy fills the frame around it. */}
           <img className="cp-fill" src={event.poster} alt="" aria-hidden="true" />
           <img src={event.poster} alt="" />
-          <span className={`badge ${sm.badge}`}><i className={`ti ${sm.ico}`} /> {sm.label}</span>
+          <span className={`badge ${badge}`}><i className={`ti ${sm.ico}`} /> {sm.label}</span>
         </div>
       ) : (
         <div className={`card-strip ${STRIP_TONE[event.tone] || 'strip-1'}`} />
@@ -61,7 +67,7 @@ export default function EventCard({ event, isStudent, myStatus, myPayment, onApp
             {PROGRAM_TAG[event.program] && <span className="card-program" title={`เฉพาะนักศึกษาสาขา${EVENT_PROGRAMS.find((p) => p.key === event.program).short}`}>{PROGRAM_TAG[event.program]}</span>}
             {event.years?.length > 0 && <span className="card-program" title={`เฉพาะนักศึกษา${yearsText(event.years)}`}>{event.years.length === 1 && event.years[0] !== '5' ? `ปี ${event.years[0]}` : `ปี ${event.years.map((y) => (y === '5' ? '5+' : y)).join(',')}`}</span>}
           </div>
-          {!event.poster && <span className={`badge ${sm.badge}`}><i className={`ti ${sm.ico}`} /> {sm.label}</span>}
+          {!event.poster && <span className={`badge ${badge}`}><i className={`ti ${sm.ico}`} /> {sm.label}</span>}
         </div>
         <h3 className="card-title"><button type="button" className="card-open" onClick={() => onApply(event.id)} aria-label={`ดูรายละเอียด ${event.title}`}>{event.title}</button></h3>
         {!isStudent && <CycleProgress stage={event.stage} status={event.status} dense />}

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useEvents } from '../../hooks/useEvents';
-import { REG_STATUS_META, CYCLE } from '../../utils/constants';
+import { REG_STATUS_META } from '../../utils/constants';
 import { CertPreviewModal } from '../../features/certificates/components/CertificateCard';
 import OnlineJoinLink from '../../features/events/components/OnlineJoinLink';
 import PaymentBox from '../../features/events/components/PaymentBox';
@@ -166,7 +166,6 @@ export default function MyRegistrationsPage() {
                   <div className="hi-meta">
                     <span><i className="ti ti-calendar-event" /> {r.date}</span>
                     <span><i className="ti ti-map-pin" /> {r.place}</span>
-                    <span><i className="ti ti-route" /> Cycle: {CYCLE[r.stage]}</span>
                   </div>
                   {['pending', 'submitted', 'rejected'].includes(r.paymentStatus) && (
                     <div style={{ marginTop: 9 }}><PaymentBox fee={r.fee} info={r.paymentInfo} reg={r} refundMethod={r.refundMethod} refundNote={r.refundNote} cancelled={r.cancelled} /></div>

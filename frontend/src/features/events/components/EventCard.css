@@ -9,6 +9,9 @@
 .card-clickable:hover .card-title{color:var(--c2)}
 .card-clickable .card-footer button{position:relative;z-index:2}
 
+/* Organizer view: registration over but the event still to run — solid, not faded. */
+.badge-waiting{background:var(--c2);color:var(--white)}
+
 /* Closed / finished events: muted, not hidden. */
 .card.is-past{background:#f7f7fa;border-color:#e7e7ef}
 .card.is-past .card-poster img{filter:grayscale(.85);opacity:.8;transition:filter .25s ease,opacity .25s ease}

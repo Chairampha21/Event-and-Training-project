@@ -19,11 +19,10 @@ function resultOf(r) {
 // Columns of the activity table (width in Excel character units).
 const COLS = [
   { label: 'ลำดับ', width: 7 },
-  { label: 'ชื่อกิจกรรม', width: 44 },
+  { label: 'ชื่อกิจกรรม', width: 54 },
   { label: 'ประเภท', width: 20 },
   { label: 'วันที่จัด', width: 20 },
-  { label: 'สถานที่', width: 30 },
-  { label: 'ผู้รับผิดชอบ', width: 24 },
+  { label: 'สถานที่', width: 44 },
   { label: 'ผลการเข้าร่วม', width: 22 },
   { label: 'รหัสเกียรติบัตร', width: 18 },
 ];
@@ -50,7 +49,7 @@ export function downloadActivityTranscript(session, regs, certificates = []) {
     .filter((r) => (r.status === 'attended' || r.status === 'certified') && !r.cancelled)
     .sort((a, b) => (a.dateStart || '').localeCompare(b.dateStart || ''));
   const codeOf = Object.fromEntries((certificates || []).map((c) => [c.event_id, c.cert_code]));
-  const { year, major } = parseStudentDept(session.dept);
+  const { major } = parseStudentDept(session.dept);
   const certified = done.filter((r) => r.status === 'certified').length;
   const academicYear = (iso) => (iso ? academicYearBE(new Date(`${iso}T12:00:00`)) : 0);
 
@@ -70,17 +69,16 @@ export function downloadActivityTranscript(session, regs, certificates = []) {
   fullWidth('ภาควิชาคอมพิวเตอร์ คณะวิทยาศาสตร์ มหาวิทยาลัยศิลปากร', STYLE.subtitle, 20);
   blank(12);
 
-  // Student details: two label/value pairs a row (labels A:B / E, values C:D / F:H).
+  // Student details: two label/value pairs a row (labels A:B / E, values C:D / F:G).
   const info = [
     ['ชื่อ–นามสกุล', fullNameTh(session), 'รหัสนักศึกษา', session.student_id || '-'],
-    ['สาขาวิชา', major || '-', 'ชั้นปี', year ? `ชั้นปีที่ ${year}` : '-'],
-    ['ภาควิชา', 'ภาควิชาคอมพิวเตอร์ คณะวิทยาศาสตร์', 'อีเมล', session.email || '-'],
+    ['สาขาวิชา', major || '-', 'ภาควิชา', 'ภาควิชาคอมพิวเตอร์ คณะวิทยาศาสตร์'],
     ['เข้าร่วมกิจกรรม', `${done.length} กิจกรรม`, 'ได้รับเกียรติบัตร', `${certified} ใบ`],
   ];
   info.forEach(([k1, v1, k2, v2]) => add({
     height: 22,
-    cells: [{ v: k1, s: STYLE.label }, { s: STYLE.label }, { v: v1, s: STYLE.text }, { s: STYLE.text }, { v: k2, s: STYLE.label }, { v: v2, s: STYLE.text }, { s: STYLE.text }, { s: STYLE.text }],
-  }, [[0, 1], [2, 3], [5, 7]]));
+    cells: [{ v: k1, s: STYLE.label }, { s: STYLE.label }, { v: v1, s: STYLE.text }, { s: STYLE.text }, { v: k2, s: STYLE.label }, { v: v2, s: STYLE.text }, { s: STYLE.text }],
+  }, [[0, 1], [2, 3], [5, 6]]));
   blank(12);
 
   // Activities, one block per academic year.
@@ -101,15 +99,14 @@ export function downloadActivityTranscript(session, regs, certificates = []) {
         { v: r.cat || '-', s: STYLE.left },
         { v: r.date || formatThaiDate(r.dateStart), s: STYLE.left },
         { v: r.place || '-', s: STYLE.left },
-        { v: r.org || '-', s: STYLE.left },
         { v: resultOf(r), s: STYLE.center },
         { v: codeOf[r.eid] || '-', s: STYLE.center },
       ];
       add({ height: fitHeight(cells), cells });
     });
     const yearCerts = list.filter((r) => r.status === 'certified').length;
-    add({ height: 22, cells: [{ v: `รวมปีการศึกษา ${ay || '-'}`, s: STYLE.totalLeft }, { s: STYLE.totalLeft }, { s: STYLE.totalLeft }, { s: STYLE.totalLeft }, { s: STYLE.totalLeft }, { s: STYLE.totalLeft },
-      { v: `${list.length} กิจกรรม`, s: STYLE.total }, { v: `${yearCerts} ใบ`, s: STYLE.total }] }, [[0, 5]]);
+    add({ height: 22, cells: [{ v: `รวมปีการศึกษา ${ay || '-'}`, s: STYLE.totalLeft }, { s: STYLE.totalLeft }, { s: STYLE.totalLeft }, { s: STYLE.totalLeft }, { s: STYLE.totalLeft },
+      { v: `${list.length} กิจกรรม`, s: STYLE.total }, { v: `${yearCerts} ใบ`, s: STYLE.total }] }, [[0, 4]]);
   });
   blank(16);
 
@@ -130,7 +127,7 @@ export function downloadActivityTranscript(session, regs, certificates = []) {
   // Where it came from, and a line to certify it.
   add({ height: 30, cells: [{ v: `ออกจากระบบ CPSU ETMS เมื่อ ${formatThaiDate(todayIso())} · นับเฉพาะกิจกรรมที่เข้าร่วมแล้ว (เช็คอินครบ) ไม่รวมกิจกรรมที่ขาดหรือถูกยกเลิก · ตรวจสอบเกียรติบัตรได้จากรหัสเกียรติบัตร`, s: STYLE.note }] }, [[0, 4]]);
   blank(24);
-  const sign = (v) => add({ height: 22, cells: [null, null, null, null, null, { v, s: STYLE.centerPlain }] }, [[5, 7]]);
+  const sign = (v) => add({ height: 22, cells: [null, null, null, null, null, { v, s: STYLE.centerPlain }] }, [[5, 6]]);
   sign('ลงชื่อ ......................................................... ผู้รับรอง');
   sign('(.........................................................)');
   sign('ตำแหน่ง .........................................................');

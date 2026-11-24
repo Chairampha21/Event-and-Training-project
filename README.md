@@ -34,7 +34,7 @@
 docker run -d --name cpsu-etms-mysql -p 3306:3306 \
   -e MYSQL_ALLOW_EMPTY_PASSWORD=yes -e MYSQL_DATABASE=cpsu_etms mysql:8.0
 # รอสัก 20 วินาทีให้ MySQL พร้อม แล้วสร้างตารางและข้อมูลตัวอย่าง (ตามลำดับนี้)
-for f in schema seed demo_organizer seed_teachers seed_demo_titles; do
+for f in schema seed demo_organizer seed_teachers seed_demo_titles seed_fy2569_moves seed_blacklist seed_english_camp seed_sound_sport seed_genai_ethics seed_next_step seed_cv_ai_industry seed_llm_rag seed_ntt_roadshow seed_web_dev_aws seed_skill_up_more seed_aucc2027 seed_fy2570_plan seed_posters seed_certificates; do
   docker exec -i cpsu-etms-mysql mysql --default-character-set=utf8mb4 -uroot cpsu_etms < database/$f.sql
 done
 ```

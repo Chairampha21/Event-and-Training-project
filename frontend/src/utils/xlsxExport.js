@@ -16,10 +16,17 @@ export const STYLE = {
   totalLeft: 10, // as total, left-aligned
   note: 11, // small grey, left, wraps
   centerPlain: 12, // centred, no border (signature lines)
+  num: 13, // bordered number, #,##0
+  numDiff: 14, // as num, negatives in red
+  dec: 15, // bordered number, 0.00
+  totalNum: 16, // total-row versions of the three above
+  totalDiff: 17,
+  totalDec: 18,
 };
 
 const STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<numFmts count="2"><numFmt numFmtId="164" formatCode="#,##0;[Red]\\-#,##0"/><numFmt numFmtId="165" formatCode="0.00"/></numFmts>
 <fonts count="4">
 <font><sz val="11"/><name val="Tahoma"/></font>
 <font><b/><sz val="11"/><name val="Tahoma"/></font>
@@ -37,7 +44,7 @@ const STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <border><left style="thin"><color auto="1"/></left><right style="thin"><color auto="1"/></right><top style="thin"><color auto="1"/></top><bottom style="thin"><color auto="1"/></bottom><diagonal/></border>
 </borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-<cellXfs count="13">
+<cellXfs count="19">
 <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
 <xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
 <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
@@ -51,6 +58,12 @@ const STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center"/></xf>
 <xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
 <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="3" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>
+<xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>
+<xf numFmtId="165" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>
+<xf numFmtId="3" fontId="1" fillId="2" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>
+<xf numFmtId="164" fontId="1" fillId="2" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>
+<xf numFmtId="165" fontId="1" fillId="2" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>
 </cellXfs>
 <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`;
@@ -88,9 +101,14 @@ function sheetXml(sheet) {
   const merges = (sheet.merges || []).length
     ? `<mergeCells count="${sheet.merges.length}">${sheet.merges.map((m) => `<mergeCell ref="${m}"/>`).join('')}</mergeCells>`
     : '';
+  // freezeRows: keep the first N rows (title + table header) in view when scrolling.
+  const freeze = sheet.freezeRows
+    ? `<sheetViews><sheetView workbookViewId="0"><pane ySplit="${sheet.freezeRows}" topLeftCell="A${sheet.freezeRows + 1}" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>`
+    : '';
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
 <sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>
+${freeze}
 <cols>${cols}</cols>
 <sheetData>${rows}</sheetData>
 ${merges}
@@ -215,6 +233,31 @@ ${sheets.map((_, i) => `<Relationship Id="rId${i + 1}" Type="${NS}/officeDocumen
     ...sheets.map((s, i) => ({ name: `xl/worksheets/sheet${i + 1}.xml`, content: sheetXml(s) })),
   ];
   return zip(files);
+}
+
+const BODY = { text: STYLE.left, center: STYLE.center, int: STYLE.num, diff: STYLE.numDiff, dec: STYLE.dec };
+const TOTAL = { text: STYLE.totalLeft, center: STYLE.total, int: STYLE.totalNum, diff: STYLE.totalDiff, dec: STYLE.totalDec };
+
+/**
+ * A titled report table as a sheet: { name, title, subtitle?, columns:
+ * [{ label, value: key | (row) => v, type?: 'text'|'center'|'int'|'diff'|'dec', width? }],
+ * rows, totals?: [v, ...] lined up with columns }. Numbers stay numbers so
+ * Excel can sum them; empty values ('' / null) leave the cell blank.
+ */
+export function tableSheet({ name, title, subtitle, columns, rows, totals }) {
+  const last = colName(columns.length - 1);
+  const out = [];
+  const merges = [];
+  out.push({ height: 26, cells: [{ v: title, s: STYLE.title }] });
+  merges.push(`A1:${last}1`);
+  if (subtitle) { out.push({ cells: [{ v: subtitle, s: STYLE.note }] }); merges.push(`A2:${last}2`); }
+  out.push({ cells: [] });
+  out.push({ height: 36, cells: columns.map((c) => ({ v: c.label, s: STYLE.head })) });
+  const freezeRows = out.length;
+  const read = (c, r) => (typeof c.value === 'function' ? c.value(r) : r[c.value]);
+  rows.forEach((r) => out.push({ cells: columns.map((c) => ({ v: read(c, r), s: BODY[c.type || 'text'] })) }));
+  if (totals) out.push({ cells: columns.map((c, i) => ({ v: totals[i], s: TOTAL[c.type || 'text'] })) });
+  return { name, cols: columns.map((c) => c.width || 14), rows: out, merges, freezeRows, landscape: true };
 }
 
 /** Downloads `sheets` as an Excel workbook. */

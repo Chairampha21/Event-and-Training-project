@@ -123,7 +123,9 @@ func (h *AuthHandler) accountByEmail(email string) (accountRow, error) {
 	var a accountRow
 	var active int
 	err := h.DB.QueryRow(`SELECT `+userPublicFields+`, email_verified_at IS NOT NULL FROM users WHERE email = ?`, email).Scan(
-		&a.user.ID, &a.user.Name, &a.user.TitleTH, &a.user.NameEN, &a.user.TitleEN, &a.user.Email, &a.user.Role, &a.user.StudentID, &a.user.Dept, &active, &a.user.CreatedAt, &a.verified)
+		&a.user.ID, &a.user.Name, &a.user.TitleTH, &a.user.NameEN, &a.user.TitleEN, &a.user.Email, &a.user.Role, &a.user.StudentID, &a.user.Dept, &active, &a.user.CreatedAt,
+		&a.user.Nickname, &a.user.Gender, &a.user.Phone, &a.user.BloodType, &a.user.FoodAllergy, &a.user.MedicalNote, &a.user.EmergencyContact,
+		&a.verified)
 	a.user.Active = active == 1
 	return a, err
 }

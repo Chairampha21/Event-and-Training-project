@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { downloadCsv } from '../../../utils/csvExport';
+import { downloadXlsx, tableSheet } from '../../../utils/xlsxExport';
 import { formatThaiDate } from '../../../utils/dateFormat';
 import { formatBaht } from '../../../utils/money';
 import BudgetActualModal from './BudgetActualModal';
@@ -33,24 +33,68 @@ const perAttendee = (r) => (r.budget_actual != null && r.attended_count > 0 ? Ma
 // perAttendee, it shows what the no-shows cost per head.
 const perRegistrant = (r) => (r.budget_actual != null && r.registered_count > 0 ? Math.round(r.budget_actual / r.registered_count) : null);
 
-/** Downloads one fiscal year's per-event budget table as a CSV file. */
-export function exportBudgetCsv(rows, year) {
-  downloadCsv(`งบประมาณ-ปีงบประมาณ-${year}`, rows, [
-    { label: 'กิจกรรม', value: 'title' },
-    { label: 'ประเภท', value: 'category' },
-    { label: 'วันที่จัด', value: (r) => formatThaiDate(r.date_start) },
-    { label: 'งบประมาณเงินรายได้ (บาท)', value: (r) => r.budget_planned ?? '' },
-    { label: 'งบประมาณแหล่งอื่น (บาท)', value: (r) => r.budget_other ?? '' },
-    { label: 'รวม (บาท)', value: (r) => r.budget_total ?? '' },
-    { label: 'งบประมาณที่ใช้จริง (บาท)', value: (r) => r.budget_actual ?? '' },
-    { label: 'ส่วนต่าง (บาท)', value: (r) => (r.budget_total != null && r.budget_actual != null ? r.budget_total - r.budget_actual : '') },
-    { label: 'ใช้ไป (%)', value: (r) => (r.budget_total > 0 && r.budget_actual != null ? pct(r.budget_actual, r.budget_total) : '') },
-    { label: 'ผู้สมัคร (คน)', value: 'registered_count' },
-    { label: 'งบประมาณที่ใช้ต่อผู้สมัคร (บาท)', value: (r) => perRegistrant(r) ?? '' },
-    { label: 'ผู้เข้าร่วมจริง (เช็คอิน)', value: 'attended_count' },
-    { label: 'งบประมาณที่ใช้ต่อผู้เข้าร่วมจริง (บาท)', value: (r) => perAttendee(r) ?? '' },
-    { label: 'สถานะ', value: (r) => STATE_META[budgetState(r)].label },
-  ]);
+const sum = (rows, f) => rows.reduce((a, r) => a + (f(r) || 0), 0);
+
+/**
+ * One fiscal year's per-event budget table as a workbook sheet: the same
+ * figures as the table on the page, each in its own column, plus a totals row
+ * worked out the same way as the page's "รวม" row.
+ */
+export function budgetSheet(rows, year) {
+  return tableSheet(budgetTable(rows, year));
+}
+
+function budgetTable(rows, year) {
+  const withActual = rows.filter((r) => r.budget_actual != null);
+  const both = rows.filter((r) => r.budget_total != null && r.budget_actual != null);
+  const cmpPlanned = sum(both, (r) => r.budget_total);
+  const cmpActual = sum(both, (r) => r.budget_actual);
+  const att = withActual.filter((r) => r.attended_count > 0);
+  const reg = withActual.filter((r) => r.registered_count > 0);
+  const attendees = sum(att, (r) => r.attended_count);
+  const registrants = sum(reg, (r) => r.registered_count);
+  const hasPlan = rows.some((r) => r.budget_total != null);
+  return {
+    name: `งบประมาณ ${year}`,
+    title: `ผลการใช้จ่ายงบประมาณ ปีงบประมาณ ${year}`,
+    subtitle: `${rows.length} กิจกรรม · ส่วนต่าง = งบประมาณรวม − งบประมาณที่ใช้จริง (ติดลบสีแดง = ใช้เกินงบ) · ค่าเฉลี่ยต่อคนในแถวรวมคิดเฉพาะกิจกรรมที่บันทึกงบที่ใช้จริงแล้ว`,
+    columns: [
+      { label: 'กิจกรรม', value: 'title', width: 40 },
+      { label: 'ประเภท', value: 'category', width: 20 },
+      { label: 'วันที่จัด', value: (r) => formatThaiDate(r.date_start), width: 18 },
+      { label: 'งบประมาณเงินรายได้ (บาท)', value: (r) => r.budget_planned, type: 'int', width: 15 },
+      { label: 'งบประมาณแหล่งอื่น (บาท)', value: (r) => r.budget_other, type: 'int', width: 15 },
+      { label: 'งบประมาณรวม (บาท)', value: (r) => r.budget_total, type: 'int', width: 15 },
+      { label: 'งบประมาณที่ใช้จริง (บาท)', value: (r) => r.budget_actual, type: 'int', width: 15 },
+      { label: 'ส่วนต่าง (บาท)', value: (r) => (r.budget_total != null && r.budget_actual != null ? r.budget_total - r.budget_actual : null), type: 'diff', width: 13 },
+      { label: 'ใช้ไป (%)', value: (r) => (r.budget_total > 0 && r.budget_actual != null ? pct(r.budget_actual, r.budget_total) : null), type: 'int', width: 9 },
+      { label: 'ผู้สมัคร (คน)', value: 'registered_count', type: 'int', width: 10 },
+      { label: 'งบประมาณที่ใช้ต่อผู้สมัคร (บาท)', value: perRegistrant, type: 'int', width: 15 },
+      { label: 'ผู้เข้าร่วมจริง (เช็คอิน) (คน)', value: 'attended_count', type: 'int', width: 13 },
+      { label: 'งบประมาณที่ใช้ต่อผู้เข้าร่วมจริง (บาท)', value: perAttendee, type: 'int', width: 16 },
+      { label: 'สถานะ', value: (r) => STATE_META[budgetState(r)].label, width: 28 },
+    ],
+    rows,
+    totals: rows.length === 0 ? null : [
+      'รวม', '', '',
+      sum(rows, (r) => r.budget_planned),
+      sum(rows, (r) => r.budget_other),
+      hasPlan ? sum(rows, (r) => r.budget_total) : null,
+      withActual.length ? sum(withActual, (r) => r.budget_actual) : null,
+      both.length ? cmpPlanned - cmpActual : null,
+      cmpPlanned > 0 ? pct(cmpActual, cmpPlanned) : null,
+      sum(rows, (r) => r.registered_count),
+      registrants > 0 ? Math.round(sum(reg, (r) => r.budget_actual) / registrants) : null,
+      sum(rows, (r) => r.attended_count),
+      attendees > 0 ? Math.round(sum(att, (r) => r.budget_actual) / attendees) : null,
+      '',
+    ],
+  };
+}
+
+/** Downloads one fiscal year's per-event budget table as a formatted Excel file. */
+export function exportBudgetXlsx(rows, year) {
+  downloadXlsx(`งบประมาณ-ปีงบประมาณ-${year}`, [budgetSheet(rows, year)]);
 }
 
 /**
@@ -205,7 +249,7 @@ export default function BudgetSection({ rows, year, onSaveActual }) {
       <div className="table-card">
         <div className="table-toolbar">
           <h3><i className="ti ti-receipt-2" /> งบประมาณรายกิจกรรม · ปีงบประมาณ {year}</h3>
-          <button className="btn btn-outline" style={{ padding: '7px 12px', fontSize: 13 }} onClick={() => exportBudgetCsv(rows, year)}><i className="ti ti-download" /> ส่งออก CSV</button>
+          <button className="btn btn-outline" style={{ padding: '7px 12px', fontSize: 13 }} onClick={() => exportBudgetXlsx(rows, year)}><i className="ti ti-download" /> ส่งออก Excel</button>
         </div>
         <div className="bud-table-wrap">
           {/* Few, short columns: each money column shows one figure, with what

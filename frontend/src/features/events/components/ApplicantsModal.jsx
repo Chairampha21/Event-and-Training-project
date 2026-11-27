@@ -209,7 +209,7 @@ export default function ApplicantsModal({ eventId, open, onClose, mode = 'list' 
     pushToast('ดาวน์โหลดใบลงชื่อแล้ว', [
       hybrid ? `เฉพาะผู้เข้าร่วมที่สถานที่จัด ${people.length} คน` : `${people.length} คน`,
       needMatch && need !== 'onsite' && `ที่${FILTERS[need].what}`,
-      multiDay ? `แยกแผ่นงานวันละแผ่น ${days.length} วัน` : 'มีช่องลงชื่อเช้า/บ่าย',
+      multiDay ? `แยกแผ่นงานวันละแผ่น ${days.length} วัน` : noCert ? 'มีช่องลงชื่อช่องเดียว' : 'มีช่องลงชื่อเช้า/บ่าย',
     ].filter(Boolean).join(' · '));
   }
 

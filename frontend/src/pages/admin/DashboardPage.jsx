@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useEvents } from '../../hooks/useEvents';
-import { downloadCsv } from '../../utils/csvExport';
-import BudgetSection, { exportBudgetCsv } from '../../features/budget/components/BudgetSection';
+import { downloadXlsx, tableSheet } from '../../utils/xlsxExport';
+import BudgetSection, { budgetSheet } from '../../features/budget/components/BudgetSection';
 import CategoryMixCard from '../../features/dashboard/components/CategoryMixCard';
 import AttendanceCard from '../../features/dashboard/components/AttendanceCard';
 import BreakdownCard from '../../features/dashboard/components/BreakdownCard';
@@ -106,23 +106,34 @@ export default function DashboardPage() {
     : '–';
 
 
+  // The activity summary table, laid out as on the page, as a workbook sheet.
+  function dashSheet() {
+    const certPct = (c, p) => (p ? Math.round((c / p) * 100) : null);
+    return tableSheet({
+      name: `สรุปกิจกรรม ${year}`,
+      title: `สรุปผลการจัดกิจกรรมตามประเภท ปีงบประมาณ ${year}`,
+      subtitle: 'นับเฉพาะกิจกรรมที่จัดเสร็จแล้ว · ความพึงพอใจว่างไว้ = ยังไม่มีผลแบบประเมิน',
+      columns: [
+        { label: 'ประเภทกิจกรรม', value: 'category', width: 30 },
+        { label: 'กิจกรรม', value: 'event_count', type: 'int', width: 11 },
+        { label: 'ผู้ลงทะเบียน (คน)', value: 'participant_count', type: 'int', width: 14 },
+        { label: 'ได้เกียรติบัตร (คน)', value: 'certificate_count', type: 'int', width: 14 },
+        { label: 'ได้เกียรติบัตร (%)', value: (r) => certPct(r.certificate_count, r.participant_count), type: 'int', width: 13 },
+        { label: 'ความพึงพอใจ (เต็ม 5)', value: (r) => (r.avg_satisfaction > 0 ? Number(r.avg_satisfaction) : null), type: 'dec', width: 14 },
+      ],
+      rows: yearRows,
+      totals: ['รวมทั้งปี', totals.events, totals.participants, totals.certs, certPct(totals.certs, totals.participants), rated.length ? Number(avgSatisfaction) : null],
+    });
+  }
+
   function exportDash() {
-    downloadCsv(`dashboard-ปีงบประมาณ-${year}`, yearRows.map((r) => ({
-      cat: r.category, events: r.event_count, participants: r.participant_count, certs: r.certificate_count, satis: r.avg_satisfaction,
-    })), [
-      { label: 'หมวดหมู่', value: 'cat' },
-      { label: 'กิจกรรม', value: 'events' },
-      { label: 'ผู้ลงทะเบียน', value: 'participants' },
-      { label: 'เกียรติบัตร', value: 'certs' },
-      { label: 'ความพึงพอใจ', value: 'satis' },
-    ]);
+    downloadXlsx(`dashboard-ปีงบประมาณ-${year}`, [dashSheet()]);
   }
 
   // Header button: everything on the page for the chosen fiscal year — the
-  // activity summary and the per-event budget table, as two files.
+  // activity summary and the per-event budget table, as two sheets of one file.
   function exportAll() {
-    exportDash();
-    if (yearBudgetRows.length > 0) exportBudgetCsv(yearBudgetRows, year);
+    downloadXlsx(`รายงาน-ปีงบประมาณ-${year}`, [dashSheet(), budgetSheet(yearBudgetRows, year)]);
   }
 
   return (
@@ -136,7 +147,7 @@ export default function DashboardPage() {
           </div>
           {year && (
             <div className="ph-actions">
-              <button className="btn glass" onClick={exportAll} title="ดาวน์โหลด 2 ไฟล์: ผลการจัดกิจกรรม และผลการใช้จ่ายงบประมาณ"><i className="ti ti-download" /> ส่งออก CSV</button>
+              <button className="btn glass" onClick={exportAll} title="ดาวน์โหลดไฟล์ Excel 2 แผ่นงาน: ผลการจัดกิจกรรม และผลการใช้จ่ายงบประมาณ"><i className="ti ti-download" /> ส่งออก Excel</button>
             </div>
           )}
         </div>
@@ -230,7 +241,7 @@ export default function DashboardPage() {
             <div className="table-card dash-table">
               <div className="table-toolbar">
                 <h3><i className="ti ti-table-options" /> สรุปผลการจัดกิจกรรมตามประเภท · ปีงบประมาณ {year}</h3>
-                <button className="btn btn-outline" style={{ padding: '7px 12px', fontSize: 13 }} onClick={exportDash}><i className="ti ti-download" /> ส่งออก CSV</button>
+                <button className="btn btn-outline" style={{ padding: '7px 12px', fontSize: 13 }} onClick={exportDash}><i className="ti ti-download" /> ส่งออก Excel</button>
               </div>
               <div style={{ overflowX: 'auto' }}>
                 <table>

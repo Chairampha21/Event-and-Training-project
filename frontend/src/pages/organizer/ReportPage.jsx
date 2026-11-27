@@ -5,7 +5,7 @@ import { downloadCsv } from '../../utils/csvExport';
 import { downloadXlsx, STYLE } from '../../utils/xlsxExport';
 import { THAI_MONTHS, toBuddhistYear } from '../../utils/dateFormat';
 import EvalResultChart from '../../features/evaluations/components/EvalResultChart';
-import EventBudgetReport from '../../features/budget/components/EventBudgetReport';
+import EventBudgetReport, { eventBudgetFigures } from '../../features/budget/components/EventBudgetReport';
 import { STUDENT_YEARS } from '../../utils/constants';
 import BreakdownCard from '../../features/dashboard/components/BreakdownCard';
 
@@ -164,11 +164,32 @@ export default function ReportPage() {
       { height: 36, cells: [{ v: ev.title, s: STYLE.subtitle }] },
       { cells: [] },
     ];
+    // Budget sheet: the same figures as the "งบประมาณกิจกรรม" tab.
+    const payers = coordinator ? null : roster.filter((p) => p.paymentStatus === 'paid').length;
+    const bud = eventBudgetFigures(ev, attended, payers);
+    const money = (k, v) => ({ height: 22, cells: [{ v: k, s: STYLE.left }, { v: v ?? '-', s: v == null ? STYLE.left : STYLE.num }] });
+    const budgetRows = [
+      pair('สถานะ', bud.status.label),
+      money('งบประมาณเงินรายได้ (บาท)', bud.hasPlan ? (ev.budgetPlanned || 0) : null),
+      money('งบประมาณแหล่งอื่น (บาท)', bud.hasPlan ? (ev.budgetOther || 0) : null),
+      money('งบประมาณที่ตั้งไว้ รวม (บาท)', bud.planned),
+      money('งบประมาณที่ใช้จริง (บาท)', bud.actual),
+      bud.diff != null && bud.diff < 0 ? money('ใช้เกินงบ (บาท)', -bud.diff) : money('คงเหลือ (บาท)', bud.diff),
+      money('ใช้ไป (% ของงบประมาณ)', bud.used),
+      money('ผู้เข้าร่วม / เช็คอิน (คน)', attended),
+      money('ค่าใช้จ่ายต่อผู้เข้าร่วม (บาท)', bud.perHead),
+      ...(bud.feeIncome != null ? [
+        money('ค่าลงทะเบียนต่อคน (บาท)', ev.fee),
+        money('ผู้ชำระค่าลงทะเบียน (คน, ไม่นับอาจารย์)', payers),
+        money('รายรับค่าลงทะเบียน (บาท)', bud.feeIncome),
+      ] : []),
+    ];
     downloadXlsx(`รายงานสรุปกิจกรรม-${ev.id}`, [
       {
         name: 'สรุปกิจกรรม', cols: [30, 44], ...merged('B'),
         rows: [
           ...top('รายงานสรุปกิจกรรม'),
+          { height: 22, cells: [head('รายการ'), head('ข้อมูล')] },
           pair('วันที่จัด', ev.date),
           pair('ประเภท', ev.cat || '-'),
           pair('ผู้สมัครทั้งหมด (คน)', roster.length),
@@ -209,6 +230,14 @@ export default function ReportPage() {
           ...(evalResults.length === 0 ? [{ height: 22, cells: [{ v: '', s: STYLE.center }, { v: 'กิจกรรมนี้ยังไม่มีคำถามแบบประเมิน', s: STYLE.left }, { v: '', s: STYLE.center }, { v: '', s: STYLE.center }] }] : []),
         ],
       },
+      {
+        name: 'งบประมาณ', cols: [40, 30], ...merged('B'),
+        rows: [
+          ...top('งบประมาณกิจกรรม'),
+          { height: 22, cells: [head('รายการ'), head('จำนวน')] },
+          ...budgetRows,
+        ],
+      },
     ]);
   }
 
@@ -233,7 +262,7 @@ export default function ReportPage() {
                 <div className="rp-export-menu" role="menu">
                   <button type="button" role="menuitem" onClick={() => exportReport('all')}>
                     <i className="ti ti-file-spreadsheet" />
-                    <span><strong>รายงานทั้งหมด (Excel)</strong><small>สรุปกิจกรรม รายชื่อ และผลแบบประเมิน แยกแผ่นในไฟล์เดียว</small></span>
+                    <span><strong>รายงานทั้งหมด (Excel)</strong><small>สรุปกิจกรรม รายชื่อ ผลแบบประเมิน และงบประมาณ แยกแผ่นในไฟล์เดียว</small></span>
                   </button>
                   <button type="button" role="menuitem" onClick={() => exportReport('roster')} disabled={roster.length === 0}>
                     <i className="ti ti-users" />

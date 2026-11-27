@@ -126,14 +126,59 @@ export default function DashboardPage() {
     });
   }
 
+  // The audience tables (programme × year, and year of study), as on the page.
+  function audienceSheets() {
+    const share = (part, whole) => (whole ? Math.round((part / whole) * 100) : null);
+    const note = `ปีงบประมาณ ${year} (${fiscalYearRange(year)}) · นับเฉพาะกิจกรรมที่จัดเสร็จแล้ว · % คิดจากผู้ลงทะเบียน`;
+    const tail = [
+      { label: 'ลงทะเบียน (คน)', value: 'reg', type: 'int', width: 13 },
+      { label: 'เข้าร่วมจริง (คน)', value: 'in', type: 'int', width: 13 },
+      { label: 'เข้าร่วมจริง (%)', value: (r) => share(r.in, r.reg), type: 'int', width: 12 },
+      { label: 'ได้เกียรติบัตร (คน)', value: 'cert', type: 'int', width: 14 },
+      { label: 'ได้เกียรติบัตร (%)', value: (r) => share(r.cert, r.reg), type: 'int', width: 13 },
+    ];
+    const tailTotals = [audienceTotal, audienceIn, share(audienceIn, audienceTotal), audienceCert, share(audienceCert, audienceTotal)];
+    return [
+      tableSheet({
+        name: `สาขาและชั้นปี ${year}`,
+        title: `ผู้ลงทะเบียนตามสาขาและชั้นปี ปีงบประมาณ ${year}`,
+        subtitle: note,
+        columns: [
+          { label: 'สาขา', value: 'label', width: 30 },
+          ...crossYears.map((y) => ({ label: `${y.label} (คน)`, value: (p) => crossCell(p.key || 'all', y.key), type: 'int', width: 10 })),
+          ...tail,
+        ],
+        rows: crossPrograms,
+        totals: ['รวม', ...crossYears.map((y) => studyYearRows.find((r) => r.key === y.key)?.reg || 0), ...tailTotals],
+      }),
+      tableSheet({
+        name: `ชั้นปี ${year}`,
+        title: `ผู้เข้าร่วมแยกตามชั้นปี ปีงบประมาณ ${year}`,
+        subtitle: note,
+        columns: [{ label: 'ชั้นปี', value: 'label', width: 18 }, ...tail],
+        rows: studyYearRows,
+        totals: ['รวม', ...tailTotals],
+      }),
+    ];
+  }
+
+  function exportAudience() {
+    downloadXlsx(`ผู้ลงทะเบียนตามสาขาและชั้นปี-ปีงบประมาณ-${year}`, audienceSheets());
+  }
+
   function exportDash() {
     downloadXlsx(`dashboard-ปีงบประมาณ-${year}`, [dashSheet()]);
   }
 
   // Header button: everything on the page for the chosen fiscal year — the
-  // activity summary and the per-event budget table, as two sheets of one file.
+  // activity summary, the audience tables and the per-event budget table, as
+  // sheets of one file.
   function exportAll() {
-    downloadXlsx(`รายงาน-ปีงบประมาณ-${year}`, [dashSheet(), budgetSheet(yearBudgetRows, year)]);
+    downloadXlsx(`รายงาน-ปีงบประมาณ-${year}`, [
+      dashSheet(),
+      ...(audienceTotal > 0 ? audienceSheets() : []),
+      budgetSheet(yearBudgetRows, year),
+    ]);
   }
 
   return (
@@ -147,7 +192,7 @@ export default function DashboardPage() {
           </div>
           {year && (
             <div className="ph-actions">
-              <button className="btn glass" onClick={exportAll} title="ดาวน์โหลดไฟล์ Excel 2 แผ่นงาน: ผลการจัดกิจกรรม และผลการใช้จ่ายงบประมาณ"><i className="ti ti-download" /> ส่งออก Excel</button>
+              <button className="btn glass" onClick={exportAll} title="ดาวน์โหลดไฟล์ Excel: ผลการจัดกิจกรรม ผู้ลงทะเบียนตามสาขาและชั้นปี และผลการใช้จ่ายงบประมาณ"><i className="ti ti-download" /> ส่งออก Excel</button>
             </div>
           )}
         </div>
@@ -196,6 +241,7 @@ export default function DashboardPage() {
               <div className="table-card dash-table">
                 <div className="table-toolbar">
                   <h3><i className="ti ti-table" /> ผู้ลงทะเบียนตามสาขาและชั้นปี · ปีงบประมาณ {year}</h3>
+                  <button className="btn btn-outline" style={{ padding: '7px 12px', fontSize: 13 }} onClick={exportAudience}><i className="ti ti-download" /> ส่งออก Excel</button>
                 </div>
                 <div style={{ overflowX: 'auto' }}>
                   <table>

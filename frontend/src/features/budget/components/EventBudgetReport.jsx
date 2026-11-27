@@ -7,6 +7,26 @@ import './BudgetSection.css';
 const pct = (part, whole) => (whole > 0 ? Math.round((part / whole) * 100) : 0);
 
 /**
+ * One event's budget figures, shared by the report card and its Excel export.
+ * `attended` / `payers` count participants only.
+ */
+export function eventBudgetFigures(ev, attended, payers) {
+  const planned = ev.budgetTotal;
+  const actual = ev.budgetActual;
+  const hasPlan = planned != null;
+  const hasActual = actual != null;
+  const diff = hasPlan && hasActual ? planned - actual : null; // + left over, − over budget
+  const used = hasPlan && hasActual ? pct(actual, planned) : null;
+  const perHead = hasActual && attended > 0 ? Math.round(actual / attended) : null;
+  const feeIncome = ev.fee > 0 && payers != null ? ev.fee * payers : null;
+  const status = hasPlan && hasActual ? (actual > planned ? { label: 'เกินงบประมาณ', icon: 'ti-alert-triangle', cls: 'bad' } : { label: 'อยู่ในงบประมาณ', icon: 'ti-circle-check', cls: 'good' })
+    : hasActual ? { label: 'ไม่ได้ตั้งงบประมาณ', icon: 'ti-receipt-2', cls: 'muted' }
+      : hasPlan ? (ev.ended ? { label: 'รอบันทึกงบประมาณที่ใช้จริง', icon: 'ti-clock', cls: 'wait' } : { label: 'ยังไม่ถึงวันจัด', icon: 'ti-calendar-time', cls: 'muted' })
+        : { label: 'ไม่ได้ตั้งงบประมาณ', icon: 'ti-minus', cls: 'muted' };
+  return { planned, actual, hasPlan, hasActual, diff, used, perHead, feeIncome, status };
+}
+
+/**
  * One event's budget for the report page: what was set aside (department
  * income + other sources), what was actually spent, what is left or over,
  * and the cost per person who came. `attended` / `payers` count participants
@@ -16,20 +36,8 @@ const pct = (part, whole) => (whole > 0 ? Math.round((part / whole) * 100) : 0);
 export default function EventBudgetReport({ ev, attended, payers }) {
   const { session, saveBudgetActual } = useEvents();
   const [actualOpen, setActualOpen] = useState(false);
-  const planned = ev.budgetTotal;
-  const actual = ev.budgetActual;
-  const hasPlan = planned != null;
-  const hasActual = actual != null;
-  const diff = hasPlan && hasActual ? planned - actual : null; // + left over, − over budget
-  const used = hasPlan && hasActual ? pct(actual, planned) : null;
-  const perHead = hasActual && attended > 0 ? Math.round(actual / attended) : null;
-  const feeIncome = ev.fee > 0 && payers != null ? ev.fee * payers : null;
+  const { planned, actual, hasPlan, hasActual, diff, used, perHead, feeIncome, status } = eventBudgetFigures(ev, attended, payers);
   const canRecord = ev.ended && (session?.role === 'admin' || ev.organizerId === session?.id);
-
-  const status = hasPlan && hasActual ? (actual > planned ? { label: 'เกินงบประมาณ', icon: 'ti-alert-triangle', cls: 'bad' } : { label: 'อยู่ในงบประมาณ', icon: 'ti-circle-check', cls: 'good' })
-    : hasActual ? { label: 'ไม่ได้ตั้งงบประมาณ', icon: 'ti-receipt-2', cls: 'muted' }
-      : hasPlan ? (ev.ended ? { label: 'รอบันทึกงบประมาณที่ใช้จริง', icon: 'ti-clock', cls: 'wait' } : { label: 'ยังไม่ถึงวันจัด', icon: 'ti-calendar-time', cls: 'muted' })
-        : { label: 'ไม่ได้ตั้งงบประมาณ', icon: 'ti-minus', cls: 'muted' };
 
   return (
     <div className="table-card bud-report" style={{ padding: 20 }}>
